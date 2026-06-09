@@ -4,7 +4,7 @@ import type { GraphState } from "../state.js";
 const IMAGEM_MARIA = "https://maria-ia.s3.us-east-1.amazonaws.com/maria-ia.webp";
 
 const TEXTO_SAUDACAO =
-  "Olá! Eu sou a *Maria*, assistente virtual da Defensoria Pública. Estou aqui para te ajudar 😊\n\n" +
+  "Olá! Eu sou a **Maria**, assistente virtual da Defensoria Pública. Estou aqui para te ajudar 😊\n\n" +
   "🔒 *Lembrete importante:* Nosso serviço é *gratuito!*\n\n" +
   "⚠️ *Não caia em golpes!*";
 
