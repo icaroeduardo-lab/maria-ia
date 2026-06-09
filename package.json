@@ -23,7 +23,8 @@
   "dependencies": {
     "@langchain/aws": "^1.3.9",
     "@langchain/core": "^1.1.48",
-    "@langchain/langgraph": "^1.3.6",
-    "dotenv": "^17.4.2"
+    "@langchain/langgraph": "^1.3.7",
+    "dotenv": "^17.4.2",
+    "zod": "^4.4.3"
   }
 }

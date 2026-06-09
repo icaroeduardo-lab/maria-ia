@@ -15,11 +15,14 @@ importers:
         specifier: ^1.1.48
         version: 1.1.48
       '@langchain/langgraph':
-        specifier: ^1.3.6
-        version: 1.3.6(@langchain/core@1.1.48)(zod@4.4.3)
+        specifier: ^1.3.7
+        version: 1.3.7(@langchain/core@1.1.48)(zod@4.4.3)
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^25.9.2
@@ -313,8 +316,8 @@ packages:
     peerDependencies:
       '@langchain/core': ^1.1.44
 
-  '@langchain/langgraph-sdk@1.9.18':
-    resolution: {integrity: sha512-EQLlop/GLlm52Rii06oZDv1bPvrWARnDuzSY6in4d1gnZX2KSQvxajeZH8GYfMjapDVhbo324DRYJgL9euo2fg==}
+  '@langchain/langgraph-sdk@1.9.20':
+    resolution: {integrity: sha512-waZQNUN6apVg3jvDApy16wUGwrCvJB8WXHbIPvVrrUZHObqx0w5tk7P/Ite5Qvu4abWrvNtrmqk2zmcqCx7jVw==}
     peerDependencies:
       '@langchain/core': ^1.1.48
       react: ^18 || ^19
@@ -331,8 +334,8 @@ packages:
       vue:
         optional: true
 
-  '@langchain/langgraph@1.3.6':
-    resolution: {integrity: sha512-OlpIhaMYs2IlN5hCGUMF9B/jgVacLK5nYbwri1AQatB+CcFIk1xVi9jHcD+fkAtn+7ExFbwiOAAdhuGeWQA9BA==}
+  '@langchain/langgraph@1.3.7':
+    resolution: {integrity: sha512-6WNskiu3bpy3XFwiD9cm4n2QapnFVX7dqYeJzuEAUGp9R3vbxngRVyb5+Myp5Rz4GCFXGXuhcFSjLVRHPhsNtQ==}
     engines: {node: '>=18'}
     peerDependencies:
       '@langchain/core': ^1.1.48
@@ -866,7 +869,7 @@ snapshots:
       '@langchain/core': 1.1.48
       uuid: 14.0.0
 
-  '@langchain/langgraph-sdk@1.9.18(@langchain/core@1.1.48)':
+  '@langchain/langgraph-sdk@1.9.20(@langchain/core@1.1.48)':
     dependencies:
       '@langchain/core': 1.1.48
       '@langchain/protocol': 0.0.16
@@ -875,11 +878,11 @@ snapshots:
       p-retry: 7.1.1
       uuid: 14.0.0
 
-  '@langchain/langgraph@1.3.6(@langchain/core@1.1.48)(zod@4.4.3)':
+  '@langchain/langgraph@1.3.7(@langchain/core@1.1.48)(zod@4.4.3)':
     dependencies:
       '@langchain/core': 1.1.48
       '@langchain/langgraph-checkpoint': 1.0.4(@langchain/core@1.1.48)
-      '@langchain/langgraph-sdk': 1.9.18(@langchain/core@1.1.48)
+      '@langchain/langgraph-sdk': 1.9.20(@langchain/core@1.1.48)
       '@langchain/protocol': 0.0.16
       '@standard-schema/spec': 1.1.0
       uuid: 14.0.0
