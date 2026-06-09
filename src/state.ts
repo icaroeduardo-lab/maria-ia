@@ -2,7 +2,8 @@ import { Annotation, MessagesAnnotation } from "@langchain/langgraph";
 
 export const GraphAnnotation = Annotation.Root({
   ...MessagesAnnotation.spec,
-  lgpdAceito: Annotation<boolean | null>({ value: (_, b) => b, default: () => null }),
+  lgpdAceito: Annotation<boolean>({ value: (_, b) => b, default: () => false }),
+  etapa: Annotation<string>({ value: (_, b) => b, default: () => "inicio" }),
 });
 
 export type GraphState = typeof GraphAnnotation.State;

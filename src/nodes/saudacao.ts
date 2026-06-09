@@ -17,7 +17,6 @@ export async function saudacao(_state: GraphState) {
           { type: "text", text: TEXTO_SAUDACAO },
         ],
       }),
-      new AIMessage("Me conte um pouco sobre o seu caso."),
     ],
   };
 }

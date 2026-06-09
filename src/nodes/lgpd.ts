@@ -1,4 +1,4 @@
-import { AIMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import type { GraphState } from "../state.js";
 
 const TEXTO_LGPD =
@@ -8,22 +8,25 @@ const TEXTO_LGPD =
 
 export async function lgpd(_state: GraphState) {
   return {
+    etapa: "aguardando_lgpd",
     messages: [
       new AIMessage({
         content: [
           { type: "text", text: TEXTO_LGPD },
-          { type: "options", options: ["Sim", "Não"] },
+          { type: "boolean", trueLabel: true, falseLabel: false },
         ],
       }),
     ],
   };
 }
 
+export async function lgpdProcessar(state: GraphState) {
+  const lastHuman = state.messages.findLast((m) => m instanceof HumanMessage);
+  return { lgpdAceito: lastHuman?.content === "true" };
+}
+
 export function lgpdRoute(state: GraphState) {
-  const last = state.messages.at(-1);
-  const texto = typeof last?.content === "string" ? last.content.toLowerCase().trim() : "";
-  const aceitou = texto.includes("sim") || texto === "s";
-  return aceitou ? "aceito" : "recusado";
+  return state.lgpdAceito ? "primeira_mensagem" : "lgpd_recusado";
 }
 
 export async function lgpdRecusado(_state: GraphState) {
