@@ -1,5 +1,5 @@
 import { AIMessage } from "@langchain/core/messages";
-import type { GraphState } from "../state.js";
+import type { GraphState } from "../../state.js";
 
 // TODO: coletar Telefone → confirmar WhatsApp → Email
 export async function dadosContato(_state: GraphState) {

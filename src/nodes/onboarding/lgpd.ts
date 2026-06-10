@@ -1,5 +1,5 @@
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
-import type { GraphState } from "../state.js";
+import type { GraphState } from "../../state.js";
 
 const TEXTO_LGPD =
   "Antes de continuar, preciso que você aceite nosso *Termo de Privacidade*.\n\n" +

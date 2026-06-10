@@ -1,19 +1,19 @@
 import "dotenv/config";
 import { StateGraph, MemorySaver } from "@langchain/langgraph";
 import { GraphAnnotation } from "./state.js";
-import { saudacao } from "./nodes/saudacao.js";
-import { lgpd, lgpdProcessar, lgpdRecusado, lgpdRoute } from "./nodes/lgpd.js";
-import { primeiraMensagem } from "./nodes/primeira-mensagem.js";
-import { triagem, triagemRoute } from "./nodes/triagem.js";
+import { saudacao } from "./nodes/onboarding/saudacao.js";
+import { lgpd, lgpdProcessar, lgpdRecusado, lgpdRoute } from "./nodes/onboarding/lgpd.js";
+import { primeiraMensagem } from "./nodes/onboarding/primeira-mensagem.js";
+import { triagem, triagemRoute } from "./nodes/atendimento/triagem.js";
+import { informativo } from "./nodes/atendimento/informativo.js";
+import { encerramento } from "./nodes/atendimento/encerramento.js";
+import { dadosPessoais } from "./nodes/coleta/dados-pessoais.js";
+import { dadosResidenciais } from "./nodes/coleta/dados-residenciais.js";
+import { dadosContato } from "./nodes/coleta/dados-contato.js";
 import { familiaPensaoGraph } from "./services/familia-pensao/graph.js";
 import { trabalhistaGraph } from "./services/trabalhista/graph.js";
 import { inssGraph } from "./services/inss/graph.js";
 import { outrosGraph } from "./services/outros/graph.js";
-import { dadosPessoais } from "./nodes/dados-pessoais.js";
-import { dadosResidenciais } from "./nodes/dados-residenciais.js";
-import { dadosContato } from "./nodes/dados-contato.js";
-import { informativo } from "./nodes/informativo.js";
-import { encerramento } from "./nodes/encerramento.js";
 
 const checkpointer = new MemorySaver();
 

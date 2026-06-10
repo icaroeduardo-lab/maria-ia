@@ -1,5 +1,5 @@
 import { AIMessage } from "@langchain/core/messages";
-import type { GraphState } from "../state.js";
+import type { GraphState } from "../../state.js";
 
 const IMAGEM_MARIA = "https://maria-ia.s3.us-east-1.amazonaws.com/maria-ia.webp";
 

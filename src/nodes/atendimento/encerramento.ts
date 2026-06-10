@@ -1,5 +1,5 @@
 import { AIMessage } from "@langchain/core/messages";
-import type { GraphState } from "../state.js";
+import type { GraphState } from "../../state.js";
 
 const TEXTO_ENCERRAMENTO =
   "Atendimento encerrado. Se precisar de ajuda, ligue *129* de segunda a sexta, das 9h às 18h. Até logo! 👋";
