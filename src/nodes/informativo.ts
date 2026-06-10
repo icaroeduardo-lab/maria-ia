@@ -1,27 +1,27 @@
-import { AIMessage } from "@langchain/core/messages";
+import { ChatBedrockConverse } from "@langchain/aws";
+import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { GraphState } from "../state.js";
 
-const MENSAGENS: Record<string, string> = {
-  trabalhista:
-    "A DPERJ não realiza atendimento em casos da Justiça do Trabalho.\n\n" +
-    "Procure o *sindicato da sua categoria* ou o *Ministério Público do Trabalho*.",
-  inss_federal:
-    "A DPERJ não realiza atendimento em casos da Justiça Federal.\n\n" +
-    "Para assuntos de INSS ou Caixa Econômica, procure a *DPU* em: www.dpu.def.br",
-  familia_pensao:
-    "Entendemos que você precisa de ajuda com questões de família ou pensão.\n\n" +
-    "Em breve teremos atendimento disponível para esse tipo de demanda.",
-  penal:
-    "Entendemos que você precisa de ajuda com questões criminais.\n\n" +
-    "Em breve teremos atendimento disponível para esse tipo de demanda.",
-  outros:
-    "Entendemos sua solicitação.\n\n" +
-    "Em breve teremos atendimento disponível para esse tipo de demanda.",
-};
+const model = new ChatBedrockConverse({
+  model: process.env.BEDROCK_MODEL_ID ?? "anthropic.claude-3-haiku-20240307-v1:0",
+  region: process.env.AWS_REGION ?? "us-east-1",
+});
+
+const SYSTEM_PROMPT = `Você é a Maria, assistente virtual da Defensoria Pública do RJ.
+Responda de forma natural, acolhedora e humana — como se fosse uma atendente real.
+Diga que entendeu o caso do usuário, que vai ajudá-lo e que vai precisar fazer algumas perguntas para dar continuidade ao atendimento.
+Seja BREVE: máximo 2 frases. Não explique demais. Não use bullet points. Não mencione categorias ou departamentos.`;
 
 export async function informativo(state: GraphState) {
-  const texto = MENSAGENS[state.categoria] ?? MENSAGENS.outros;
+  const lastHuman = state.messages.findLast((m) => m instanceof HumanMessage);
+  const caso = typeof lastHuman?.content === "string" ? lastHuman.content : "";
+
+  const response = await model.invoke([
+    new SystemMessage(SYSTEM_PROMPT),
+    new HumanMessage(caso),
+  ]);
+
   return {
-    messages: [new AIMessage(texto)],
+    messages: [new AIMessage(response.content as string)],
   };
 }

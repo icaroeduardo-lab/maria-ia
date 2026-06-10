@@ -8,7 +8,6 @@ const TEXTO_LGPD =
 
 export async function lgpd(_state: GraphState) {
   return {
-    etapa: "aguardando_lgpd",
     messages: [
       new AIMessage({
         content: [

@@ -31,7 +31,7 @@ export async function triagem(state: GraphState) {
   const raw = (typeof response.content === "string" ? response.content : "").trim().toLowerCase();
   const categoria = CATEGORIAS.find((c) => raw.includes(c)) ?? "outros";
 
-  return { categoria, etapa: "triagem_concluida" };
+  return { categoria };
 }
 
 export function triagemRoute(state: GraphState) {
