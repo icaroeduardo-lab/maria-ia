@@ -17,7 +17,7 @@ const sessions = new Map<string, SessionState>();
 app.post("/api/chat", async (req, res) => {
   const { sessionId, message } = req.body as { sessionId: string; message?: string };
 
-  let state: SessionState = sessions.get(sessionId) ?? { messages: [], etapa: "inicio", lgpdAceito: false };
+  let state: SessionState = sessions.get(sessionId) ?? { messages: [], etapa: "inicio", lgpdAceito: false, categoria: "" };
 
   if (message !== undefined) {
     state = { ...state, messages: [...state.messages, new HumanMessage(message)] };

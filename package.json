@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
-    "server": "tsx src/server.ts",
+    "server": "nodemon --exec tsx src/server.ts --ext ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "studio": "npx @langchain/langgraph-cli dev",
@@ -19,6 +19,7 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^25.9.2",
+    "nodemon": "^3.1.14",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   },
