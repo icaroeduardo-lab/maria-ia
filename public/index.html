@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maria IA</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #e5ddd5; height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    #chat-wrapper { width: 100%; max-width: 480px; height: 100dvh; display: flex; flex-direction: column; background: #fff; }
+    #chat-header { background: #075e54; color: #fff; padding: 16px; font-size: 18px; font-weight: bold; }
+    #chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .bubble { max-width: 80%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+    .bubble.ai { background: #dcf8c6; align-self: flex-start; border-bottom-left-radius: 2px; }
+    .bubble.human { background: #fff; align-self: flex-end; border-bottom-right-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+    .bubble img { max-width: 200px; border-radius: 8px; display: block; margin-bottom: 8px; }
+    .options { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .options button { background: #075e54; color: #fff; border: none; border-radius: 20px; padding: 8px 18px; cursor: pointer; font-size: 14px; }
+    .options button:hover { background: #128c7e; }
+    #chat-input { display: flex; padding: 12px; gap: 8px; border-top: 1px solid #ddd; }
+    #input-text { flex: 1; border: 1px solid #ccc; border-radius: 20px; padding: 10px 16px; font-size: 14px; outline: none; }
+    #send-btn { background: #075e54; color: #fff; border: none; border-radius: 50%; width: 42px; height: 42px; font-size: 18px; cursor: pointer; }
+    #send-btn:disabled { background: #ccc; cursor: default; }
+  </style>
+</head>
+<body>
+  <div id="chat-wrapper">
+    <div id="chat-header">Maria IA — Defensoria Pública</div>
+    <div id="chat-messages"></div>
+    <div id="chat-input">
+      <input id="input-text" type="text" placeholder="Digite uma mensagem..." />
+      <button id="send-btn">&#10148;</button>
+    </div>
+  </div>
+
+  <script>
+    const sessionId = crypto.randomUUID();
+    const messagesEl = document.getElementById("chat-messages");
+    const inputEl = document.getElementById("input-text");
+    const sendBtn = document.getElementById("send-btn");
+
+    function renderContent(content) {
+      if (typeof content === "string") return `<span>${content}</span>`;
+      let html = "";
+      for (const block of content) {
+        if (block.type === "image_url") html += `<img src="${block.image_url.url}" />`;
+        else if (block.type === "text") html += `<span>${block.text}</span>`;
+        else if (block.type === "boolean") {
+          html += `<div class="options">
+            <button onclick="sendMessage('true')">${block.trueLabel === true ? "Sim" : block.trueLabel}</button>
+            <button onclick="sendMessage('false')">${block.falseLabel === false ? "Não" : block.falseLabel}</button>
+          </div>`;
+        } else if (block.type === "options") {
+          html += `<div class="options">${block.options.map(o => `<button onclick="sendMessage('${o}')">${o}</button>`).join("")}</div>`;
+        }
+      }
+      return html;
+    }
+
+    function addBubble(role, content) {
+      const div = document.createElement("div");
+      div.className = `bubble ${role === "ai" ? "ai" : "human"}`;
+      div.innerHTML = renderContent(content);
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    async function sendMessage(message) {
+      if (message && message !== "true" && message !== "false") {
+        addBubble("human", message);
+      } else if (message === "true") {
+        addBubble("human", "Sim");
+      } else if (message === "false") {
+        addBubble("human", "Não");
+      }
+
+      sendBtn.disabled = true;
+      inputEl.disabled = true;
+
+      const body = message !== undefined ? { sessionId, message } : { sessionId };
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+
+      for (const msg of data.messages) {
+        if (msg.role === "ai") addBubble("ai", msg.content);
+      }
+
+      sendBtn.disabled = false;
+      inputEl.disabled = false;
+      inputEl.focus();
+    }
+
+    sendBtn.addEventListener("click", () => {
+      const text = inputEl.value.trim();
+      if (!text) return;
+      inputEl.value = "";
+      sendMessage(text);
+    });
+
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendBtn.click();
+    });
+
+    // Inicia conversa automaticamente
+    sendMessage(undefined);
+  </script>
+</body>
+</html>
