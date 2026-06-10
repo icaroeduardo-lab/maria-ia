@@ -1,4 +1,5 @@
 import { ChatBedrockConverse } from "@langchain/aws";
+import { AmazonKnowledgeBaseRetriever } from "@langchain/aws";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { GraphState } from "../../state.js";
 
@@ -7,25 +8,35 @@ const model = new ChatBedrockConverse({
   region: process.env.AWS_REGION ?? "us-east-1",
 });
 
+const retriever = new AmazonKnowledgeBaseRetriever({
+  topK: 3,
+  knowledgeBaseId: process.env.BEDROCK_KB_ID!,
+  region: process.env.AWS_REGION ?? "us-east-1",
+});
+
 const CATEGORIAS = ["trabalhista", "inss_federal", "familia_pensao", "penal", "outros"] as const;
 
-const SYSTEM_CLASSIFICAR = `Você é um classificador de demandas jurídicas da Defensoria Pública do RJ.
-Analise a mensagem do usuário e responda APENAS com uma das categorias abaixo, sem explicações:
-
-- trabalhista: questões de justiça do trabalho, CLT, demissão, FGTS, horas extras
-- inss_federal: benefícios INSS, Caixa Econômica, Justiça Federal, DPU
-- familia_pensao: pensão alimentícia, guarda, divórcio, família
-- penal: crimes, processo criminal, delegacia
-- outros: qualquer assunto que não se encaixe nas categorias acima`;
-
 export async function triagem(state: GraphState) {
-  const lastHuman = state.messages.findLast(
-    (m) => m.getType() === "human"
-  );
+  const lastHuman = state.messages.findLast((m) => m.getType() === "human");
+  const caso = typeof lastHuman?.content === "string" ? lastHuman.content : "";
+
+  const docs = await retriever.invoke(caso);
+  const contexto = docs.map((d) => d.pageContent).join("\n\n");
+
+  const system = `Você é um classificador de demandas jurídicas da Defensoria Pública do RJ.
+
+Use o contexto abaixo para entender quais serviços a Defensoria oferece e classificar corretamente.
+
+<contexto>
+${contexto}
+</contexto>
+
+Analise a mensagem do usuário e responda APENAS com uma das categorias, sem explicações:
+trabalhista | inss_federal | familia_pensao | penal | outros`;
 
   const response = await model.invoke([
-    new SystemMessage(SYSTEM_CLASSIFICAR),
-    new HumanMessage(typeof lastHuman?.content === "string" ? lastHuman.content : ""),
+    new SystemMessage(system),
+    new HumanMessage(caso),
   ]);
 
   const raw = (typeof response.content === "string" ? response.content : "").trim().toLowerCase();
