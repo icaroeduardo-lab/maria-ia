@@ -1,6 +1,7 @@
 # Plano de Implementação — Maria Chat
 
-Prompt de referência para Claude executar as próximas fases do produto.
+Blueprint técnico para a IA completar o produto fase a fase.
+Leia junto com `CLAUDE.md` que descreve o estado atual do código.
 
 ---
 
@@ -100,13 +101,15 @@ Prompt de referência para Claude executar as próximas fases do produto.
 
 **Maria Chat** é uma plataforma de atendimento jurídico conversacional com IA para a Defensoria Pública do RJ (DPERJ). Canal principal: WhatsApp Business.
 
-**Stack atual (MVP em `src/`):**
-- LangGraph JS `^1.3.7` — orquestração de grafo conversacional
-- AWS Bedrock (Claude 3 Haiku) — LLM via `ChatBedrockConverse`
-- Bedrock Knowledge Base (S3 Vectors + Titan Embed v2) — RAG
-- SQLite via `SqliteSaver` — checkpoints (migrar para PostgreSQL na Fase 5)
-- Express v5 — servidor REST (migrar para Fastify na Fase 5)
-- TypeScript ESM/NodeNext, pnpm
+**Stack atual (MVP — código em `src/`, ver `CLAUDE.md` para detalhes):**
+- LangGraph JS `^1.3.7` + `@langchain/aws` — engine conversacional + Bedrock
+- AWS Bedrock Claude 3 Haiku — LLM via `ChatBedrockConverse`
+- Bedrock Knowledge Base `LF04FDVIYP` — RAG com `AmazonKnowledgeBaseRetriever`
+- SQLite `SqliteSaver` → `data/checkpoints.db` — persistência de checkpoints
+- Express v5 — servidor REST em `src/server.ts`
+- TypeScript ESM/NodeNext, pnpm 10
+
+**O que migrar na Fase 5:** Express → Fastify, SQLite → PostgreSQL + `@langchain/langgraph-checkpoint-postgres`
 
 **Padrão crítico de multi-turn (nunca mudar):**
 ```typescript
@@ -327,18 +330,23 @@ Interface web onde gestores da DPERJ (sem conhecimento técnico) podem:
 ### Stack do Painel Admin
 
 ```
-frontend/
-  framework: Next.js 14 App Router + TypeScript
-  UI: shadcn/ui + Tailwind CSS
-  Flow builder: React Flow (drag-and-drop visual)
-  Estado: Zustand
-  API client: TanStack Query
+frontend/          (pasta raiz: frontend/)
+  Build tool:  Vite 6
+  Framework:   React 19 + TypeScript
+  UI:          Tailwind CSS 4 + shadcn/ui
+  Flow builder: React Flow 12 (drag-and-drop visual)
+  Estado:      Zustand 5
+  API client:  TanStack Query 5
+  Roteamento:  TanStack Router 1
+  Forms:       React Hook Form + Zod
+  Charts:      Recharts 2
 
-backend/
-  API: Fastify ou Express com rotas /admin/*
-  Auth: JWT + refresh token
-  ORM: Prisma
-  Banco: PostgreSQL (migrar do SQLite)
+backend/           (migração do src/ atual)
+  Servidor:    Fastify 5 (substituir Express)
+  Auth:        JWT + refresh token (fastify-jwt)
+  ORM:         Prisma 6
+  Banco:       PostgreSQL 16 (substituir SQLite)
+  Filas:       BullMQ 5 + Redis 7
 ```
 
 ### Estrutura do Builder Visual
@@ -424,7 +432,7 @@ function buildGraphFromFlow(flow: Flow): CompiledStateGraph {
   }
 
   return builder.compile({
-    checkpointer: sqliteSaver,
+    checkpointer: postgresSaver,  // PostgresSaver na Fase 5, SqliteSaver no dev
     interruptAfter: flow.nodes
       .filter((n) => n.type === "pergunta")
       .map((n) => n.id),
