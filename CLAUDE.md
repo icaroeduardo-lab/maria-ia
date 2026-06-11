@@ -25,7 +25,7 @@ Substitui o chatbot atual da Defensoria por uma IA conversacional que:
 
 ### Engine LangGraph (`src/`)
 
-Fluxo completo funcionando (Fases 2 e 3 concluídas):
+Fluxo completo funcionando (Fases 2, 3 e 4 concluídas):
 
 ```
 __start__ → saudacao → lgpd [INTERRUPT]
@@ -55,6 +55,13 @@ __start__ → saudacao → lgpd [INTERRUPT]
 - `DPERJ_API_URL` vazia → modo mock: gera protocolo local `MARIA-<ano>-<seq>` e loga o payload
 - POST com `Authorization: Bearer DPERJ_API_KEY`, timeout 10s; resposta esperada `{ protocolo }`
 - Falha → payload entra na fila SQLite `data/fila-envios.db`; `processarFila()` roda a cada 5min no server; encerramento degrada para mensagem sem protocolo
+
+**WhatsApp (`src/channels/whatsapp.ts`):**
+- `GET /webhook/whatsapp` → challenge da Meta (`WA_WEBHOOK_VERIFY_TOKEN`)
+- `POST /webhook/whatsapp` → responde 200 imediato, processa async; sessionId = `wa:<wa_id>`; dedupe de reentregas por message id
+- Respostas interativas voltam pelo **id** (botão: `"true"/"false"`; lista: texto completo da opção — title é truncado em 24 chars)
+- Sender: `**` → `*` (markdown WhatsApp); texto acumulado vira body do interactive; sem `WA_ACCESS_TOKEN` só loga payload (modo dev); `WA_GRAPH_URL` sobrescrevível para teste
+- Ambos os canais usam `processarMensagem()` de `src/chat.ts` (padrão crítico preservado; canal definido no primeiro invoke)
 
 **Serviços:** `familia_pensao` | `trabalhista` | `inss_federal` | `penal` → `outros`
 
@@ -90,7 +97,10 @@ src/
   perguntas.ts        ← interface Pergunta + helpers (proxima, mensagemPergunta, nodePergunta)
   registro-perguntas.ts ← registro de todos os grupos de perguntas + roteador
   dperj.ts            ← cliente API DPERJ + fila de retry (data/fila-envios.db)
-  server.ts           ← Express POST /api/chat (lógica de resume) + retry da fila a cada 5min
+  chat.ts             ← processarMensagem() compartilhado entre canais (lógica de resume)
+  server.ts           ← Express: POST /api/chat + rotas WhatsApp + retry da fila a cada 5min
+  channels/
+    whatsapp.ts       ← webhook Meta (GET verify + POST receive) + sender Graph API
   nodes/
     onboarding/       saudacao.ts | lgpd.ts | primeira-mensagem.ts
     atendimento/      triagem.ts (RAG) | informativo.ts (RAG) | extrator.ts |
@@ -127,10 +137,11 @@ LANGSMITH_API_KEY=
 # Fase 3 — vazio = modo mock (protocolo local):
 DPERJ_API_URL=
 DPERJ_API_KEY=
-# Próximas fases:
+# Fase 4 — sem WA_ACCESS_TOKEN o sender só loga (modo dev):
 WA_PHONE_NUMBER_ID=
 WA_ACCESS_TOKEN=
 WA_WEBHOOK_VERIFY_TOKEN=
+# Próximas fases:
 POSTGRES_URL=
 REDIS_URL=
 ```
@@ -226,8 +237,11 @@ aws bedrock-agent start-ingestion-job \
 - [x] `encerramento.ts` mostrar número de protocolo retornado pela API
 - [ ] Trocar mock pela URL/contrato reais quando a DPERJ liberar a API (`.env`: `DPERJ_API_URL`, `DPERJ_API_KEY`)
 
-### Posterior (Fases 4–6)
-- [ ] WhatsApp Business API (webhook + sender) em `src/channels/whatsapp.ts`
+### ✅ Fase 4 — concluída (jun/2026)
+- [x] WhatsApp Business API (webhook + sender) em `src/channels/whatsapp.ts`
+- [ ] Configurar app Meta real: preencher `WA_PHONE_NUMBER_ID`/`WA_ACCESS_TOKEN`/`WA_WEBHOOK_VERIFY_TOKEN` no `.env` e apontar o webhook da Meta para `https://<host>/webhook/whatsapp` (precisa de URL pública)
+
+### Posterior (Fases 5–6)
 - [ ] Migrar Express → Fastify + SQLite → PostgreSQL
 - [ ] Painel admin SaaS: Vite + React + React Flow (builder visual)
 - [ ] Multi-tenant + billing

@@ -463,7 +463,7 @@ Expandir para outras Defensorias estaduais ou órgãos públicos como produto Sa
 [✅] Fase 2b: Perguntas reais nos subgrafos de serviço
 [✅] Fase 2c: Perguntas reais nos nodes de coleta
 [✅] Fase 3: Node enviar-dados + integração DPERJ API
-[📋] Fase 4: WhatsApp webhook + sender
+[✅] Fase 4: WhatsApp webhook + sender
 [📋] Fase 5a: Backend admin API (Fastify + Prisma + PostgreSQL)
 [📋] Fase 5b: Frontend React Flow builder
 [📋] Fase 5c: Analytics dashboard
@@ -497,6 +497,23 @@ Expandir para outras Defensorias estaduais ou órgãos públicos como produto Sa
   checkpoints.db do LangGraph. `processarFila()` em `setInterval` de 5min no server
   (migra para BullMQ na Fase 5). Se o envio falhar na hora, o assistido recebe a
   mensagem de encerramento sem protocolo (payload não se perde).
+
+### Notas da implementação da Fase 4
+
+- Lógica de resume extraída para `src/chat.ts` (`processarMensagem`) — compartilhada por
+  `/api/chat` (web) e `/webhook/whatsapp`. O canal entra no PRIMEIRO `invoke({ canal })`
+  (input inicial em thread novo não viola o padrão crítico; resume continua `invoke(null)`).
+- `sessionId` do WhatsApp = `wa:<wa_id>`. Primeira mensagem do usuário ("oi") só abre o
+  fluxo — o conteúdo não entra no histórico (igual ao web).
+- Limites da Cloud API tratados: title de botão ≤20 chars, title de row ≤24 (truncado com
+  "…"), o **id** carrega o valor interno completo (botões: "true"/"false"; listas: texto
+  integral da opção, casa com o matching do extrator).
+- `POST /webhook/whatsapp` responde 200 imediato e processa async (Meta reenvia se demorar);
+  dedupe em memória por message id (reentregas).
+- `WA_GRAPH_URL`/`WA_API_VERSION` sobrescrevíveis — teste e2e roda contra Graph API fake
+  local gravando payloads. Sem `WA_ACCESS_TOKEN`, sender loga em vez de enviar.
+- Falta para produção: app no Meta Developers, número verificado, token permanente e URL
+  pública (nginx já previsto no docker-compose) apontada no painel da Meta.
 
 ---
 

@@ -2,32 +2,19 @@ import "dotenv/config";
 import express from "express";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { HumanMessage } from "@langchain/core/messages";
-import { graph } from "./graph.js";
+import { processarMensagem } from "./chat.js";
+import { whatsappRouter } from "./channels/whatsapp.js";
 import { processarFila } from "./dperj.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.json());
 app.use(express.static(join(__dirname, "../public")));
+app.use(whatsappRouter);
 
 app.post("/api/chat", async (req, res) => {
   const { sessionId, message } = req.body as { sessionId: string; message?: string };
-  const config = { configurable: { thread_id: sessionId } };
-
-  const prevState = await graph.getState(config);
-  const prevLen = (prevState.values?.messages as unknown[])?.length ?? 0;
-  const isResuming = prevLen > 0;
-
-  if (isResuming && message) {
-    await graph.updateState(config, { messages: [new HumanMessage(message)] });
-  }
-
-  const result = await graph.invoke(isResuming ? null : {}, config);
-
-  const newMessages = result.messages
-    .slice(prevLen)
-    .filter((m) => m.getType() !== "human");
+  const { result, newMessages } = await processarMensagem(sessionId, message, "web");
 
   res.json({
     messages: newMessages.map((m) => ({
