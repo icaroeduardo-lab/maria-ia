@@ -25,7 +25,7 @@ Substitui o chatbot atual da Defensoria por uma IA conversacional que:
 
 ### Engine LangGraph (`src/`)
 
-Fluxo completo funcionando (Fase 2 concluída):
+Fluxo completo funcionando (Fases 2 e 3 concluídas):
 
 ```
 __start__ → saudacao → lgpd [INTERRUPT]
@@ -42,12 +42,19 @@ __start__ → saudacao → lgpd [INTERRUPT]
             │   → roteador: próxima pergunta pendente ou ↓ │
             └──────────────────────────────────────────────┘
                                                ▼
+                          enviar_dados (POST DPERJ → protocolo)
+                                               ▼
                                           encerramento → __end__
 ```
 
 **Nodes de pergunta no loop:** subgrafos de serviço (`familia_pensao`, `trabalhista`, `inss`, `outros`) e coleta (`dados_pessoais`, `dados_residenciais`, `dados_contato`). Cada um pergunta o próximo item pendente do seu grupo. O `roteador` (em `registro-perguntas.ts`) decide: perguntas do serviço → pessoais → residenciais → contato → encerramento.
 
 **Nodes com IA real:** `triagem.ts` e `informativo.ts` (RAG) e `extrator.ts` (structured output Zod).
+
+**Envio à DPERJ (`src/dperj.ts` + `nodes/atendimento/enviar-dados.ts`):**
+- `DPERJ_API_URL` vazia → modo mock: gera protocolo local `MARIA-<ano>-<seq>` e loga o payload
+- POST com `Authorization: Bearer DPERJ_API_KEY`, timeout 10s; resposta esperada `{ protocolo }`
+- Falha → payload entra na fila SQLite `data/fila-envios.db`; `processarFila()` roda a cada 5min no server; encerramento degrada para mensagem sem protocolo
 
 **Serviços:** `familia_pensao` | `trabalhista` | `inss_federal` | `penal` → `outros`
 
@@ -78,13 +85,16 @@ __start__ → saudacao → lgpd [INTERRUPT]
 src/
   graph.ts            ← grafo principal compilado + SqliteSaver
   state.ts            ← GraphAnnotation: messages, lgpdAceito, categoria, dadosColetados,
-                        perguntasFeitas, ultimaPergunta, servicoConcluido
+                        perguntasFeitas, ultimaPergunta, servicoConcluido, canal,
+                        iniciadoEm, protocolo
   perguntas.ts        ← interface Pergunta + helpers (proxima, mensagemPergunta, nodePergunta)
   registro-perguntas.ts ← registro de todos os grupos de perguntas + roteador
-  server.ts           ← Express POST /api/chat (lógica de resume)
+  dperj.ts            ← cliente API DPERJ + fila de retry (data/fila-envios.db)
+  server.ts           ← Express POST /api/chat (lógica de resume) + retry da fila a cada 5min
   nodes/
     onboarding/       saudacao.ts | lgpd.ts | primeira-mensagem.ts
-    atendimento/      triagem.ts (RAG) | informativo.ts (RAG) | extrator.ts | encerramento.ts
+    atendimento/      triagem.ts (RAG) | informativo.ts (RAG) | extrator.ts |
+                      enviar-dados.ts | encerramento.ts
     coleta/           dados-pessoais.ts | dados-residenciais.ts | dados-contato.ts
   services/
     familia-pensao/   graph.ts (subgrafo + PERGUNTAS_FAMILIA)
@@ -114,9 +124,10 @@ BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
 BEDROCK_KB_ID=LF04FDVIYP
 BEDROCK_KB_DS_ID=V6AOSMT9CQ
 LANGSMITH_API_KEY=
-# Próximas fases:
+# Fase 3 — vazio = modo mock (protocolo local):
 DPERJ_API_URL=
 DPERJ_API_KEY=
+# Próximas fases:
 WA_PHONE_NUMBER_ID=
 WA_ACCESS_TOKEN=
 WA_WEBHOOK_VERIFY_TOKEN=
@@ -210,9 +221,10 @@ aws bedrock-agent start-ingestion-job \
 - [x] Perguntas reais nos nodes `coleta/dados-pessoais`, `dados-residenciais`, `dados-contato`
 - [x] `docs/guia-linguagem.md` preenchido (rascunho — falta validação final da DPERJ)
 
-### Próximo (Fase 3)
-- [ ] `src/nodes/atendimento/enviar-dados.ts` — POST para API da DPERJ no encerramento
-- [ ] `encerramento.ts` mostrar número de protocolo retornado pela API
+### ✅ Fase 3 — concluída (jun/2026)
+- [x] `src/nodes/atendimento/enviar-dados.ts` — POST para API da DPERJ no encerramento
+- [x] `encerramento.ts` mostrar número de protocolo retornado pela API
+- [ ] Trocar mock pela URL/contrato reais quando a DPERJ liberar a API (`.env`: `DPERJ_API_URL`, `DPERJ_API_KEY`)
 
 ### Posterior (Fases 4–6)
 - [ ] WhatsApp Business API (webhook + sender) em `src/channels/whatsapp.ts`

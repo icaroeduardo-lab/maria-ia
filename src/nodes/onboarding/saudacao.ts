@@ -10,6 +10,7 @@ const TEXTO_SAUDACAO =
 
 export async function saudacao(_state: GraphState) {
   return {
+    iniciadoEm: new Date().toISOString(),
     messages: [
       new AIMessage({
         content: [

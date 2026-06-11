@@ -44,7 +44,7 @@ export const PERGUNTAS_POR_CHAVE = new Map<string, Pergunta>(
   ].map((p) => [p.chave, p])
 );
 
-// Decide o próximo node: perguntas do serviço → coleta → encerramento.
+// Decide o próximo node: perguntas do serviço → coleta → envio para a DPERJ.
 // Usado como conditional edge após `informativo` e após `extrator`.
 export function roteador(state: GraphState): string {
   const dados = state.dadosColetados;
@@ -53,5 +53,5 @@ export function roteador(state: GraphState): string {
   for (const grupo of GRUPOS_COLETA) {
     if (proxima(grupo.perguntas, dados)) return grupo.node;
   }
-  return "encerramento";
+  return "enviar_dados";
 }

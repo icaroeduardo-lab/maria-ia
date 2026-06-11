@@ -8,6 +8,7 @@ import { primeiraMensagem } from "./nodes/onboarding/primeira-mensagem.js";
 import { triagem } from "./nodes/atendimento/triagem.js";
 import { informativo } from "./nodes/atendimento/informativo.js";
 import { extrator } from "./nodes/atendimento/extrator.js";
+import { enviarDados } from "./nodes/atendimento/enviar-dados.js";
 import { encerramento } from "./nodes/atendimento/encerramento.js";
 import { dadosPessoais } from "./nodes/coleta/dados-pessoais.js";
 import { dadosResidenciais } from "./nodes/coleta/dados-residenciais.js";
@@ -20,7 +21,7 @@ import { roteador } from "./registro-perguntas.js";
 
 const checkpointer = SqliteSaver.fromConnString("./data/checkpoints.db");
 
-// Destinos possíveis do roteador (próxima pergunta pendente ou encerramento)
+// Destinos possíveis do roteador (próxima pergunta pendente ou envio à DPERJ)
 const DESTINOS_ROTEADOR = {
   familia_pensao:     "familia_pensao",
   trabalhista:        "trabalhista",
@@ -29,7 +30,7 @@ const DESTINOS_ROTEADOR = {
   dados_pessoais:     "dados_pessoais",
   dados_residenciais: "dados_residenciais",
   dados_contato:      "dados_contato",
-  encerramento:       "encerramento",
+  enviar_dados:       "enviar_dados",
 } as const;
 
 export const graph = new StateGraph(GraphAnnotation)
@@ -51,6 +52,7 @@ export const graph = new StateGraph(GraphAnnotation)
   .addNode("dados_pessoais",     dadosPessoais)
   .addNode("dados_residenciais", dadosResidenciais)
   .addNode("dados_contato",      dadosContato)
+  .addNode("enviar_dados",       enviarDados)
   .addNode("encerramento",       encerramento)
 
   // ── Entrada ────────────────────────────────────────────────────────────
@@ -84,6 +86,8 @@ export const graph = new StateGraph(GraphAnnotation)
   .addEdge("dados_contato",      "extrator")
   .addConditionalEdges("extrator", roteador, DESTINOS_ROTEADOR)
 
+  // ── Envio à DPERJ + encerramento ───────────────────────────────────────
+  .addEdge("enviar_dados", "encerramento")
   .addEdge("encerramento", "__end__")
 
   .compile({

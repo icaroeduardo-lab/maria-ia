@@ -462,7 +462,7 @@ Expandir para outras Defensorias estaduais ou órgãos públicos como produto Sa
 [✅] Fase 2a: Extrator de contexto (nodes/atendimento/extrator.ts)
 [✅] Fase 2b: Perguntas reais nos subgrafos de serviço
 [✅] Fase 2c: Perguntas reais nos nodes de coleta
-[📋] Fase 3: Node enviar-dados + integração DPERJ API
+[✅] Fase 3: Node enviar-dados + integração DPERJ API
 [📋] Fase 4: WhatsApp webhook + sender
 [📋] Fase 5a: Backend admin API (Fastify + Prisma + PostgreSQL)
 [📋] Fase 5b: Frontend React Flow builder
@@ -485,6 +485,18 @@ Expandir para outras Defensorias estaduais ou órgãos públicos como produto Sa
   schema dinâmico restrito a campos pendentes + grupo da pergunta atual; sim/não de serviço
   só como resposta direta; blacklist de placeholders; `Pergunta.validar` para rejeitar
   inferências vagas. Ver `extrator.ts`.
+
+### Notas da implementação da Fase 3
+
+- `enviar_dados` entra como destino do `roteador` (no lugar de `encerramento` direto);
+  `lgpd_recusado → encerramento` continua sem envio.
+- Contrato da API DPERJ ainda não existe — cliente assume `POST` JSON com
+  `Authorization: Bearer` e resposta `{ protocolo }`. Sem `DPERJ_API_URL`, modo mock
+  gera protocolo local `MARIA-<ano>-<seq>` (flow demonstrável de ponta a ponta).
+- Fila de retry em SQLite próprio (`data/fila-envios.db`, better-sqlite3), não no
+  checkpoints.db do LangGraph. `processarFila()` em `setInterval` de 5min no server
+  (migra para BullMQ na Fase 5). Se o envio falhar na hora, o assistido recebe a
+  mensagem de encerramento sem protocolo (payload não se perde).
 
 ---
 

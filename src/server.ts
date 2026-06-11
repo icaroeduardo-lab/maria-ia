@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { HumanMessage } from "@langchain/core/messages";
 import { graph } from "./graph.js";
+import { processarFila } from "./dperj.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -36,6 +37,9 @@ app.post("/api/chat", async (req, res) => {
     lgpdAceito: result.lgpdAceito,
   });
 });
+
+// retry de envios à DPERJ que falharam (fila local em data/fila-envios.db)
+setInterval(() => processarFila().catch(console.error), 5 * 60 * 1000).unref();
 
 const PORT = process.env.PORT ?? 3000;
 app.listen(PORT, () => console.log(`Servidor em http://localhost:${PORT}`));
