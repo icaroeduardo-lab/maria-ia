@@ -1,4 +1,4 @@
-import express from "express";
+import type { FastifyInstance } from "fastify";
 import type { BaseMessage, MessageContent } from "@langchain/core/messages";
 import { processarMensagem } from "../chat.js";
 
@@ -165,25 +165,24 @@ function jaProcessado(id: string): boolean {
   return false;
 }
 
-export const whatsappRouter: express.Router = express.Router();
-
-whatsappRouter.get("/webhook/whatsapp", (req, res) => {
-  const { "hub.mode": mode, "hub.verify_token": token, "hub.challenge": challenge } = req.query;
-  if (mode === "subscribe" && token === process.env.WA_WEBHOOK_VERIFY_TOKEN) {
-    res.send(challenge);
-  } else {
-    res.sendStatus(403);
-  }
-});
-
-whatsappRouter.post("/webhook/whatsapp", (req, res) => {
-  res.sendStatus(200); // Meta exige 200 rápido; processamento segue async
-
-  (async () => {
-    for (const msg of extrairMensagens(req.body)) {
-      if (jaProcessado(msg.id)) continue;
-      const { newMessages } = await processarMensagem(`wa:${msg.from}`, msg.texto, "whatsapp");
-      await enviarWhatsApp(msg.from, newMessages);
+export async function whatsappRoutes(app: FastifyInstance) {
+  app.get("/webhook/whatsapp", async (req, reply) => {
+    const q = req.query as Record<string, string>;
+    if (q["hub.mode"] === "subscribe" && q["hub.verify_token"] === process.env.WA_WEBHOOK_VERIFY_TOKEN) {
+      return reply.send(q["hub.challenge"]);
     }
-  })().catch((err) => console.error("[whatsapp] erro no processamento:", err));
-});
+    return reply.code(403).send();
+  });
+
+  app.post("/webhook/whatsapp", async (req, reply) => {
+    reply.code(200).send(); // Meta exige 200 rápido; processamento segue async
+
+    (async () => {
+      for (const msg of extrairMensagens(req.body)) {
+        if (jaProcessado(msg.id)) continue;
+        const { newMessages } = await processarMensagem(`wa:${msg.from}`, msg.texto, "whatsapp");
+        await enviarWhatsApp(msg.from, newMessages);
+      }
+    })().catch((err) => console.error("[whatsapp] erro no processamento:", err));
+  });
+}

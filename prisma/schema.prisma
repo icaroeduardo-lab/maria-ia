@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id    String @id @default(cuid())
+  name  String
+  flows Flow[]
+  users User[]
+}
+
+model Flow {
+  id        String   @id @default(cuid())
+  name      String
+  orgId     String
+  org       Organization @relation(fields: [orgId], references: [id])
+  nodes     Json     @default("[]") // array de FlowNode
+  edges     Json     @default("[]") // array de FlowEdge
+  active    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Conversation {
+  id             String    @id @default(cuid())
+  sessionId      String    @unique
+  channel        String // "whatsapp" | "web"
+  flowId         String? // null = grafo estático
+  status         String    @default("active") // "active" | "completed" | "abandoned"
+  categoria      String?
+  ultimaEtapa    String? // último node executado (análise de abandono)
+  dadosColetados Json      @default("{}")
+  protocoloDperj String?
+  startedAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  completedAt    DateTime?
+}
+
+model User {
+  id     String @id @default(cuid())
+  email  String @unique
+  senha  String // hash bcrypt
+  nome   String @default("")
+  role   String @default("viewer") // "admin" | "viewer"
+  orgId  String
+  org    Organization @relation(fields: [orgId], references: [id])
+}

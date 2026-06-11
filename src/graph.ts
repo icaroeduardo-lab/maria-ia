@@ -1,6 +1,8 @@
 import "dotenv/config";
 import { StateGraph } from "@langchain/langgraph";
+import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
+import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { GraphAnnotation } from "./state.js";
 import { saudacao } from "./nodes/onboarding/saudacao.js";
 import { lgpd, lgpdProcessar, lgpdRecusado, lgpdRoute } from "./nodes/onboarding/lgpd.js";
@@ -19,7 +21,16 @@ import { inssGraph } from "./services/inss/graph.js";
 import { outrosGraph } from "./services/outros/graph.js";
 import { roteador } from "./registro-perguntas.js";
 
-const checkpointer = SqliteSaver.fromConnString("./data/checkpoints.db");
+// Postgres quando DATABASE_URL configurada (Fase 5); SQLite como fallback de dev
+async function criarCheckpointer(): Promise<BaseCheckpointSaver> {
+  if (process.env.DATABASE_URL) {
+    const saver = PostgresSaver.fromConnString(process.env.DATABASE_URL);
+    await saver.setup();
+    return saver;
+  }
+  return SqliteSaver.fromConnString("./data/checkpoints.db");
+}
+const checkpointer = await criarCheckpointer();
 
 // Destinos possíveis do roteador (próxima pergunta pendente ou envio à DPERJ)
 const DESTINOS_ROTEADOR = {
