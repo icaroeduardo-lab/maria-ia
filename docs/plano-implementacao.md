@@ -4,16 +4,108 @@ Prompt de referência para Claude executar as próximas fases do produto.
 
 ---
 
+## Stack Completo
+
+### Visão Geral da Arquitetura
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        USUÁRIOS                              │
+│   WhatsApp ──► Webhook   |   Admin ──► Frontend (Vite)      │
+└──────────────────┬──────────────────────┬───────────────────┘
+                   │                      │
+┌──────────────────▼──────────────────────▼───────────────────┐
+│                    BACKEND (Fastify)                          │
+│  /webhook/whatsapp  |  /api/chat  |  /admin/*  |  /auth/*   │
+│                                                               │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │         LangGraph Engine (AI Orchestration)          │    │
+│  │  Grafo Principal → Subgrafos de Serviço              │    │
+│  │  Extrator de Contexto → Agentes especializados       │    │
+│  └─────────────────────────────────────────────────────┘    │
+└──────────────┬──────────────────────┬───────────────────────┘
+               │                      │
+┌──────────────▼───────┐  ┌───────────▼──────────────────────┐
+│     PostgreSQL        │  │            AWS                    │
+│  (conversas, fluxos,  │  │  Bedrock (Claude Haiku)          │
+│   usuários, dados)    │  │  Bedrock KB (S3 Vectors + RAG)   │
+└──────────────────────┘  │  S3 (docs, imagens)              │
+                           └──────────────────────────────────┘
+┌──────────────────────┐
+│       Redis           │
+│  (filas BullMQ,       │
+│   sessions, cache)    │
+└──────────────────────┘
+```
+
+### Backend — `backend/`
+
+| Tecnologia | Versão | Função |
+|---|---|---|
+| **Node.js** | 22 LTS | Runtime |
+| **TypeScript** | 5.x | Linguagem (ESM/NodeNext) |
+| **Fastify** | 5.x | Servidor HTTP (mais rápido que Express, melhor TS) |
+| **LangGraph JS** | ^1.3.7 | Orquestração de grafo conversacional |
+| **@langchain/aws** | ^1.x | AWS Bedrock LLM + Knowledge Base |
+| **Prisma** | 6.x | ORM para PostgreSQL |
+| **BullMQ** | 5.x | Filas para retry de WhatsApp + chamadas API |
+| **ioredis** | 5.x | Client Redis |
+| **zod** | 4.x | Validação de schemas |
+| **pnpm** | 10.x | Package manager |
+| **tsx** | 4.x | Dev runner TypeScript |
+
+### Frontend Admin — `frontend/`
+
+| Tecnologia | Versão | Função |
+|---|---|---|
+| **Vite** | 6.x | Build tool + dev server |
+| **React** | 19.x | Framework UI |
+| **TypeScript** | 5.x | Linguagem |
+| **Tailwind CSS** | 4.x | Estilização |
+| **shadcn/ui** | latest | Componentes UI (Radix primitives) |
+| **React Flow** | 12.x | Builder visual drag-and-drop de grafos |
+| **Zustand** | 5.x | Estado global |
+| **TanStack Query** | 5.x | Cache e sincronização de dados com API |
+| **TanStack Router** | 1.x | Roteamento |
+| **React Hook Form + Zod** | — | Formulários com validação |
+| **Recharts** | 2.x | Gráficos de analytics |
+
+### Banco de Dados
+
+| Tecnologia | Função |
+|---|---|
+| **PostgreSQL 16** | Banco principal (fluxos, conversas, usuários) |
+| **Redis 7** | Filas BullMQ + cache de sessões + rate limiting |
+
+### AWS
+
+| Serviço | Função |
+|---|---|
+| **Bedrock — Claude 3 Haiku** | LLM: triagem, extração, respostas naturais |
+| **Bedrock Knowledge Base** | RAG: guia de linguagem + descrição de serviços |
+| **S3 (maria-ia-kb-docs)** | Documentos do Knowledge Base |
+| **S3 Vectors (maria-ia-kb-vectors)** | Embeddings (Titan Embed v2, 1024 dims) |
+
+### Infra / Deploy
+
+| Tecnologia | Função |
+|---|---|
+| **Docker + Docker Compose** | Ambiente local e produção |
+| **Nginx** | Reverse proxy: frontend (80/443) + backend API |
+| **GitHub Actions** | CI/CD |
+
+---
+
 ## Contexto do Projeto
 
 **Maria Chat** é uma plataforma de atendimento jurídico conversacional com IA para a Defensoria Pública do RJ (DPERJ). Canal principal: WhatsApp Business.
 
-**Stack atual:**
+**Stack atual (MVP em `src/`):**
 - LangGraph JS `^1.3.7` — orquestração de grafo conversacional
 - AWS Bedrock (Claude 3 Haiku) — LLM via `ChatBedrockConverse`
 - Bedrock Knowledge Base (S3 Vectors + Titan Embed v2) — RAG
-- SQLite via `SqliteSaver` — persistência de checkpoints
-- Express v5 — servidor REST
+- SQLite via `SqliteSaver` — checkpoints (migrar para PostgreSQL na Fase 5)
+- Express v5 — servidor REST (migrar para Fastify na Fase 5)
 - TypeScript ESM/NodeNext, pnpm
 
 **Padrão crítico de multi-turn (nunca mudar):**
