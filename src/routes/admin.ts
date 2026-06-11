@@ -1,7 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import bcrypt from "bcryptjs";
 import { prisma } from "../db.js";
-import { autenticar, exigirAdmin } from "./auth.js";
+import { autenticar, exigirAdmin, exigirSuperadmin } from "./auth.js";
+import { PLANOS, usoDoMes } from "../orgs.js";
+import { iniciarUpgrade, stripeConfigurado } from "../billing.js";
 
 // API do painel admin (registrada com prefix /admin). Tudo exige JWT;
 // mutações exigem role admin. Exige DATABASE_URL (Postgres).
@@ -82,6 +84,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const q = req.query as { status?: string; categoria?: string; channel?: string; page?: string };
     const page = Math.max(1, Number(q.page ?? 1));
     const where = {
+      orgId: req.user.orgId,
       ...(q.status && { status: q.status }),
       ...(q.categoria && { categoria: q.categoria }),
       ...(q.channel && { channel: q.channel }),
@@ -95,34 +98,35 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.get("/conversations/:sessionId", async (req, reply) => {
     const { sessionId } = req.params as { sessionId: string };
-    const conv = await db.conversation.findUnique({ where: { sessionId } });
+    const conv = await db.conversation.findFirst({ where: { sessionId, orgId: req.user.orgId } });
     return conv ?? reply.code(404).send({ erro: "conversa não encontrada" });
   });
 
   // ── Analytics ─────────────────────────────────────────────────────────────
-  app.get("/analytics/summary", async () => {
+  app.get("/analytics/summary", async (req) => {
+    const orgId = req.user.orgId;
     // conversa ativa parada há 24h+ conta como abandonada
     await db.conversation.updateMany({
-      where: { status: "active", updatedAt: { lt: new Date(Date.now() - 24 * 3600 * 1000) } },
+      where: { orgId, status: "active", updatedAt: { lt: new Date(Date.now() - 24 * 3600 * 1000) } },
       data: { status: "abandoned" },
     });
 
     const [total, porStatus, porCategoria, porCanal, abandonoPorEtapa, serieDiaria] = await Promise.all([
-      db.conversation.count(),
-      db.conversation.groupBy({ by: ["status"], _count: { _all: true } }),
-      db.conversation.groupBy({ by: ["categoria"], _count: { _all: true } }),
-      db.conversation.groupBy({ by: ["channel"], _count: { _all: true } }),
+      db.conversation.count({ where: { orgId } }),
+      db.conversation.groupBy({ by: ["status"], _count: { _all: true }, where: { orgId } }),
+      db.conversation.groupBy({ by: ["categoria"], _count: { _all: true }, where: { orgId } }),
+      db.conversation.groupBy({ by: ["channel"], _count: { _all: true }, where: { orgId } }),
       db.conversation.groupBy({
         by: ["ultimaEtapa"],
         _count: { _all: true },
-        where: { status: { in: ["active", "abandoned"] } },
+        where: { orgId, status: { in: ["active", "abandoned"] } },
       }),
       db.$queryRaw`
         SELECT date_trunc('day', "startedAt")::date::text AS dia,
                count(*)::int AS total,
                count(*) FILTER (WHERE status = 'completed')::int AS concluidas
         FROM "Conversation"
-        WHERE "startedAt" > now() - interval '30 days'
+        WHERE "startedAt" > now() - interval '30 days' AND "orgId" = ${orgId}
         GROUP BY 1 ORDER BY 1`,
     ]);
 
@@ -157,5 +161,76 @@ export async function adminRoutes(app: FastifyInstance) {
       select: { id: true, email: true, nome: true, role: true },
     });
     return user;
+  });
+
+  // ── Organização (plano, uso, billing) ─────────────────────────────────────
+  app.get("/org", async (req) => {
+    const org = await db.organization.findUniqueOrThrow({
+      where: { id: req.user.orgId },
+      select: { id: true, slug: true, name: true, plano: true, limiteConversasMes: true, waPhoneNumberId: true },
+    });
+    return { ...org, uso: await usoDoMes(org.id), planos: PLANOS, stripe: stripeConfigurado() };
+  });
+
+  app.put("/org", { preHandler: [exigirAdmin] }, async (req) => {
+    const { name, waPhoneNumberId, waAccessToken } = (req.body ?? {}) as {
+      name?: string; waPhoneNumberId?: string; waAccessToken?: string;
+    };
+    return db.organization.update({
+      where: { id: req.user.orgId },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(waPhoneNumberId !== undefined && { waPhoneNumberId: waPhoneNumberId || null }),
+        ...(waAccessToken !== undefined && { waAccessToken: waAccessToken || null }),
+      },
+      select: { id: true, slug: true, name: true, plano: true, waPhoneNumberId: true },
+    });
+  });
+
+  // upgrade de plano: com Stripe retorna checkoutUrl; sem, aplica direto (mock)
+  app.post("/org/upgrade", { preHandler: [exigirAdmin] }, async (req, reply) => {
+    const { plano } = (req.body ?? {}) as { plano?: string };
+    if (!plano || !PLANOS[plano]) return reply.code(400).send({ erro: "plano inválido" });
+    const urlRetorno = `${req.protocol}://${req.headers.host}/flows`;
+    try {
+      return await iniciarUpgrade(req.user.orgId, plano, urlRetorno);
+    } catch (err) {
+      return reply.code(500).send({ erro: String(err) });
+    }
+  });
+
+  // ── Organizações (somente superadmin — gestão do SaaS) ───────────────────
+  app.get("/orgs", { preHandler: [exigirSuperadmin] }, async () => {
+    const orgs = await db.organization.findMany({
+      select: { id: true, slug: true, name: true, plano: true, limiteConversasMes: true,
+                _count: { select: { users: true, flows: true } } },
+      orderBy: { name: "asc" },
+    });
+    return Promise.all(orgs.map(async (o) => ({ ...o, uso: await usoDoMes(o.id) })));
+  });
+
+  app.post("/orgs", { preHandler: [exigirSuperadmin] }, async (req, reply) => {
+    const { name, slug, plano = "free", adminEmail, adminSenha } = (req.body ?? {}) as {
+      name?: string; slug?: string; plano?: string; adminEmail?: string; adminSenha?: string;
+    };
+    if (!name || !slug || !adminEmail || !adminSenha) {
+      return reply.code(400).send({ erro: "name, slug, adminEmail e adminSenha obrigatórios" });
+    }
+    if (!/^[a-z0-9-]{2,30}$/.test(slug)) {
+      return reply.code(400).send({ erro: "slug inválido (a-z, 0-9, hífen)" });
+    }
+    if (!PLANOS[plano]) return reply.code(400).send({ erro: "plano inválido" });
+
+    const org = await db.organization.create({
+      data: {
+        name, slug, plano,
+        limiteConversasMes: PLANOS[plano].limiteConversasMes,
+        users: {
+          create: { email: adminEmail, senha: bcrypt.hashSync(adminSenha, 10), nome: "Admin", role: "admin" },
+        },
+      },
+      select: { id: true, slug: true, name: true, plano: true },
+    });
+    return org;
   });
 }

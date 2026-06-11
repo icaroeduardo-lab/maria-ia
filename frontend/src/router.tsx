@@ -5,6 +5,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Flows } from "./pages/Flows";
 import { Builder } from "./pages/Builder";
 import { Conversations } from "./pages/Conversations";
+import { Organizacao } from "./pages/Organizacao";
 
 function Layout() {
   const { usuario, logout } = useAuth();
@@ -17,6 +18,7 @@ function Layout() {
           <Link to="/" className="hover:underline [&.active]:font-bold">Dashboard</Link>
           <Link to="/flows" className="hover:underline [&.active]:font-bold">Fluxos</Link>
           <Link to="/conversations" className="hover:underline [&.active]:font-bold">Conversas</Link>
+          <Link to="/org" className="hover:underline [&.active]:font-bold">Organização</Link>
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm">
           <span>{usuario?.nome || usuario?.email}</span>
@@ -56,10 +58,11 @@ const dashboardRoute = createRoute({ getParentRoute: () => protectedRoute, path:
 const flowsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/flows", component: Flows });
 const builderRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/flows/$flowId", component: Builder });
 const conversationsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/conversations", component: Conversations });
+const orgRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/org", component: Organizacao });
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  protectedRoute.addChildren([dashboardRoute, flowsRoute, builderRoute, conversationsRoute]),
+  protectedRoute.addChildren([dashboardRoute, flowsRoute, builderRoute, conversationsRoute, orgRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

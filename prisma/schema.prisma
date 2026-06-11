@@ -8,10 +8,16 @@ datasource db {
 }
 
 model Organization {
-  id    String @id @default(cuid())
-  name  String
-  flows Flow[]
-  users User[]
+  id                 String  @id @default(cuid())
+  slug               String  @unique // subdomínio: <slug>.mariachat.com.br
+  name               String
+  plano              String  @default("free") // "free" | "pro" | "enterprise"
+  limiteConversasMes Int     @default(100)
+  stripeCustomerId   String?
+  waPhoneNumberId    String? @unique // número WhatsApp da org (roteia o webhook)
+  waAccessToken      String?
+  flows              Flow[]
+  users              User[]
 }
 
 model Flow {
@@ -29,6 +35,7 @@ model Flow {
 model Conversation {
   id             String    @id @default(cuid())
   sessionId      String    @unique
+  orgId          String    @default("dperj")
   channel        String // "whatsapp" | "web"
   flowId         String? // null = grafo estático
   status         String    @default("active") // "active" | "completed" | "abandoned"
@@ -39,6 +46,8 @@ model Conversation {
   startedAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   completedAt    DateTime?
+
+  @@index([orgId, startedAt])
 }
 
 model User {
@@ -46,7 +55,7 @@ model User {
   email  String @unique
   senha  String // hash bcrypt
   nome   String @default("")
-  role   String @default("viewer") // "admin" | "viewer"
+  role   String @default("viewer") // "superadmin" | "admin" | "viewer"
   orgId  String
   org    Organization @relation(fields: [orgId], references: [id])
 }

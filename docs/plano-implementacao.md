@@ -467,7 +467,7 @@ Expandir para outras Defensorias estaduais ou órgãos públicos como produto Sa
 [✅] Fase 5a: Backend admin API (Fastify + Prisma + PostgreSQL)
 [✅] Fase 5b: Frontend React Flow builder
 [✅] Fase 5c: Analytics dashboard
-[📋] Fase 6: Multi-tenant + billing
+[✅] Fase 6: Multi-tenant + billing
 ```
 
 ### Notas da implementação da Fase 2 (desvios do blueprint)
@@ -532,6 +532,26 @@ Expandir para outras Defensorias estaduais ou órgãos públicos como produto Sa
 - **Troca de flow ativo** só afeta conversas novas; thread em andamento retoma no grafo
   vigente (estruturas de checkpoint podem divergir — limitação aceita).
 - Login seed: `admin@mariachat.local` / `SEED_ADMIN_PASSWORD` (default `admin123`).
+
+### Notas da implementação da Fase 6 (desvios do blueprint)
+
+- **Isolamento em nível de aplicação, não RLS**: todas as queries do admin levam
+  `orgId` do JWT; `Conversation.orgId` indexado; thread do LangGraph prefixada com
+  org. RLS nativo (FORCE ROW LEVEL SECURITY + set_config por request) fica como
+  hardening futuro — com Prisma exigiria transação por request em todas as rotas.
+- **Subdomínio**: resolvido pelo header Host (`<slug>.dominio.tld`), com header
+  `X-Org-Slug` como alternativa para dev/teste (localhost não tem subdomínio).
+  DNS wildcard + nginx é configuração de deploy, fora do código.
+- **WhatsApp multi-org**: cada org cadastra `waPhoneNumberId`/`waAccessToken`
+  (página Organização); webhook roteia pelo `metadata.phone_number_id` do payload
+  da Meta; fallback nas vars de ambiente (single-tenant).
+- **Stripe**: sem `STRIPE_SECRET_KEY` o upgrade aplica direto (mock). Com chave:
+  checkout session por assinatura (`STRIPE_PRICE_PRO`/`_ENTERPRISE`), webhook
+  `/webhook/stripe` com verificação de assinatura (raw body em plugin isolado).
+- **Limite de plano** bloqueia apenas ABERTURA de conversa; em andamento sempre
+  conclui. DPERJ seed = enterprise ilimitado (limite 0).
+- **Checkpoints movidos para o schema `langgraph`** no Postgres: o Prisma acusava
+  drift das tabelas do PostgresSaver no public e pedia reset a cada migrate.
 
 ---
 

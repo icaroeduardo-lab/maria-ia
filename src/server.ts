@@ -6,10 +6,12 @@ import fastifyJwt from "@fastify/jwt";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { processarMensagem } from "./chat.js";
+import { orgPorRequisicao } from "./orgs.js";
 import { whatsappRoutes } from "./channels/whatsapp.js";
 import { authRoutes } from "./routes/auth.js";
 import { adminRoutes } from "./routes/admin.js";
 import { processarFila } from "./dperj.js";
+import { stripeRoutes } from "./billing.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = Fastify();
@@ -20,20 +22,23 @@ await app.register(fastifyStatic, { root: join(__dirname, "../public") });
 
 app.post("/api/chat", async (req) => {
   const { sessionId, message } = req.body as { sessionId: string; message?: string };
-  const { result, newMessages } = await processarMensagem(sessionId, message, "web");
+  // org pelo subdomínio (<slug>.mariachat.com.br) ou header X-Org-Slug
+  const orgId = await orgPorRequisicao(req.headers.host, req.headers["x-org-slug"] as string | undefined);
+  const { result, newMessages } = await processarMensagem(sessionId, message, "web", orgId);
 
   return {
     messages: newMessages.map((m) => ({
       role: m.getType(),
       content: m.content,
     })),
-    lgpdAceito: result.lgpdAceito,
+    lgpdAceito: result?.lgpdAceito ?? false,
   };
 });
 
 await app.register(whatsappRoutes);
 await app.register(authRoutes);
 await app.register(adminRoutes, { prefix: "/admin" });
+await app.register(stripeRoutes);
 
 // retry de envios à DPERJ que falharam (fila local em data/fila-envios.db)
 setInterval(() => processarFila().catch(console.error), 5 * 60 * 1000).unref();

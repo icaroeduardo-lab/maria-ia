@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import type { BaseMessage, MessageContent } from "@langchain/core/messages";
 import { processarMensagem } from "../chat.js";
+import { orgPorPhoneNumberId } from "../orgs.js";
+import { prisma } from "../db.js";
 
 // Canal WhatsApp Business Cloud API (Meta).
 // GET  /webhook/whatsapp → verificação do webhook (challenge)
@@ -17,6 +19,7 @@ interface MensagemRecebida {
   id: string;
   from: string;   // wa_id, ex: "5521999990000"
   texto: string;
+  phoneNumberId?: string; // número que RECEBEU — identifica a org (multi-tenant)
 }
 
 // Extrai mensagens de um body de webhook da Meta (entry[].changes[].value.messages[])
@@ -24,11 +27,18 @@ export function extrairMensagens(body: unknown): MensagemRecebida[] {
   const out: MensagemRecebida[] = [];
   const entries = (body as { entry?: unknown[] })?.entry ?? [];
   for (const entry of entries as { changes?: unknown[] }[]) {
-    for (const change of (entry.changes ?? []) as { value?: { messages?: Record<string, unknown>[] } }[]) {
+    for (const change of (entry.changes ?? []) as {
+      value?: { messages?: Record<string, unknown>[]; metadata?: { phone_number_id?: string } };
+    }[]) {
       for (const msg of change.value?.messages ?? []) {
         const texto = textoDaMensagem(msg);
         if (texto === null) continue;
-        out.push({ id: String(msg.id), from: String(msg.from), texto });
+        out.push({
+          id: String(msg.id),
+          from: String(msg.from),
+          texto,
+          phoneNumberId: change.value?.metadata?.phone_number_id,
+        });
       }
     }
   }
@@ -125,19 +135,40 @@ export function toWhatsAppPayloads(to: string, content: MessageContent): object[
   return payloads;
 }
 
-export async function enviarWhatsApp(to: string, messages: BaseMessage[]): Promise<void> {
+export interface CredenciaisWA {
+  phoneNumberId?: string;
+  accessToken?: string;
+}
+
+// Credenciais da org (multi-tenant) com fallback no .env (single-tenant/dev)
+async function credenciaisDaOrg(orgId: string): Promise<CredenciaisWA> {
+  const padrao = { phoneNumberId: process.env.WA_PHONE_NUMBER_ID, accessToken: process.env.WA_ACCESS_TOKEN };
+  if (!prisma) return padrao;
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { waPhoneNumberId: true, waAccessToken: true },
+  });
+  return {
+    phoneNumberId: org?.waPhoneNumberId ?? padrao.phoneNumberId,
+    accessToken: org?.waAccessToken ?? padrao.accessToken,
+  };
+}
+
+export async function enviarWhatsApp(to: string, messages: BaseMessage[], cred?: CredenciaisWA): Promise<void> {
+  const phoneNumberId = cred?.phoneNumberId ?? process.env.WA_PHONE_NUMBER_ID;
+  const accessToken = cred?.accessToken ?? process.env.WA_ACCESS_TOKEN;
   for (const msg of messages) {
     for (const payload of toWhatsAppPayloads(to, msg.content)) {
-      if (!process.env.WA_ACCESS_TOKEN) {
+      if (!accessToken) {
         console.log("[whatsapp] dev (sem WA_ACCESS_TOKEN) — payload:", JSON.stringify(payload));
         continue;
       }
-      const url = `${GRAPH_URL()}/${API_VERSION()}/${process.env.WA_PHONE_NUMBER_ID}/messages`;
+      const url = `${GRAPH_URL()}/${API_VERSION()}/${phoneNumberId}/messages`;
       const res = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.WA_ACCESS_TOKEN}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(15_000),
@@ -180,8 +211,9 @@ export async function whatsappRoutes(app: FastifyInstance) {
     (async () => {
       for (const msg of extrairMensagens(req.body)) {
         if (jaProcessado(msg.id)) continue;
-        const { newMessages } = await processarMensagem(`wa:${msg.from}`, msg.texto, "whatsapp");
-        await enviarWhatsApp(msg.from, newMessages);
+        const orgId = await orgPorPhoneNumberId(msg.phoneNumberId);
+        const { newMessages } = await processarMensagem(`wa:${msg.from}`, msg.texto, "whatsapp", orgId);
+        await enviarWhatsApp(msg.from, newMessages, await credenciaisDaOrg(orgId));
       }
     })().catch((err) => console.error("[whatsapp] erro no processamento:", err));
   });

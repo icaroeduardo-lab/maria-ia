@@ -268,8 +268,19 @@ aws bedrock-agent start-ingestion-job \
 - [x] Engine dinâmico: flow ativo do painel compilado em grafo LangGraph em runtime
 - [ ] Fila DPERJ ainda em SQLite — migrar para BullMQ/Redis se necessário em produção
 
-### Posterior (Fase 6)
-- [ ] Multi-tenant + billing (schema já tem Organization; falta RLS, subdomínios, planos)
+### ✅ Fase 6 — concluída (jun/2026)
+- [x] Multi-tenant: isolamento por org em flows/conversas/analytics (escopo em app, orgId em tudo)
+- [x] Resolução de org: subdomínio `<slug>.dominio` ou header `X-Org-Slug` (web); `metadata.phone_number_id` (WhatsApp, credenciais WA por org com fallback no .env)
+- [x] Planos free/pro/enterprise com limite de conversas/mês (0 = ilimitado); estouro bloqueia só conversas NOVAS
+- [x] Billing Stripe (`src/billing.ts`): checkout + webhook `/webhook/stripe`; sem `STRIPE_SECRET_KEY` = modo mock (plano troca direto)
+- [x] Superadmin: CRUD de organizações via `/admin/orgs` + página Organização no painel
+- [ ] RLS nativo no Postgres (hardening opcional — isolamento atual é em nível de aplicação)
+- [ ] Stripe real: configurar `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO/ENTERPRISE`
+
+**Multi-tenant — pontos críticos:**
+- `thread_id` = `<orgId>:<sessionId>` (sessões de orgs diferentes nunca colidem)
+- Flow ativo é POR ORG (`obterGraph(orgId)`); seed deixa DPERJ como enterprise/ilimitado e admin como `superadmin`
+- Checkpoints LangGraph agora no schema Postgres `langgraph` (separado das tabelas do Prisma — evita drift no migrate)
 
 > Ver `docs/plano-implementacao.md` para o blueprint técnico detalhado de cada fase.
 

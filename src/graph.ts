@@ -24,7 +24,8 @@ import { roteador } from "./registro-perguntas.js";
 // Postgres quando DATABASE_URL configurada (Fase 5); SQLite como fallback de dev
 async function criarCheckpointer(): Promise<BaseCheckpointSaver> {
   if (process.env.DATABASE_URL) {
-    const saver = PostgresSaver.fromConnString(process.env.DATABASE_URL);
+    // schema separado: não conflita com as migrações do Prisma no public
+    const saver = PostgresSaver.fromConnString(process.env.DATABASE_URL, { schema: "langgraph" });
     await saver.setup();
     return saver;
   }
