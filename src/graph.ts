@@ -1,5 +1,6 @@
 import "dotenv/config";
-import { StateGraph, MemorySaver } from "@langchain/langgraph";
+import { StateGraph } from "@langchain/langgraph";
+import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 import { GraphAnnotation } from "./state.js";
 import { saudacao } from "./nodes/onboarding/saudacao.js";
 import { lgpd, lgpdProcessar, lgpdRecusado, lgpdRoute } from "./nodes/onboarding/lgpd.js";
@@ -15,7 +16,7 @@ import { trabalhistaGraph } from "./services/trabalhista/graph.js";
 import { inssGraph } from "./services/inss/graph.js";
 import { outrosGraph } from "./services/outros/graph.js";
 
-const checkpointer = new MemorySaver();
+const checkpointer = SqliteSaver.fromConnString("./data/checkpoints.db");
 
 export const graph = new StateGraph(GraphAnnotation)
 
