@@ -30,7 +30,7 @@ async function criarCheckpointer(): Promise<BaseCheckpointSaver> {
   }
   return SqliteSaver.fromConnString("./data/checkpoints.db");
 }
-const checkpointer = await criarCheckpointer();
+export const checkpointer = await criarCheckpointer();
 
 // Destinos possíveis do roteador (próxima pergunta pendente ou envio à DPERJ)
 const DESTINOS_ROTEADOR = {

@@ -1,12 +1,29 @@
 import { HumanMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
-import { graph } from "./graph.js";
+import { graph as graphEstatico } from "./graph.js";
+import { graphDoFlow } from "./engine/builder.js";
 import { prisma } from "./db.js";
+
+// Grafo a usar: flow ativo do painel admin (compilado dinamicamente, com cache)
+// ou o grafo estático padrão. Troca de flow ativo afeta conversas novas;
+// conversas em andamento retomam no grafo atual (limitação documentada).
+async function obterGraph(): Promise<{ graph: typeof graphEstatico; flowId: string | null }> {
+  if (!prisma) return { graph: graphEstatico, flowId: null };
+  try {
+    const ativo = await prisma.flow.findFirst({ where: { active: true } });
+    if (!ativo) return { graph: graphEstatico, flowId: null };
+    return { graph: graphDoFlow(ativo) as typeof graphEstatico, flowId: ativo.id };
+  } catch (err) {
+    console.error("[engine] falha ao carregar flow ativo, usando grafo estático:", err);
+    return { graph: graphEstatico, flowId: null };
+  }
+}
 
 // Processa uma mensagem de qualquer canal (web ou whatsapp), preservando o
 // padrão crítico de multi-turn: thread novo → invoke(estado inicial);
 // resume → updateState + invoke(null). NUNCA invoke(input não-nulo) em thread existente.
 export async function processarMensagem(sessionId: string, message: string | undefined, canal: "web" | "whatsapp") {
+  const { graph, flowId } = await obterGraph();
   const config = { configurable: { thread_id: sessionId } };
 
   const prevState = await graph.getState(config);
@@ -23,7 +40,7 @@ export async function processarMensagem(sessionId: string, message: string | und
     .slice(prevLen)
     .filter((m) => m.getType() !== "human");
 
-  await rastrearConversa(sessionId, canal, config).catch((err) =>
+  await rastrearConversa(sessionId, canal, flowId, graph, config).catch((err) =>
     console.error("[tracking] falha ao registrar conversa:", err)
   );
 
@@ -35,6 +52,8 @@ export async function processarMensagem(sessionId: string, message: string | und
 async function rastrearConversa(
   sessionId: string,
   canal: string,
+  flowId: string | null,
+  graph: typeof graphEstatico,
   config: { configurable: { thread_id: string } }
 ) {
   if (!prisma) return;
@@ -44,6 +63,7 @@ async function rastrearConversa(
 
   const dados = {
     channel: canal,
+    flowId,
     status: emAndamento ? "active" : "completed",
     categoria: (v.categoria as string) || null,
     ultimaEtapa: emAndamento ? atual.next[0] : "fim",
