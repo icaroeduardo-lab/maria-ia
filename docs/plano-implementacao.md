@@ -464,9 +464,9 @@ Expandir para outras Defensorias estaduais ou órgãos públicos como produto Sa
 [✅] Fase 2c: Perguntas reais nos nodes de coleta
 [✅] Fase 3: Node enviar-dados + integração DPERJ API
 [✅] Fase 4: WhatsApp webhook + sender
-[📋] Fase 5a: Backend admin API (Fastify + Prisma + PostgreSQL)
-[📋] Fase 5b: Frontend React Flow builder
-[📋] Fase 5c: Analytics dashboard
+[✅] Fase 5a: Backend admin API (Fastify + Prisma + PostgreSQL)
+[✅] Fase 5b: Frontend React Flow builder
+[✅] Fase 5c: Analytics dashboard
 [📋] Fase 6: Multi-tenant + billing
 ```
 
@@ -514,6 +514,24 @@ Expandir para outras Defensorias estaduais ou órgãos públicos como produto Sa
   local gravando payloads. Sem `WA_ACCESS_TOKEN`, sender loga em vez de enviar.
 - Falta para produção: app no Meta Developers, número verificado, token permanente e URL
   pública (nginx já previsto no docker-compose) apontada no painel da Meta.
+
+### Notas da implementação da Fase 5 (desvios do blueprint)
+
+- **Backend continua na raiz** (`src/`), não em `backend/` — o docker-compose já commitado
+  usa a raiz como context; mover seria churn sem ganho.
+- **Dual-mode preservado**: sem `DATABASE_URL`, checkpoints caem para SQLite e tracking/
+  admin desligam — chat nunca depende do Postgres. Com `DATABASE_URL`: PostgresSaver
+  (`checkpoints*` no mesmo banco) + Prisma.
+- **Fila DPERJ segue em SQLite** (better-sqlite3), não BullMQ — uma dependência a menos;
+  migrar se o volume exigir. Redis sobe no compose mas ainda não é usado.
+- **Sem shadcn/ui e RHF**: componentes Tailwind diretos bastaram para o painel; formulários
+  são simples demais para React Hook Form. Adicionar quando houver formulários complexos.
+- **Builder visual**: paleta de 8 nós (espelha `src/engine/builder.ts`); edges de condição
+  carregam o valor no label ("*" = default); pergunta ganha node de captura automático
+  invisível; subgrafo reusa as perguntas + extrator do serviço escolhido.
+- **Troca de flow ativo** só afeta conversas novas; thread em andamento retoma no grafo
+  vigente (estruturas de checkpoint podem divergir — limitação aceita).
+- Login seed: `admin@mariachat.local` / `SEED_ADMIN_PASSWORD` (default `admin123`).
 
 ---
 

@@ -77,13 +77,15 @@ __start__ → saudacao → lgpd [INTERRUPT]
 
 | Camada | Tecnologia |
 |---|---|
-| Runtime | Node.js 20 + TypeScript ESM/NodeNext |
+| Runtime | Node.js 20+ + TypeScript ESM/NodeNext |
 | Orquestração IA | LangGraph JS `^1.3.7` |
 | LLM | AWS Bedrock — Claude 3 Haiku (`ChatBedrockConverse`) |
 | RAG | Bedrock Knowledge Base — `AmazonKnowledgeBaseRetriever` |
 | Embeddings | Amazon Titan Embed v2 (1024 dims, cosine, S3 Vectors) |
-| Persistência | SQLite — `SqliteSaver` → `data/checkpoints.db` |
-| Servidor | Express v5 — `src/server.ts` |
+| Checkpoints | `PostgresSaver` (com `DATABASE_URL`) ou `SqliteSaver` (fallback dev) |
+| Banco admin | PostgreSQL 16 + Prisma 6 (Organization, User, Flow, Conversation) |
+| Servidor | Fastify 5 — `src/server.ts` (JWT, CORS, static) |
+| Painel admin | `frontend/` — Vite + React 19 + Tailwind 4 + React Flow 12 + TanStack Router/Query + Zustand + Recharts |
 | Package manager | pnpm |
 
 ### Estrutura de Pastas
@@ -97,8 +99,16 @@ src/
   perguntas.ts        ← interface Pergunta + helpers (proxima, mensagemPergunta, nodePergunta)
   registro-perguntas.ts ← registro de todos os grupos de perguntas + roteador
   dperj.ts            ← cliente API DPERJ + fila de retry (data/fila-envios.db)
-  chat.ts             ← processarMensagem() compartilhado entre canais (lógica de resume)
-  server.ts           ← Express: POST /api/chat + rotas WhatsApp + retry da fila a cada 5min
+  db.ts               ← Prisma client (null sem DATABASE_URL — admin off, chat segue)
+  chat.ts             ← processarMensagem() compartilhado: escolhe flow ativo ou grafo
+                        estático, resume, tracking da conversa no Postgres
+  server.ts           ← Fastify: /api/chat + WhatsApp + /auth + /admin + retry da fila
+  engine/
+    builder.ts        ← buildGraphFromFlow: JSON do builder visual → grafo LangGraph
+                        (mensagem|pergunta|condicao|ia|api|subgrafo|atribuir|encerrar)
+  routes/
+    auth.ts           ← POST /auth/login (JWT 8h) + guards autenticar/exigirAdmin
+    admin.ts          ← /admin: flows CRUD+activate, conversations, analytics, users
   channels/
     whatsapp.ts       ← webhook Meta (GET verify + POST receive) + sender Graph API
   nodes/
@@ -111,6 +121,13 @@ src/
     trabalhista/      graph.ts (subgrafo + PERGUNTAS_TRABALHISTA)
     inss/             graph.ts (subgrafo + PERGUNTAS_INSS)
     outros/           graph.ts (subgrafo + PERGUNTAS_OUTROS)
+prisma/
+  schema.prisma       ← Organization | User | Flow (nodes/edges JSON) | Conversation
+  seed.ts             ← org DPERJ + usuário admin
+frontend/             ← painel admin (Vite + React)
+  src/router.tsx      ← TanStack Router (login + rotas protegidas por JWT)
+  src/pages/          Login | Dashboard (Recharts) | Flows | Builder (React Flow) | Conversations
+  Dockerfile + nginx.conf ← build estático p/ docker-compose
 docs/
   plano-implementacao.md  ← blueprint completo das próximas fases
   servicos.md             ← conteúdo do KB (S3)
@@ -166,6 +183,10 @@ REDIS_URL=
 pnpm server        # inicia servidor em http://localhost:3000
 pnpm studio        # LangGraph Studio (visualização do grafo)
 pnpm build         # compila TypeScript
+pnpm seed          # cria org DPERJ + admin (admin@mariachat.local / SEED_ADMIN_PASSWORD, default admin123)
+npx prisma migrate dev             # aplica migrações no Postgres
+
+cd frontend && pnpm dev            # painel admin em http://localhost:5173 (proxy → :3000)
 
 docker compose up postgres redis   # sobe só o banco para dev
 docker compose up                  # sobe tudo
@@ -241,10 +262,14 @@ aws bedrock-agent start-ingestion-job \
 - [x] WhatsApp Business API (webhook + sender) em `src/channels/whatsapp.ts`
 - [ ] Configurar app Meta real: preencher `WA_PHONE_NUMBER_ID`/`WA_ACCESS_TOKEN`/`WA_WEBHOOK_VERIFY_TOKEN` no `.env` e apontar o webhook da Meta para `https://<host>/webhook/whatsapp` (precisa de URL pública)
 
-### Posterior (Fases 5–6)
-- [ ] Migrar Express → Fastify + SQLite → PostgreSQL
-- [ ] Painel admin SaaS: Vite + React + React Flow (builder visual)
-- [ ] Multi-tenant + billing
+### ✅ Fase 5 — concluída (jun/2026)
+- [x] Migrar Express → Fastify + SQLite → PostgreSQL (PostgresSaver + Prisma; SQLite continua como fallback dev)
+- [x] Painel admin: Vite + React + React Flow (builder visual) + auth JWT + analytics
+- [x] Engine dinâmico: flow ativo do painel compilado em grafo LangGraph em runtime
+- [ ] Fila DPERJ ainda em SQLite — migrar para BullMQ/Redis se necessário em produção
+
+### Posterior (Fase 6)
+- [ ] Multi-tenant + billing (schema já tem Organization; falta RLS, subdomínios, planos)
 
 > Ver `docs/plano-implementacao.md` para o blueprint técnico detalhado de cada fase.
 

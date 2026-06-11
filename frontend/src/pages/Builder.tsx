@@ -1,0 +1,307 @@
+import { useCallback, useEffect, useState } from "react";
+import { useParams } from "@tanstack/react-router";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  ReactFlow, Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState,
+  type Node, type Edge, type Connection, type NodeProps, Handle, Position,
+} from "@xyflow/react";
+import { api } from "../lib/api";
+
+// ── Tipos de nó da paleta (espelho de src/engine/builder.ts no backend) ──────
+
+const TIPOS = [
+  { tipo: "mensagem", label: "Mensagem", cor: "#0ea5e9" },
+  { tipo: "pergunta", label: "Pergunta", cor: "#047857" },
+  { tipo: "condicao", label: "Condição", cor: "#d97706" },
+  { tipo: "ia", label: "IA Livre", cor: "#7c3aed" },
+  { tipo: "api", label: "Chamada API", cor: "#475569" },
+  { tipo: "subgrafo", label: "Subgrafo", cor: "#0891b2" },
+  { tipo: "atribuir", label: "Atribuir campo", cor: "#64748b" },
+  { tipo: "encerrar", label: "Encerrar", cor: "#dc2626" },
+] as const;
+
+type TipoNo = (typeof TIPOS)[number]["tipo"];
+type DataNo = Record<string, unknown> & { tipo: TipoNo };
+
+const corDe = (tipo: string) => TIPOS.find((t) => t.tipo === tipo)?.cor ?? "#64748b";
+const labelDe = (tipo: string) => TIPOS.find((t) => t.tipo === tipo)?.label ?? tipo;
+
+function NoCustom({ data, selected }: NodeProps) {
+  const d = data as DataNo;
+  const resumo = String(d.texto ?? d.prompt ?? d.campo ?? d.servico ?? d.chave ?? "");
+  return (
+    <div
+      className="rounded-lg bg-white shadow border-2 px-3 py-2 w-52 text-xs"
+      style={{ borderColor: selected ? "#0f172a" : corDe(d.tipo) }}
+    >
+      <Handle type="target" position={Position.Top} />
+      <p className="font-bold" style={{ color: corDe(d.tipo) }}>{labelDe(d.tipo)}</p>
+      {resumo && <p className="text-slate-600 truncate">{resumo}</p>}
+      <Handle type="source" position={Position.Bottom} />
+    </div>
+  );
+}
+
+const nodeTypes = { custom: NoCustom };
+
+// ── Painel lateral de edição ─────────────────────────────────────────────────
+
+function Campo({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block text-sm">
+      <span className="text-slate-500">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const inputCls = "mt-1 w-full border border-slate-300 rounded px-2 py-1.5 bg-white";
+
+function EditorNo({ no, onChange, onRemove }: {
+  no: Node; onChange: (data: Record<string, unknown>) => void; onRemove: () => void;
+}) {
+  const d = no.data as DataNo;
+  const set = (k: string, v: unknown) => onChange({ ...d, [k]: v });
+  const texto = (k: string, label: string, area = false) => (
+    <Campo label={label}>
+      {area
+        ? <textarea className={inputCls} rows={3} value={String(d[k] ?? "")} onChange={(e) => set(k, e.target.value)} />
+        : <input className={inputCls} value={String(d[k] ?? "")} onChange={(e) => set(k, e.target.value)} />}
+    </Campo>
+  );
+
+  return (
+    <div className="space-y-3">
+      <p className="font-bold" style={{ color: corDe(d.tipo) }}>{labelDe(d.tipo)}</p>
+
+      {d.tipo === "mensagem" && <>{texto("texto", "Texto", true)}{texto("imagem", "URL da imagem (opcional)")}</>}
+
+      {d.tipo === "pergunta" && (
+        <>
+          {texto("texto", "Pergunta", true)}
+          {texto("chave", "Chave (campo onde salva a resposta)")}
+          <Campo label="Tipo de resposta">
+            <select className={inputCls} value={String(d.tipoPergunta ?? "texto")} onChange={(e) => set("tipoPergunta", e.target.value)}>
+              {["texto", "sim_nao", "opcoes", "cpf", "telefone", "cep", "data"].map((t) => <option key={t}>{t}</option>)}
+            </select>
+          </Campo>
+          {d.tipoPergunta === "opcoes" && (
+            <Campo label="Opções (uma por linha)">
+              <textarea
+                className={inputCls} rows={4}
+                value={((d.opcoes as string[]) ?? []).join("\n")}
+                onChange={(e) => set("opcoes", e.target.value.split("\n").filter(Boolean))}
+              />
+            </Campo>
+          )}
+        </>
+      )}
+
+      {d.tipo === "condicao" && (
+        <>
+          {texto("campo", "Campo a comparar (de dadosColetados)")}
+          <p className="text-xs text-slate-500">O valor esperado vai no rótulo de cada seta que sai deste nó ("*" = padrão). Clique na seta para editar.</p>
+        </>
+      )}
+
+      {d.tipo === "ia" && (
+        <>
+          {texto("prompt", "Prompt do sistema", true)}
+          <Campo label="Usar base de conhecimento (RAG)">
+            <input type="checkbox" className="ml-2" checked={Boolean(d.usarRag)} onChange={(e) => set("usarRag", e.target.checked)} />
+          </Campo>
+        </>
+      )}
+
+      {d.tipo === "api" && (
+        <>
+          {texto("url", "URL")}
+          <Campo label="Método">
+            <select className={inputCls} value={String(d.metodo ?? "POST")} onChange={(e) => set("metodo", e.target.value)}>
+              <option>POST</option><option>GET</option>
+            </select>
+          </Campo>
+          {texto("chave", "Salvar resposta no campo")}
+        </>
+      )}
+
+      {d.tipo === "subgrafo" && (
+        <Campo label="Serviço (faz as perguntas do serviço)">
+          <select className={inputCls} value={String(d.servico ?? "outros")} onChange={(e) => set("servico", e.target.value)}>
+            {["familia_pensao", "trabalhista", "inss_federal", "outros"].map((s) => <option key={s}>{s}</option>)}
+          </select>
+        </Campo>
+      )}
+
+      {d.tipo === "atribuir" && <>{texto("chave", "Campo")}{texto("valor", "Valor")}</>}
+
+      {d.tipo === "encerrar" && <p className="text-xs text-slate-500">Envia os dados coletados para a DPERJ e mostra o protocolo.</p>}
+
+      <button className="text-sm text-red-600 border border-red-200 rounded px-3 py-1 hover:bg-red-50" onClick={onRemove}>
+        Remover nó
+      </button>
+    </div>
+  );
+}
+
+// ── Página ───────────────────────────────────────────────────────────────────
+
+interface FlowAPI {
+  id: string; name: string; active: boolean;
+  nodes: { id: string; type: TipoNo; position?: { x: number; y: number }; data: Record<string, unknown> }[];
+  edges: { id: string; source: string; target: string; label?: string }[];
+}
+
+export function Builder() {
+  const { flowId } = useParams({ from: "/protected/flows/$flowId" });
+  const qc = useQueryClient();
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [selecionado, setSelecionado] = useState<string | null>(null);
+  const [edgeSelecionada, setEdgeSelecionada] = useState<string | null>(null);
+  const [salvo, setSalvo] = useState(true);
+
+  const { data: flow } = useQuery({
+    queryKey: ["flow", flowId],
+    queryFn: () => api<FlowAPI>(`/admin/flows/${flowId}`),
+  });
+
+  useEffect(() => {
+    if (!flow) return;
+    setNodes(
+      flow.nodes.map((n, i) => ({
+        id: n.id,
+        type: "custom",
+        position: n.position ?? { x: 80 + (i % 4) * 260, y: 60 + Math.floor(i / 4) * 140 },
+        data: { ...n.data, tipo: n.type },
+      }))
+    );
+    setEdges(flow.edges.map((e) => ({ ...e, label: e.label })));
+  }, [flow, setNodes, setEdges]);
+
+  const salvar = useMutation({
+    mutationFn: () =>
+      api(`/admin/flows/${flowId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          nodes: nodes.map((n) => {
+            const { tipo, ...data } = n.data as DataNo;
+            return { id: n.id, type: tipo, position: n.position, data };
+          }),
+          edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, label: e.label ?? undefined })),
+        }),
+      }),
+    onSuccess: () => { setSalvo(true); qc.invalidateQueries({ queryKey: ["flow", flowId] }); },
+  });
+
+  const sujar = () => setSalvo(false);
+
+  const adicionar = (tipo: TipoNo) => {
+    const id = `${tipo}_${Date.now().toString(36)}`;
+    setNodes((ns) => [...ns, {
+      id, type: "custom",
+      position: { x: 120 + Math.random() * 300, y: 80 + Math.random() * 250 },
+      data: { tipo },
+    }]);
+    setSelecionado(id);
+    sujar();
+  };
+
+  const onConnect = useCallback(
+    (c: Connection) => { setEdges((es) => addEdge(c, es)); sujar(); },
+    [setEdges]
+  );
+
+  const noAtual = nodes.find((n) => n.id === selecionado);
+  const edgeAtual = edges.find((e) => e.id === edgeSelecionada);
+
+  return (
+    <div className="flex gap-4" style={{ height: "calc(100vh - 120px)" }}>
+      {/* paleta */}
+      <aside className="w-44 space-y-2">
+        <p className="text-sm font-semibold text-slate-500">Adicionar nó</p>
+        {TIPOS.map((t) => (
+          <button
+            key={t.tipo}
+            className="w-full text-left text-sm bg-white rounded-lg shadow px-3 py-2 border-l-4 hover:bg-slate-50"
+            style={{ borderLeftColor: t.cor }}
+            onClick={() => adicionar(t.tipo)}
+          >
+            {t.label}
+          </button>
+        ))}
+        <button
+          className="w-full bg-emerald-700 text-white rounded-lg py-2 hover:bg-emerald-800 disabled:opacity-50"
+          disabled={salvo || salvar.isPending}
+          onClick={() => salvar.mutate()}
+        >
+          {salvar.isPending ? "Salvando…" : salvo ? "Salvo ✓" : "Salvar"}
+        </button>
+        <p className="text-xs text-slate-400">{flow?.name}{flow?.active ? " (ativo)" : ""}</p>
+      </aside>
+
+      {/* canvas */}
+      <div className="flex-1 bg-white rounded-xl shadow overflow-hidden">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onNodesChange={(c) => { onNodesChange(c); sujar(); }}
+          onEdgesChange={(c) => { onEdgesChange(c); sujar(); }}
+          onConnect={onConnect}
+          onNodeClick={(_, n) => { setSelecionado(n.id); setEdgeSelecionada(null); }}
+          onEdgeClick={(_, e) => { setEdgeSelecionada(e.id); setSelecionado(null); }}
+          onPaneClick={() => { setSelecionado(null); setEdgeSelecionada(null); }}
+          fitView
+        >
+          <Background />
+          <Controls />
+          <MiniMap />
+        </ReactFlow>
+      </div>
+
+      {/* painel de edição */}
+      <aside className="w-72 bg-white rounded-xl shadow p-4 overflow-y-auto">
+        {noAtual && (
+          <EditorNo
+            no={noAtual}
+            onChange={(data) => {
+              setNodes((ns) => ns.map((n) => (n.id === noAtual.id ? { ...n, data } : n)));
+              sujar();
+            }}
+            onRemove={() => {
+              setNodes((ns) => ns.filter((n) => n.id !== noAtual.id));
+              setEdges((es) => es.filter((e) => e.source !== noAtual.id && e.target !== noAtual.id));
+              setSelecionado(null);
+              sujar();
+            }}
+          />
+        )}
+        {edgeAtual && (
+          <div className="space-y-3">
+            <p className="font-bold text-amber-600">Seta</p>
+            <Campo label='Rótulo (valor da condição; "*" = padrão)'>
+              <input
+                className={inputCls}
+                value={String(edgeAtual.label ?? "")}
+                onChange={(e) => {
+                  setEdges((es) => es.map((x) => (x.id === edgeAtual.id ? { ...x, label: e.target.value } : x)));
+                  sujar();
+                }}
+              />
+            </Campo>
+            <button
+              className="text-sm text-red-600 border border-red-200 rounded px-3 py-1 hover:bg-red-50"
+              onClick={() => { setEdges((es) => es.filter((x) => x.id !== edgeAtual.id)); setEdgeSelecionada(null); sujar(); }}
+            >
+              Remover seta
+            </button>
+          </div>
+        )}
+        {!noAtual && !edgeAtual && (
+          <p className="text-sm text-slate-400">Clique em um nó ou seta para editar. Arraste da borda inferior de um nó até outro para conectar.</p>
+        )}
+      </aside>
+    </div>
+  );
+}
