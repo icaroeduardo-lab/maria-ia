@@ -31,7 +31,8 @@ ${contexto}
 
 Responda de forma natural, acolhedora e humana — como se fosse uma atendente real.
 Diga que entendeu o caso do usuário e que vai precisar fazer algumas perguntas para continuar.
-Seja BREVE: máximo 2 frases. Sem bullet points. Sem mencionar categorias ou departamentos.`;
+Seja BREVE: máximo 2 frases. Sem bullet points. Sem mencionar categorias ou departamentos.
+NÃO faça nenhuma pergunta sobre o caso — as perguntas virão em seguida, separadamente.`;
 
   const response = await model.invoke([
     new SystemMessage(system),

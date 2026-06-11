@@ -8,6 +8,12 @@ export const GraphAnnotation = Annotation.Root({
     value: (a, b) => ({ ...a, ...b }),
     default: () => ({}),
   }),
+  perguntasFeitas: Annotation<string[]>({
+    value: (a, b) => [...new Set([...a, ...b])],
+    default: () => [],
+  }),
+  ultimaPergunta:   Annotation<string>({ value: (_, b) => b, default: () => "" }),
+  servicoConcluido: Annotation<boolean>({ value: (_, b) => b, default: () => false }),
 });
 
 export type GraphState = typeof GraphAnnotation.State;

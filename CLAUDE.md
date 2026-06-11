@@ -25,23 +25,39 @@ Substitui o chatbot atual da Defensoria por uma IA conversacional que:
 
 ### Engine LangGraph (`src/`)
 
-Fluxo completo funcionando:
+Fluxo completo funcionando (Fase 2 concluída):
 
 ```
 __start__ → saudacao → lgpd [INTERRUPT]
   → lgpd_processar → lgpd_recusado → encerramento
                    → primeira_mensagem [INTERRUPT]
                        → triagem (Bedrock RAG classifica)
-                           → informativo (Bedrock RAG responde acolhendo)
-                               → [subgrafo do serviço] → dados_pessoais [INTERRUPT]
-                                   → dados_residenciais [INTERRUPT]
-                                       → dados_contato [INTERRUPT]
-                                           → encerramento → __end__
+                           → extrator_inicial (extrai campos da descrição)
+                               → informativo (Bedrock RAG acolhe)
+                                   → roteador ─┐
+                                               ▼
+            ┌─────────── LOOP DE PERGUNTAS ───────────────┐
+            │ [node de pergunta] faz 1 pergunta [INTERRUPT]│
+            │   → extrator (LLM extrai resposta+contexto)  │
+            │   → roteador: próxima pergunta pendente ou ↓ │
+            └──────────────────────────────────────────────┘
+                                               ▼
+                                          encerramento → __end__
 ```
 
-**Nodes com IA real:** `triagem.ts` e `informativo.ts` usam `AmazonKnowledgeBaseRetriever` + `ChatBedrockConverse`.
+**Nodes de pergunta no loop:** subgrafos de serviço (`familia_pensao`, `trabalhista`, `inss`, `outros`) e coleta (`dados_pessoais`, `dados_residenciais`, `dados_contato`). Cada um pergunta o próximo item pendente do seu grupo. O `roteador` (em `registro-perguntas.ts`) decide: perguntas do serviço → pessoais → residenciais → contato → encerramento.
+
+**Nodes com IA real:** `triagem.ts` e `informativo.ts` (RAG) e `extrator.ts` (structured output Zod).
 
 **Serviços:** `familia_pensao` | `trabalhista` | `inss_federal` | `penal` → `outros`
+
+**Extrator (`nodes/atendimento/extrator.ts`) — anti-alucinação (Haiku chuta muito):**
+- Processa SÓ a última mensagem do usuário (histórico já foi extraído nos turnos anteriores)
+- Schema dinâmico: só campos ainda não coletados; campos de identidade/endereço/contato só entram quando a última pergunta é do mesmo grupo
+- Campos sim/não de serviço só valem como resposta direta à pergunta (senão Haiku inventa "não")
+- Blacklist de placeholders (`<UNKNOWN>`, `N/A`...), validação de opções contra a lista oficial
+- `Pergunta.validar` rejeita valor inferido inválido (ex: "meu marido" como nome) → pergunta é feita
+- Fallback anti-loop: pergunta respondida sem extração → guarda resposta bruta
 
 ### Stack Atual
 
@@ -61,21 +77,24 @@ __start__ → saudacao → lgpd [INTERRUPT]
 ```
 src/
   graph.ts            ← grafo principal compilado + SqliteSaver
-  state.ts            ← GraphAnnotation: messages, lgpdAceito, categoria, dadosColetados
+  state.ts            ← GraphAnnotation: messages, lgpdAceito, categoria, dadosColetados,
+                        perguntasFeitas, ultimaPergunta, servicoConcluido
+  perguntas.ts        ← interface Pergunta + helpers (proxima, mensagemPergunta, nodePergunta)
+  registro-perguntas.ts ← registro de todos os grupos de perguntas + roteador
   server.ts           ← Express POST /api/chat (lógica de resume)
   nodes/
     onboarding/       saudacao.ts | lgpd.ts | primeira-mensagem.ts
-    atendimento/      triagem.ts (RAG) | informativo.ts (RAG) | encerramento.ts
+    atendimento/      triagem.ts (RAG) | informativo.ts (RAG) | extrator.ts | encerramento.ts
     coleta/           dados-pessoais.ts | dados-residenciais.ts | dados-contato.ts
   services/
-    familia-pensao/   graph.ts (subgrafo — shell)
-    trabalhista/      graph.ts (subgrafo — shell)
-    inss/             graph.ts (subgrafo — shell)
-    outros/           graph.ts (subgrafo — shell)
+    familia-pensao/   graph.ts (subgrafo + PERGUNTAS_FAMILIA)
+    trabalhista/      graph.ts (subgrafo + PERGUNTAS_TRABALHISTA)
+    inss/             graph.ts (subgrafo + PERGUNTAS_INSS)
+    outros/           graph.ts (subgrafo + PERGUNTAS_OUTROS)
 docs/
   plano-implementacao.md  ← blueprint completo das próximas fases
   servicos.md             ← conteúdo do KB (S3)
-  guia-linguagem.md       ← guia de tom/linguagem (a preencher pela DPERJ)
+  guia-linguagem.md       ← guia de tom/linguagem (rascunho — validar com DPERJ)
 data/
   checkpoints.db          ← SQLite, gitignored
 public/
@@ -185,11 +204,11 @@ aws bedrock-agent start-ingestion-job \
 
 ## O Que Falta Construir (TODO)
 
-### Imediato (Fase 2)
-- [ ] `src/nodes/atendimento/extrator.ts` — agente que extrai campos do contexto da conversa para `dadosColetados` (evita repetir perguntas)
-- [ ] Perguntas reais nos subgrafos `services/familia-pensao`, `trabalhista`, `inss`, `outros`
-- [ ] Perguntas reais nos nodes `coleta/dados-pessoais`, `dados-residenciais`, `dados-contato`
-- [ ] Preencher `docs/guia-linguagem.md` com diretrizes reais da DPERJ
+### ✅ Fase 2 — concluída (jun/2026)
+- [x] `src/nodes/atendimento/extrator.ts` — extrai campos do contexto (evita repetir perguntas)
+- [x] Perguntas reais nos subgrafos `services/familia-pensao`, `trabalhista`, `inss`, `outros`
+- [x] Perguntas reais nos nodes `coleta/dados-pessoais`, `dados-residenciais`, `dados-contato`
+- [x] `docs/guia-linguagem.md` preenchido (rascunho — falta validação final da DPERJ)
 
 ### Próximo (Fase 3)
 - [ ] `src/nodes/atendimento/enviar-dados.ts` — POST para API da DPERJ no encerramento
@@ -207,8 +226,8 @@ aws bedrock-agent start-ingestion-job \
 
 ## Como Adicionar Novo Tipo de Serviço
 
-1. Criar `src/services/<nome>/graph.ts` (copiar de `outros/graph.ts`)
-2. Importar e registrar em `graph.ts` (`.addNode` + `.addEdge` a partir de `outros`)
-3. Adicionar categoria em `triagemRoute` em `nodes/atendimento/triagem.ts`
-4. Adicionar edge em `informativo` conditional em `graph.ts`
+1. Criar `src/services/<nome>/graph.ts` (copiar de `outros/graph.ts`): definir `PERGUNTAS_<NOME>` e exportar o subgrafo com `nodePergunta(PERGUNTAS_<NOME>)`
+2. Adicionar a categoria em `CATEGORIAS` em `nodes/atendimento/triagem.ts`
+3. Registrar em `SERVICOS` em `src/registro-perguntas.ts` (categoria → node + perguntas)
+4. Em `graph.ts`: `.addNode`, edge do node → `"extrator"`, e entrada em `DESTINOS_ROTEADOR` + `interruptAfter`
 5. Atualizar `docs/servicos.md` e re-sincronizar KB

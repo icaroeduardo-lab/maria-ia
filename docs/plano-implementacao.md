@@ -459,9 +459,9 @@ Expandir para outras Defensorias estaduais ou órgãos públicos como produto Sa
 
 ```
 [✅] Fase 1: Engine base (concluída)
-[🔄] Fase 2a: Extrator de contexto (nodes/atendimento/extrator.ts)
-[🔄] Fase 2b: Perguntas reais nos subgrafos de serviço
-[🔄] Fase 2c: Perguntas reais nos nodes de coleta
+[✅] Fase 2a: Extrator de contexto (nodes/atendimento/extrator.ts)
+[✅] Fase 2b: Perguntas reais nos subgrafos de serviço
+[✅] Fase 2c: Perguntas reais nos nodes de coleta
 [📋] Fase 3: Node enviar-dados + integração DPERJ API
 [📋] Fase 4: WhatsApp webhook + sender
 [📋] Fase 5a: Backend admin API (Fastify + Prisma + PostgreSQL)
@@ -469,6 +469,22 @@ Expandir para outras Defensorias estaduais ou órgãos públicos como produto Sa
 [📋] Fase 5c: Analytics dashboard
 [📋] Fase 6: Multi-tenant + billing
 ```
+
+### Notas da implementação da Fase 2 (desvios do blueprint)
+
+- **Extrator é node sequencial, não paralelo via `Send`**: todo node de pergunta tem edge
+  fixo → `extrator` → conditional `roteador`. Mais simples e o interrupt estático continua
+  funcionando com o padrão `updateState + invoke(null)`.
+- **Perguntas usam texto estático** (campo `texto` da `Pergunta`), não reformulação via LLM:
+  determinístico, sem custo/latência extra por turno. Reformulação por LLM fica para depois,
+  se necessário.
+- **State ganhou `ultimaPergunta`** além de `perguntasFeitas`/`servicoConcluido`: o extrator
+  precisa saber qual pergunta a resposta atual responde (mapeamento direto de botões/opções
+  e fallback anti-loop).
+- **Anti-alucinação do Haiku** (descoberto em teste e2e): extração só da última mensagem;
+  schema dinâmico restrito a campos pendentes + grupo da pergunta atual; sim/não de serviço
+  só como resposta direta; blacklist de placeholders; `Pergunta.validar` para rejeitar
+  inferências vagas. Ver `extrator.ts`.
 
 ---
 
