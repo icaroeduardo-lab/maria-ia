@@ -1,4 +1,4 @@
-# Maria IA — CLAUDE.md
+# Maria Chat — CLAUDE.md
 
 ---
 
@@ -6,33 +6,33 @@
 
 ### O que é
 
-**Maria IA** é uma assistente virtual de atendimento jurídico da **Defensoria Pública do Estado do Rio de Janeiro (DPERJ)**. Ela funciona como a primeira porta de entrada digital para cidadãos que precisam de orientação ou assistência jurídica gratuita.
+**Maria Chat** é uma plataforma de atendimento jurídico conversacional com IA para a **Defensoria Pública do Estado do Rio de Janeiro (DPERJ)**. Substitui o chatbot atual da Defensoria por uma experiência guiada por inteligência artificial — natural, acolhedora e inteligente.
 
-O nome "Maria" foi escolhido para humanizar a experiência e remeter à figura acolhedora de uma atendente real.
+O canal principal é o **WhatsApp Business**. A Maria conduz a conversa, identifica o serviço necessário, faz as perguntas certas e ao final envia os dados coletados automaticamente para o sistema interno da Defensoria para abertura do atendimento.
 
 ### Problema que resolve
 
-A Defensoria Pública atende milhões de cidadãos por ano, mas o processo de triagem e abertura de atendimento ainda é manual em grande parte. Isso gera:
-- Filas presenciais e esperas longas
-- Dificuldade de acesso para quem está em comunidades distantes ou não pode se deslocar
-- Sobrecarga nos atendentes humanos com tarefas repetitivas de coleta de dados
-- Cidadãos sem orientação sobre qual área da Defensoria procurar
+O chatbot atual da DPERJ é rígido, burocrático e com fluxo fixo de menus. Isso gera:
+- Abandono de conversa por frustração com a UX
+- Respostas fora do roteiro não reconhecidas
+- Atendentes humanos sobrecarregados com dados incompletos ou mal coletados
+- Impossibilidade de adaptar o fluxo sem desenvolvimento
 
 ### Solução
 
-A Maria IA resolve o problema sendo o primeiro ponto de contato digital:
+A Maria Chat resolve isso com uma conversa inteligente de ponta a ponta:
 
-1. **Triagem automática** — o cidadão descreve o problema em linguagem natural e a IA identifica qual serviço jurídico é o mais adequado (família, trabalhista, INSS, criminal, outros)
-2. **Coleta de dados** — a IA conduz uma conversa estruturada para coletar os dados necessários para abrir o atendimento (dados pessoais, residenciais e de contato)
-3. **Acolhimento** — linguagem simples, humana e empática, alinhada ao padrão de comunicação da DPERJ
-4. **Disponibilidade 24/7** — atende a qualquer hora, sem necessidade de deslocamento
+1. **Triagem por IA** — o assistido descreve o problema em linguagem natural; a IA identifica automaticamente qual serviço é adequado
+2. **Extração de contexto** — se o assistido já mencionou alguma informação durante a conversa (ex: "tenho um filho menor"), a IA captura e não pergunta novamente
+3. **Perguntas dinâmicas** — cada serviço tem seu próprio conjunto de perguntas obrigatórias; a IA só avança quando tiver todas
+4. **Envio automático** — ao final, os metadados coletados são enviados via API para o sistema interno da DPERJ
+5. **Administrável por leigos** — painel SaaS visual onde gestores configuram fluxos, perguntas e integrações sem código
 
 ### Público-alvo
 
-Cidadãos do Estado do Rio de Janeiro que:
-- Não têm condições financeiras de contratar um advogado particular
-- Precisam de orientação jurídica nas áreas de família, trabalho, previdência social ou criminal
-- Têm dificuldade de acesso ao atendimento presencial
+**Usuários finais (assistidos):** Cidadãos do RJ sem condições de pagar advogado, atendidos via WhatsApp.
+
+**Usuários administradores:** Gestores da DPERJ que configuram fluxos, perguntas e integrações via painel web sem precisar de conhecimento técnico.
 
 ### Serviços Cobertos
 
@@ -42,25 +42,26 @@ Cidadãos do Estado do Rio de Janeiro que:
 | **Trabalhista** | Demissão, FGTS, horas extras, assédio, acidente de trabalho |
 | **INSS / Federal** | Aposentadoria, BPC/LOAS, auxílio-doença, benefícios negados |
 | **Criminal** | Violência doméstica, defesa criminal, orientação à vítima |
-| **Outros** | Aluguel, dívidas, consumidor, documentação, casos não categorizados |
-
-> **Nota:** Casos da Justiça Federal (INSS, Caixa) são encaminhados para a DPU (Defensoria Pública da União), pois a DPERJ atua na Justiça Estadual.
+| **Outros** | Aluguel, dívidas, consumidor, documentação, casos gerais |
 
 ### Princípios de Produto
 
-- **Gratuito e acessível** — sem barreiras de acesso, funciona em qualquer dispositivo com navegador
-- **Humano em primeiro lugar** — a IA deve parecer uma atendente real, nunca um robô burocrático
-- **Privacidade por padrão** — dados coletados são protegidos pela LGPD; o usuário precisa aceitar o termo antes de iniciar
-- **Simplicidade** — linguagem do dia a dia, sem jargão jurídico
-- **Escalável** — arquitetura modular permite adicionar novos tipos de serviço sem reescrever o fluxo
+- **Conversa natural** — a IA faz perguntas como uma atendente real, não como um formulário
+- **Não repete o que já sabe** — extração de contexto evita perguntas redundantes
+- **Privacidade por padrão** — LGPD aceita antes de qualquer dado ser coletado
+- **Administrável** — fluxos, perguntas e APIs configuráveis pelo painel sem código
+- **Multi-canal** — começa no WhatsApp, expansível para outros canais
 
-### Visão de Futuro (Roadmap)
+### Roadmap
 
-- **Fase 1 (atual):** Triagem inteligente + coleta de dados básicos
-- **Fase 2:** Integração com sistema interno da DPERJ para abertura automática de processo
-- **Fase 3:** Notificações de andamento do processo via WhatsApp
-- **Fase 4:** Atendimento via WhatsApp Business API (sem necessidade de abrir navegador)
-- **Fase 5:** Expansão para outras Defensorias estaduais
+| Fase | Objetivo | Status |
+|---|---|---|
+| 1 | Engine LangGraph: triagem + coleta + RAG + persistência | ✅ MVP |
+| 2 | Extração de contexto + perguntas dinâmicas por serviço | 🔄 próximo |
+| 3 | API de encerramento → sistema interno DPERJ | 🔄 próximo |
+| 4 | WhatsApp Business API (Meta Cloud) | 📋 planejado |
+| 5 | Painel admin SaaS (builder visual de fluxos) | 📋 planejado |
+| 6 | Multi-tenant — expansão para outras Defensorias | 📋 futuro |
 
 ---
 
