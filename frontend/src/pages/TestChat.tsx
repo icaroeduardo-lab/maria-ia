@@ -57,6 +57,7 @@ export function TestChat() {
   const [iniciado, setIniciado] = useState(false);
   const [concluido, setConcluido] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [dadosColetados, setDadosColetados] = useState<Record<string, unknown>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -71,6 +72,7 @@ export function TestChat() {
     setConcluido(false);
     setErro(null);
     setInput("");
+    setDadosColetados({});
     if (novoFlowId !== undefined) setFlowId(novoFlowId);
     setTimeout(() => inputRef.current?.focus(), 50);
   }
@@ -86,7 +88,7 @@ export function TestChat() {
     setErro(null);
 
     try {
-      const data = await api<{ messages: Mensagem[]; done: boolean }>("/admin/test-chat", {
+      const data = await api<{ messages: Mensagem[]; done: boolean; dadosColetados: Record<string, unknown> }>("/admin/test-chat", {
         method: "POST",
         body: JSON.stringify({
           flowId: flowId === "__static__" ? undefined : flowId,
@@ -97,6 +99,7 @@ export function TestChat() {
       if (data.messages?.length) {
         setMensagens((prev) => [...prev, ...data.messages]);
       }
+      if (data.dadosColetados) setDadosColetados(data.dadosColetados);
       setIniciado(true);
       if (data.done) setConcluido(true);
     } catch (err) {
@@ -111,8 +114,11 @@ export function TestChat() {
   const { boolean: boolBlock, options: optsBlock } = ultimaAI ? extrairBotoes(ultimaAI.content) : {};
   const mostrarBotoes = !carregando && !concluido && (boolBlock || optsBlock);
 
+  const entradas = Object.entries(dadosColetados);
+
   return (
-    <div className="flex flex-col h-[calc(100vh-130px)] max-w-xl mx-auto">
+    <div className="flex gap-4 h-[calc(100vh-130px)]">
+    <div className="flex flex-col flex-1 min-w-0 max-w-xl">
       {/* toolbar */}
       <div className="flex items-center gap-2 mb-3">
         <select
@@ -255,6 +261,24 @@ export function TestChat() {
           </>
         )}
       </div>
+    </div>
+
+    {/* painel de estado — dados coletados + respostas de API */}
+    <aside className="w-72 shrink-0 bg-white rounded-xl shadow p-4 overflow-y-auto flex flex-col gap-2">
+      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Dados coletados</p>
+      {entradas.length === 0 ? (
+        <p className="text-xs text-slate-400">Nenhum dado ainda.</p>
+      ) : (
+        entradas.map(([chave, valor]) => (
+          <div key={chave} className="border rounded p-2 text-xs break-all">
+            <p className="font-medium text-slate-600">{chave}</p>
+            <p className="text-slate-800 mt-0.5 whitespace-pre-wrap">
+              {typeof valor === "object" ? JSON.stringify(valor, null, 2) : String(valor)}
+            </p>
+          </div>
+        ))
+      )}
+    </aside>
     </div>
   );
 }

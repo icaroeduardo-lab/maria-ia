@@ -17,17 +17,18 @@ import { servicoDe } from "../registro-perguntas.js";
 
 export interface FlowNode {
   id: string;
-  type: "mensagem" | "pergunta" | "condicao" | "ia" | "api" | "subgrafo" | "atribuir" | "encerrar";
+  type: "mensagem" | "pergunta" | "condicao" | "ia" | "classificar" | "api" | "subgrafo" | "atribuir" | "encerrar";
   position?: { x: number; y: number }; // usado só pelo frontend
   data: {
     label?: string;
+    titulo?: string;           // identificação no canvas (api | condicao | classificar)
     texto?: string;            // mensagem | pergunta
     imagem?: string;           // mensagem (url)
-    chave?: string;            // pergunta | api | atribuir
+    chave?: string;            // pergunta | api | atribuir | classificar (campo onde grava a categoria)
     tipoPergunta?: TipoPergunta;
-    opcoes?: string[];
+    opcoes?: string[];         // pergunta(opcoes) | classificar (categorias possíveis)
     campo?: string;            // condicao: campo de dadosColetados a comparar
-    prompt?: string;           // ia: system prompt
+    prompt?: string;           // ia | classificar: instrução extra ao LLM
     usarRag?: boolean;         // ia
     url?: string;              // api
     metodo?: "GET" | "POST";   // api
@@ -82,22 +83,99 @@ function perguntaDoNode(node: FlowNode): Pergunta {
   };
 }
 
+// Resolve campo com suporte a notação de ponto e JSON aninhado.
+// Ex: "resultado_cpf.encontrado" → parseia resultado_cpf como JSON e retorna .encontrado
+function resolverCampo(dados: Record<string, unknown>, caminho: string): string {
+  const partes = caminho.split(".");
+  let valor: unknown = dados[partes[0]];
+
+  if (typeof valor === "string" && partes.length > 1) {
+    try { valor = JSON.parse(valor); } catch { return ""; }
+  }
+
+  for (let i = 1; i < partes.length; i++) {
+    if (typeof valor !== "object" || valor === null) return "";
+    valor = (valor as Record<string, unknown>)[partes[i]];
+  }
+
+  if (valor === undefined || valor === null) return "";
+  if (typeof valor === "boolean") return String(valor);
+  if (typeof valor === "object") return JSON.stringify(valor);
+  return String(valor);
+}
+
+// versão para comparação em condições: lowercase + normaliza sim/não → true/false
+function resolverCampoCondicao(dados: Record<string, unknown>, caminho: string): string {
+  const v = resolverCampo(dados, caminho).toLowerCase().trim();
+  if (v === "sim" || v === "s") return "true";
+  if (v === "não" || v === "nao" || v === "n") return "false";
+  return v;
+}
+
+// Classifica um texto livre em uma das categorias dadas. Tenta o LLM (Bedrock);
+// se falhar (sem credenciais/rede), cai num matcher por palavra-chave.
+async function classificarTexto(fala: string, opcoes: string[], prompt?: string): Promise<string> {
+  if (!opcoes.length) return "";
+  if (!fala.trim()) return opcoes[opcoes.length - 1]; // sem relato → última (geralmente "outros")
+
+  try {
+    const instrucao =
+      (prompt ?? "Você classifica o relato de um cidadão em uma categoria de serviço jurídico.") +
+      `\n\nCategorias possíveis (responda APENAS com uma delas, exatamente como escrita): ${opcoes.join(", ")}.`;
+    const res = await model.invoke([
+      new SystemMessage(instrucao),
+      new HumanMessage(fala),
+    ]);
+    const bruto = String(res.content).toLowerCase().trim();
+    const achou = opcoes.find((o) => bruto.includes(o.toLowerCase()));
+    if (achou) return achou;
+  } catch (err) {
+    console.warn("[classificar] LLM indisponível, usando fallback por palavra-chave:", String(err).slice(0, 120));
+  }
+
+  return classificarPorPalavraChave(fala, opcoes);
+}
+
+// Fallback determinístico: mapeia palavras-chave → categoria.
+const PALAVRAS_CHAVE: Record<string, string[]> = {
+  alimentação: ["pensão", "pensao", "alimento", "sustento", "filho não", "mesada"],
+  divórcio: ["divórcio", "divorcio", "separar", "separação", "casamento", "marido", "esposa", "cônjuge", "conjuge"],
+  inss: ["inss", "aposentadoria", "aposentar", "benefício", "beneficio", "auxílio", "auxilio", "doença", "doenca", "loas", "bpc"],
+  trabalhista: ["trabalho", "trabalhista", "demitido", "demissão", "rescisão", "salário", "carteira", "fgts", "emprego"],
+  acompanhar: ["acompanhar", "andamento", "meu processo", "meu caso", "já tenho", "ja tenho", "protocolo"],
+  fora_competencia: ["criminal", "preso", "prisão", "prisao", "empresa", "consumidor"],
+};
+
+function classificarPorPalavraChave(fala: string, opcoes: string[]): string {
+  const txt = fala.toLowerCase();
+  for (const opt of opcoes) {
+    const chaves = PALAVRAS_CHAVE[opt.toLowerCase()] ?? [opt.toLowerCase()];
+    if (chaves.some((k) => txt.includes(k))) return opt;
+  }
+  return opcoes[opcoes.length - 1]; // default → última categoria (ex: "outros")
+}
+
+// interpola {{chave}} / {{chave.sub}} com dadosColetados — ex: "CPF: {{cpf}}"
+function interpolar(txt: string, dados: Record<string, unknown>): string {
+  return txt.replace(/\{\{([\w.]+)\}\}/g, (_, k) => resolverCampo(dados, k));
+}
+
 // ── Funções de nó ─────────────────────────────────────────────────────────────
 
 function criarNode(node: FlowNode) {
   switch (node.type) {
     case "mensagem":
-      return async (_state: GraphState) => {
+      return async (state: GraphState) => {
         const blocos: object[] = [];
         if (node.data.imagem) blocos.push({ type: "image_url", image_url: { url: node.data.imagem } });
-        if (node.data.texto) blocos.push({ type: "text", text: node.data.texto });
+        if (node.data.texto) blocos.push({ type: "text", text: interpolar(String(node.data.texto), state.dadosColetados) });
         return { messages: [new AIMessage({ content: blocos as never })] };
       };
 
     case "pergunta": {
       const p = perguntaDoNode(node);
-      return async (_state: GraphState) => ({
-        messages: [mensagemPergunta(p)],
+      return async (state: GraphState) => ({
+        messages: [mensagemPergunta({ ...p, texto: interpolar(p.texto, state.dadosColetados) })],
         perguntasFeitas: [p.chave],
         ultimaPergunta: p.chave,
       });
@@ -117,6 +195,18 @@ function criarNode(node: FlowNode) {
         ]);
         return { messages: [new AIMessage(res.content as string)] };
       };
+
+    case "classificar": {
+      // LLM escolhe 1 categoria da lista; grava em dadosColetados[chave].
+      // Fallback por palavra-chave quando o modelo não está disponível.
+      const opcoes = (node.data.opcoes ?? []).filter(Boolean);
+      const chave = node.data.chave ?? "categoria";
+      return async (state: GraphState) => {
+        const fala = ultimaFalaUsuario(state);
+        const categoria = await classificarTexto(fala, opcoes, node.data.prompt);
+        return { dadosColetados: { [chave]: categoria }, categoria };
+      };
+    }
 
     case "api":
       return async (state: GraphState) => {
@@ -233,7 +323,21 @@ export function buildGraphFromFlow(flow: FlowJSON) {
     if (node.type === "condicao") {
       const campo = node.data.campo ?? "";
       const rota = (state: GraphState) => {
-        const valor = (state.dadosColetados[campo] ?? "").toLowerCase().trim();
+        const valor = resolverCampoCondicao(state.dadosColetados, campo);
+        const match = saidas.find((e) => (e.label ?? "").toLowerCase().trim() === valor);
+        const fallback = saidas.find((e) => !e.label || e.label === "*");
+        return (match ?? fallback ?? saidas[0])?.target ?? END;
+      };
+      const destinos = Object.fromEntries(saidas.map((e) => [e.target, e.target]));
+      builder.addConditionalEdges(node.id, rota, { ...destinos, [END]: END });
+      continue;
+    }
+
+    if (node.type === "classificar") {
+      // o node já gravou dadosColetados[chave]=categoria; roteia direto pelas setas
+      const chave = node.data.chave ?? "categoria";
+      const rota = (state: GraphState) => {
+        const valor = (resolverCampo(state.dadosColetados, chave) || "").toLowerCase().trim();
         const match = saidas.find((e) => (e.label ?? "").toLowerCase().trim() === valor);
         const fallback = saidas.find((e) => !e.label || e.label === "*");
         return (match ?? fallback ?? saidas[0])?.target ?? END;

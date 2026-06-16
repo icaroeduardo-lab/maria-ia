@@ -14,6 +14,7 @@ const TIPOS = [
   { tipo: "pergunta", label: "Pergunta", cor: "#047857" },
   { tipo: "condicao", label: "Condição", cor: "#d97706" },
   { tipo: "ia", label: "IA Livre", cor: "#7c3aed" },
+  { tipo: "classificar", label: "Classificar (IA)", cor: "#9333ea" },
   { tipo: "api", label: "Chamada API", cor: "#475569" },
   { tipo: "subgrafo", label: "Subgrafo", cor: "#0891b2" },
   { tipo: "atribuir", label: "Atribuir campo", cor: "#64748b" },
@@ -28,7 +29,7 @@ const labelDe = (tipo: string) => TIPOS.find((t) => t.tipo === tipo)?.label ?? t
 
 function NoCustom({ data, selected }: NodeProps) {
   const d = data as DataNo;
-  const resumo = String(d.texto ?? d.prompt ?? d.campo ?? d.servico ?? d.chave ?? "");
+  const resumo = String(d.titulo ?? d.texto ?? d.prompt ?? d.campo ?? d.servico ?? d.chave ?? "");
   return (
     <div
       className="rounded-lg bg-white shadow border-2 px-3 py-2 w-52 text-xs"
@@ -74,7 +75,12 @@ function EditorNo({ no, onChange, onRemove }: {
     <div className="space-y-3">
       <p className="font-bold" style={{ color: corDe(d.tipo) }}>{labelDe(d.tipo)}</p>
 
-      {d.tipo === "mensagem" && <>{texto("texto", "Texto", true)}{texto("imagem", "URL da imagem (opcional)")}</>}
+      {d.tipo === "mensagem" && (
+        <>
+          {texto("texto", "Texto (use {{chave}} para dados coletados)", true)}
+          {texto("imagem", "URL da imagem (opcional)")}
+        </>
+      )}
 
       {d.tipo === "pergunta" && (
         <>
@@ -99,8 +105,12 @@ function EditorNo({ no, onChange, onRemove }: {
 
       {d.tipo === "condicao" && (
         <>
-          {texto("campo", "Campo a comparar (de dadosColetados)")}
-          <p className="text-xs text-slate-500">O valor esperado vai no rótulo de cada seta que sai deste nó ("*" = padrão). Clique na seta para editar.</p>
+          {texto("titulo", "Título (identificação)")}
+          {texto("campo", "Campo a comparar")}
+          <p className="text-xs text-slate-500">
+            Suporta notação de ponto para JSON: <code>resultado_cpf.encontrado</code><br />
+            O rótulo de cada seta é o valor esperado (<code>true</code>, <code>false</code>, texto…). <code>*</code> = padrão.
+          </p>
         </>
       )}
 
@@ -113,8 +123,28 @@ function EditorNo({ no, onChange, onRemove }: {
         </>
       )}
 
+      {d.tipo === "classificar" && (
+        <>
+          {texto("titulo", "Título (identificação)")}
+          {texto("chave", "Campo onde grava a categoria")}
+          <Campo label="Categorias (uma por linha)">
+            <textarea
+              className={inputCls} rows={5}
+              value={((d.opcoes as string[]) ?? []).join("\n")}
+              onChange={(e) => set("opcoes", e.target.value.split("\n").filter(Boolean))}
+            />
+          </Campo>
+          {texto("prompt", "Instrução extra ao classificador (opcional)", true)}
+          <p className="text-xs text-slate-500">
+            A IA lê o relato do usuário e escolhe UMA categoria. Cada seta saindo da
+            condição seguinte usa o nome da categoria como rótulo.
+          </p>
+        </>
+      )}
+
       {d.tipo === "api" && (
         <>
+          {texto("titulo", "Título (identificação)")}
           {texto("url", "URL")}
           <Campo label="Método">
             <select className={inputCls} value={String(d.metodo ?? "POST")} onChange={(e) => set("metodo", e.target.value)}>
@@ -261,6 +291,13 @@ export function Builder() {
 
   const sujar = () => setSalvo(false);
 
+  // auto-save: 1.5s após última alteração
+  useEffect(() => {
+    if (salvo || !flow) return;
+    const t = setTimeout(() => salvar.mutate(), 1500);
+    return () => clearTimeout(t);
+  }, [salvo, nodes, edges]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const adicionar = (tipo: TipoNo) => {
     salvarHistorico();
     const id = `${tipo}_${Date.now().toString(36)}`;
@@ -300,8 +337,9 @@ export function Builder() {
           className="w-full bg-emerald-700 text-white rounded-lg py-2 hover:bg-emerald-800 disabled:opacity-50"
           disabled={salvo || salvar.isPending}
           onClick={() => salvar.mutate()}
+          title="Salvar agora (auto-save em 1.5s)"
         >
-          {salvar.isPending ? "Salvando…" : salvo ? "Salvo ✓" : "Salvar"}
+          {salvar.isPending ? "Salvando…" : salvo ? "Salvo ✓" : "Salvar agora"}
         </button>
         <p className="text-xs text-slate-400">{flow?.name}{flow?.active ? " (ativo)" : ""}</p>
       </aside>

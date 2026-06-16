@@ -282,6 +282,7 @@ export async function adminRoutes(app: FastifyInstance) {
     return {
       messages: newMessages.map((m) => ({ role: m.getType(), content: m.content })),
       done,
+      dadosColetados: (estadoFinal.values as Record<string, unknown>)?.dadosColetados ?? {},
     };
   });
 }
