@@ -251,13 +251,23 @@ function criarNode(node: FlowNode) {
   }
 }
 
+// reconhece respostas afirmativas/negativas livres (além do canônico "true"/"false")
+const AFIRMATIVO = /^(true|s|sim|aceit|ok|okay|concord|claro|quero|pode|positiv|confirm|y|yes)/i;
+const NEGATIVO = /^(false|n|nao|não|recus|discord|nego|negativ)/i;
+
+export function interpretarSimNao(fala: string): "sim" | "não" {
+  const f = fala.trim();
+  if (NEGATIVO.test(f)) return "não";
+  if (AFIRMATIVO.test(f)) return "sim";
+  return "não"; // ambíguo → não (seguro para aceites como LGPD)
+}
+
 // captura a resposta do usuário após o interrupt de um node pergunta
 function criarCaptura(p: Pergunta) {
   return async (state: GraphState) => {
     const fala = ultimaFalaUsuario(state);
     if (!fala) return {};
-    let valor = fala;
-    if (p.tipo === "sim_nao") valor = fala === "true" || /^s/i.test(fala) ? "sim" : "não";
+    const valor = p.tipo === "sim_nao" ? interpretarSimNao(fala) : fala;
     return { dadosColetados: { [p.chave]: valor } };
   };
 }
@@ -269,12 +279,43 @@ export function buildGraphFromFlow(flow: FlowJSON) {
   const edges = flow.edges ?? [];
   if (!nodes.length) throw new Error("flow sem nodes");
 
-  const porId = new Map(nodes.map((n) => [n.id, n]));
+  const adj = new Map<string, string[]>();
+  for (const e of edges) (adj.get(e.source) ?? adj.set(e.source, []).get(e.source)!).push(e.target);
+  const alcancaveisDe = (id: string) => {
+    const vis = new Set<string>();
+    const pilha = [id];
+    while (pilha.length) {
+      const x = pilha.pop()!;
+      if (vis.has(x)) continue;
+      vis.add(x);
+      for (const t of adj.get(x) ?? []) pilha.push(t);
+    }
+    return vis;
+  };
+
+  // entrada: entre os nós sem edge de entrada, o que ALCANÇA mais nós.
+  // (ignora órfãos/desativados; tolera nó de boas-vindas novo antes do lgpd)
+  const comEntrada = new Set(edges.map((e) => e.target));
+  const candidatos = nodes.filter((n) => !comEntrada.has(n.id));
+  let inicio = nodes[0];
+  let melhor = -1;
+  for (const c of candidatos.length ? candidatos : nodes) {
+    const tam = alcancaveisDe(c.id).size;
+    if (tam > melhor) { melhor = tam; inicio = c; }
+  }
+
+  // poda nós inalcançáveis a partir da entrada (desconectados/desativados não
+  // quebram o grafo — LangGraph rejeitaria UnreachableNode)
+  const alcancaveis = alcancaveisDe(inicio.id);
+  const nodesUsados = nodes.filter((n) => alcancaveis.has(n.id));
+  const edgesUsados = edges.filter((e) => alcancaveis.has(e.source) && alcancaveis.has(e.target));
+
+  const porId = new Map(nodesUsados.map((n) => [n.id, n]));
   const builder = new StateGraph(GraphAnnotation) as any;
   const interrupts: string[] = [];
 
   // nodes do flow (+ captura/encerramento auxiliares)
-  for (const node of nodes) {
+  for (const node of nodesUsados) {
     builder.addNode(node.id, criarNode(node));
     if (node.type === "pergunta") {
       builder.addNode(`cap_${node.id}`, criarCaptura(perguntaDoNode(node)));
@@ -291,9 +332,6 @@ export function buildGraphFromFlow(flow: FlowJSON) {
     }
   }
 
-  // entrada: primeiro node sem edge de entrada (fallback: primeiro da lista)
-  const comEntrada = new Set(edges.map((e) => e.target));
-  const inicio = nodes.find((n) => !comEntrada.has(n.id)) ?? nodes[0];
   builder.addEdge(START, inicio.id);
 
   // origem efetiva de uma edge: perguntas/subgrafos saem do node de captura
@@ -302,8 +340,8 @@ export function buildGraphFromFlow(flow: FlowJSON) {
     return n && (n.type === "pergunta" || n.type === "subgrafo") ? `cap_${id}` : id;
   };
 
-  for (const node of nodes) {
-    const saidas = edges.filter((e) => e.source === node.id);
+  for (const node of nodesUsados) {
+    const saidas = edgesUsados.filter((e) => e.source === node.id);
 
     if (node.type === "pergunta") builder.addEdge(node.id, `cap_${node.id}`);
 

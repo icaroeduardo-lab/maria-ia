@@ -7,7 +7,8 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      // Content-Type só quando há body (DELETE sem body + json => 400 no Fastify)
+      ...(options.body != null && { "Content-Type": "application/json" }),
       ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     },

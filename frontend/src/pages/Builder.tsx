@@ -259,10 +259,17 @@ export function Builder() {
   const { data: flow } = useQuery({
     queryKey: ["flow", flowId],
     queryFn: () => api<FlowAPI>(`/admin/flows/${flowId}`),
+    // não refetcha no foco/reconexão: refetch sobrescreveria edições não salvas
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: Infinity,
   });
 
+  // carrega o flow no canvas SÓ uma vez por flowId (refetch/cache não clobbera edição)
+  const carregadoRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!flow) return;
+    if (!flow || carregadoRef.current === flowId) return;
+    carregadoRef.current = flowId;
     setNodes(
       flow.nodes.map((n, i) => ({
         id: n.id,
@@ -272,11 +279,11 @@ export function Builder() {
       }))
     );
     setEdges(flow.edges.map((e) => ({ ...e, label: e.label })));
-  }, [flow, setNodes, setEdges]);
+  }, [flow, flowId, setNodes, setEdges]);
 
   const salvar = useMutation({
     mutationFn: () =>
-      api(`/admin/flows/${flowId}`, {
+      api<FlowAPI>(`/admin/flows/${flowId}`, {
         method: "PUT",
         body: JSON.stringify({
           nodes: nodes.map((n) => {
@@ -286,7 +293,12 @@ export function Builder() {
           edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, label: e.label ?? undefined })),
         }),
       }),
-    onSuccess: () => { setSalvo(true); qc.invalidateQueries({ queryKey: ["flow", flowId] }); },
+    // atualiza o cache com a resposta (não refetcha → não sobrescreve o canvas)
+    onSuccess: (saved) => {
+      setSalvo(true);
+      qc.setQueryData(["flow", flowId], saved);
+      qc.invalidateQueries({ queryKey: ["flows"] });
+    },
   });
 
   const sujar = () => setSalvo(false);
@@ -341,6 +353,12 @@ export function Builder() {
         >
           {salvar.isPending ? "Salvando…" : salvo ? "Salvo ✓" : "Salvar agora"}
         </button>
+        {salvar.isError && (
+          <p className="text-xs text-red-600 bg-red-50 rounded px-2 py-1">
+            Erro ao salvar: {String((salvar.error as Error)?.message ?? salvar.error)}.
+            {/requer perfil admin/i.test(String(salvar.error)) && " Saia e entre novamente no painel."}
+          </p>
+        )}
         <p className="text-xs text-slate-400">{flow?.name}{flow?.active ? " (ativo)" : ""}</p>
       </aside>
 
@@ -350,8 +368,15 @@ export function Builder() {
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
-          onNodesChange={(c) => { onNodesChange(c); sujar(); }}
-          onEdgesChange={(c) => { onEdgesChange(c); sujar(); }}
+          onNodesChange={(c) => {
+            onNodesChange(c);
+            // só marca sujo em mudanças reais (não dimensão/seleção do ReactFlow)
+            if (c.some((m) => m.type === "position" || m.type === "remove" || m.type === "add")) sujar();
+          }}
+          onEdgesChange={(c) => {
+            onEdgesChange(c);
+            if (c.some((m) => m.type === "remove" || m.type === "add")) sujar();
+          }}
           onConnect={onConnect}
           onNodeDragStart={onNodeDragStart}
           onNodeClick={(_, n) => { setSelecionado(n.id); setEdgeSelecionada(null); }}

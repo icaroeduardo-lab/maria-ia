@@ -7,24 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Organization {
-  id                 String  @id @default(cuid())
-  slug               String  @unique // subdomínio: <slug>.mariachat.com.br
-  name               String
-  plano              String  @default("free") // "free" | "pro" | "enterprise"
-  limiteConversasMes Int     @default(100)
-  stripeCustomerId   String?
-  waPhoneNumberId    String? @unique // número WhatsApp da org (roteia o webhook)
-  waAccessToken      String?
-  flows              Flow[]
-  users              User[]
-}
-
 model Flow {
   id        String   @id @default(cuid())
   name      String
-  orgId     String
-  org       Organization @relation(fields: [orgId], references: [id])
   nodes     Json     @default("[]") // array de FlowNode
   edges     Json     @default("[]") // array de FlowEdge
   active    Boolean  @default(false)
@@ -35,7 +20,6 @@ model Flow {
 model Conversation {
   id             String    @id @default(cuid())
   sessionId      String    @unique
-  orgId          String    @default("dperj")
   channel        String // "whatsapp" | "web"
   flowId         String? // null = grafo estático
   status         String    @default("active") // "active" | "completed" | "abandoned"
@@ -47,15 +31,34 @@ model Conversation {
   updatedAt      DateTime  @updatedAt
   completedAt    DateTime?
 
-  @@index([orgId, startedAt])
+  @@index([startedAt])
 }
 
 model User {
-  id     String @id @default(cuid())
-  email  String @unique
-  senha  String // hash bcrypt
-  nome   String @default("")
-  role   String @default("viewer") // "superadmin" | "admin" | "viewer"
-  orgId  String
-  org    Organization @relation(fields: [orgId], references: [id])
+  id    String @id @default(cuid())
+  email String @unique
+  senha String // hash bcrypt
+  nome  String @default("")
+  role  String @default("viewer") // "admin" | "viewer"
+}
+
+// Assistido = cidadão atendido (≠ User, que é o operador do painel).
+// O fluxo consulta por CPF, cadastra quem não existe e atualiza dados.
+model Assistido {
+  id             String   @id @default(cuid())
+  cpf            String   @unique // somente dígitos (11)
+  nome           String
+  dataNascimento String?
+  nomeMae        String?
+  situacao       String   @default("regular")
+  municipio      String?
+  uf             String?
+  telefone       String?
+  email          String?
+  cep            String?
+  bairro         String?
+  logradouro     String?
+  numero         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }

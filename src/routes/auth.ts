@@ -7,7 +7,6 @@ export interface UsuarioJWT {
   email: string;
   nome: string;
   role: string;
-  orgId: string;
 }
 
 declare module "@fastify/jwt" {
@@ -26,14 +25,8 @@ export async function autenticar(req: FastifyRequest, reply: FastifyReply) {
 }
 
 export async function exigirAdmin(req: FastifyRequest, reply: FastifyReply) {
-  if (!["admin", "superadmin"].includes(req.user.role)) {
+  if (req.user.role !== "admin") {
     return reply.code(403).send({ erro: "requer perfil admin" });
-  }
-}
-
-export async function exigirSuperadmin(req: FastifyRequest, reply: FastifyReply) {
-  if (req.user.role !== "superadmin") {
-    return reply.code(403).send({ erro: "requer perfil superadmin" });
   }
 }
 
@@ -49,7 +42,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const token = app.jwt.sign(
-      { sub: user.id, email: user.email, nome: user.nome, role: user.role, orgId: user.orgId },
+      { sub: user.id, email: user.email, nome: user.nome, role: user.role },
       { expiresIn: "8h" }
     );
     return { token, usuario: { email: user.email, nome: user.nome, role: user.role } };
