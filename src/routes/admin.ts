@@ -1,9 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import bcrypt from "bcryptjs";
+import type { BaseMessage } from "@langchain/core/messages";
+import { HumanMessage } from "@langchain/core/messages";
 import { prisma } from "../db.js";
 import { autenticar, exigirAdmin, exigirSuperadmin } from "./auth.js";
 import { PLANOS, usoDoMes } from "../orgs.js";
 import { iniciarUpgrade, stripeConfigurado } from "../billing.js";
+import { graphDoFlow, graphEstatico } from "../engine/builder.js";
 
 // API do painel admin (registrada com prefix /admin). Tudo exige JWT;
 // mutações exigem role admin. Exige DATABASE_URL (Postgres).
@@ -232,5 +235,53 @@ export async function adminRoutes(app: FastifyInstance) {
       select: { id: true, slug: true, name: true, plano: true },
     });
     return org;
+  });
+
+  // ── Chat de teste (não conta nas analytics, não bloqueia por plano) ──────────
+  app.post("/test-chat", async (req, reply) => {
+    const { flowId, sessionId, message } = (req.body ?? {}) as {
+      flowId?: string;
+      sessionId?: string;
+      message?: string;
+    };
+    if (!sessionId) return reply.code(400).send({ erro: "sessionId obrigatório" });
+
+    // carrega o flow específico (ou o estático se omitido)
+    let graph = graphEstatico as ReturnType<typeof graphDoFlow>;
+    if (flowId) {
+      const flow = await db.flow.findFirst({ where: { id: flowId, orgId: req.user.orgId } });
+      if (!flow) return reply.code(404).send({ erro: "fluxo não encontrado" });
+      try {
+        graph = graphDoFlow(flow) as typeof graph;
+      } catch (err) {
+        return reply.code(422).send({ erro: `flow inválido: ${String(err)}` });
+      }
+    }
+
+    // prefixo "test:" isola sessões de teste dos checkpoints reais
+    const threadId = `test:${req.user.orgId}:${flowId ?? "static"}:${sessionId}`;
+    const config = { configurable: { thread_id: threadId } };
+
+    const prevState = await graph.getState(config);
+    const prevLen = (prevState.values?.messages as unknown[])?.length ?? 0;
+    const isResuming = prevLen > 0;
+
+    if (isResuming && message) {
+      await graph.updateState(config, { messages: [new HumanMessage(message)] });
+    }
+
+    const result = await graph.invoke(isResuming ? null : { canal: "web" }, config);
+
+    const newMessages = (result.messages as BaseMessage[])
+      .slice(prevLen)
+      .filter((m) => m.getType() !== "human");
+
+    const estadoFinal = await graph.getState(config);
+    const done = (estadoFinal.next?.length ?? 0) === 0;
+
+    return {
+      messages: newMessages.map((m) => ({ role: m.getType(), content: m.content })),
+      done,
+    };
   });
 }

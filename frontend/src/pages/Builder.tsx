@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -161,6 +161,71 @@ export function Builder() {
   const [edgeSelecionada, setEdgeSelecionada] = useState<string | null>(null);
   const [salvo, setSalvo] = useState(true);
 
+  // histórico para Ctrl+Z (refs p/ acesso estável no listener de teclado)
+  const historicoRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([]);
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  const selecionadoRef = useRef(selecionado);
+  const edgeSelecionadaRef = useRef(edgeSelecionada);
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+  useEffect(() => { edgesRef.current = edges; }, [edges]);
+  useEffect(() => { selecionadoRef.current = selecionado; }, [selecionado]);
+  useEffect(() => { edgeSelecionadaRef.current = edgeSelecionada; }, [edgeSelecionada]);
+
+  const salvarHistorico = useCallback(() => {
+    historicoRef.current = [
+      ...historicoRef.current.slice(-30),
+      { nodes: nodesRef.current, edges: edgesRef.current },
+    ];
+  }, []);
+
+  // teclado: Delete deleta selecionado; Ctrl+Z desfaz
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        const sel = selecionadoRef.current;
+        const edgeSel = edgeSelecionadaRef.current;
+        if (sel) {
+          salvarHistorico();
+          setNodes((ns) => ns.filter((n) => n.id !== sel));
+          setEdges((es) => es.filter((x) => x.source !== sel && x.target !== sel));
+          setSelecionado(null);
+          setSalvo(false);
+        } else if (edgeSel) {
+          salvarHistorico();
+          setEdges((es) => es.filter((x) => x.id !== edgeSel));
+          setEdgeSelecionada(null);
+          setSalvo(false);
+        }
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        const h = historicoRef.current;
+        if (!h.length) return;
+        const anterior = h[h.length - 1];
+        historicoRef.current = h.slice(0, -1);
+        setNodes(anterior.nodes);
+        setEdges(anterior.edges);
+        setSelecionado(null);
+        setEdgeSelecionada(null);
+        setSalvo(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [salvarHistorico, setNodes, setEdges]);
+
+  // salva snapshot no início de cada drag para Ctrl+Z restaurar posição
+  const onNodeDragStart = useCallback(() => salvarHistorico(), [salvarHistorico]);
+
+  // ref para salvar histórico apenas na primeira edição de cada seleção
+  const primeiraEdicaoRef = useRef(true);
+  useEffect(() => { primeiraEdicaoRef.current = true; }, [selecionado]);
+
   const { data: flow } = useQuery({
     queryKey: ["flow", flowId],
     queryFn: () => api<FlowAPI>(`/admin/flows/${flowId}`),
@@ -197,6 +262,7 @@ export function Builder() {
   const sujar = () => setSalvo(false);
 
   const adicionar = (tipo: TipoNo) => {
+    salvarHistorico();
     const id = `${tipo}_${Date.now().toString(36)}`;
     setNodes((ns) => [...ns, {
       id, type: "custom",
@@ -208,8 +274,8 @@ export function Builder() {
   };
 
   const onConnect = useCallback(
-    (c: Connection) => { setEdges((es) => addEdge(c, es)); sujar(); },
-    [setEdges]
+    (c: Connection) => { salvarHistorico(); setEdges((es) => addEdge(c, es)); sujar(); },
+    [setEdges, salvarHistorico]
   );
 
   const noAtual = nodes.find((n) => n.id === selecionado);
@@ -249,6 +315,7 @@ export function Builder() {
           onNodesChange={(c) => { onNodesChange(c); sujar(); }}
           onEdgesChange={(c) => { onEdgesChange(c); sujar(); }}
           onConnect={onConnect}
+          onNodeDragStart={onNodeDragStart}
           onNodeClick={(_, n) => { setSelecionado(n.id); setEdgeSelecionada(null); }}
           onEdgeClick={(_, e) => { setEdgeSelecionada(e.id); setSelecionado(null); }}
           onPaneClick={() => { setSelecionado(null); setEdgeSelecionada(null); }}
@@ -266,6 +333,10 @@ export function Builder() {
           <EditorNo
             no={noAtual}
             onChange={(data) => {
+              if (primeiraEdicaoRef.current) {
+                salvarHistorico();
+                primeiraEdicaoRef.current = false;
+              }
               setNodes((ns) => ns.map((n) => (n.id === noAtual.id ? { ...n, data } : n)));
               sujar();
             }}
