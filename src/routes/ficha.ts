@@ -38,12 +38,26 @@ function extrairDados(body: Record<string, unknown>): Record<string, string> {
   };
 }
 
+// cache do fundo em memória: evita rebaixar do S3 a cada ficha
+const bgCache = new Map<string, Buffer>();
+async function fundo(url: string): Promise<Buffer> {
+  const hit = bgCache.get(url);
+  if (hit) return hit;
+  const buf = Buffer.from(await (await fetch(url)).arrayBuffer());
+  bgCache.set(url, buf);
+  return buf;
+}
+
 async function gerarFicha(body: Record<string, unknown>): Promise<Buffer> {
   const bgUrl = (typeof body.ficha_bg === "string" && body.ficha_bg) || BG_PADRAO;
-  const bg = Buffer.from(await (await fetch(bgUrl)).arrayBuffer());
+  const bgOriginal = await fundo(bgUrl);
+  // redimensiona o fundo ANTES de compor (texto fica nítido, arquivo fica leve)
+  const orig = await sharp(bgOriginal).metadata();
+  const larguraAlvo = Math.min(orig.width ?? 1080, 820);
+  const bg = await sharp(bgOriginal).resize({ width: larguraAlvo, withoutEnlargement: true }).toBuffer();
   const meta = await sharp(bg).metadata();
-  const W = meta.width ?? 1080;
-  const H = meta.height ?? 1456;
+  const W = meta.width ?? 820;
+  const H = meta.height ?? 1093;
 
   const d = extrairDados(body);
   const linhas: [string, string][] = [
@@ -77,24 +91,28 @@ async function gerarFicha(body: Record<string, unknown>): Promise<Buffer> {
     ${textos}
   </svg>`;
 
-  return sharp(bg).composite([{ input: Buffer.from(svg), top: 0, left: 0 }]).png().toBuffer();
+  // JPEG comprimido: ~10x menor que PNG → carrega rápido em conexão lenta.
+  return sharp(bg)
+    .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
+    .jpeg({ quality: 78, mozjpeg: true })
+    .toBuffer();
 }
 
 export async function fichaRoutes(app: FastifyInstance) {
   // POST /api/ficha — body = dadosColetados → { url } (imagem composta no S3)
   app.post("/api/ficha", async (req, reply) => {
     try {
-      const png = await gerarFicha((req.body ?? {}) as Record<string, unknown>);
-      const key = `fichas/${randomUUID()}.png`;
+      const jpg = await gerarFicha((req.body ?? {}) as Record<string, unknown>);
+      const key = `fichas/${randomUUID()}.jpg`;
       try {
-        await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: png, ContentType: "image/png" }));
+        await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: jpg, ContentType: "image/jpeg" }));
         const url = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
-        console.log(`[ficha] gerada → ${url}`);
+        console.log(`[ficha] gerada (${(jpg.length / 1024).toFixed(0)}KB) → ${url}`);
         return { url };
       } catch (errS3) {
         // sem S3 → devolve data URI (funciona no chat web; WhatsApp exige URL)
         console.warn("[ficha] S3 falhou, usando data URI:", String(errS3).slice(0, 120));
-        return { url: `data:image/png;base64,${png.toString("base64")}` };
+        return { url: `data:image/jpeg;base64,${jpg.toString("base64")}` };
       }
     } catch (err) {
       console.error("[ficha] erro:", err);
