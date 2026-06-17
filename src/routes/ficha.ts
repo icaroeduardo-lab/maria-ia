@@ -18,6 +18,8 @@ const REGION = process.env.AWS_REGION ?? "us-east-1";
 const s3 = new S3Client({ region: REGION });
 const escapar = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const fmtCpf = (c: string) => (c.replace(/\D/g, "").length === 11 ? c.replace(/\D/g, "").replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : c);
+// "1985-03-22" → "22/03/1985"; outros formatos passam intactos
+const fmtData = (d: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d); return m ? `${m[3]}/${m[2]}/${m[1]}` : d; };
 
 // extrai os dados do assistido do corpo (resultado_cpf.dados ou campos diretos)
 function extrairDados(body: Record<string, unknown>): Record<string, string> {
@@ -29,7 +31,7 @@ function extrairDados(body: Record<string, unknown>): Record<string, string> {
   return {
     nome: g("nome"),
     cpf: fmtCpf(g("cpf") || String(body.cpf ?? "")),
-    dataNascimento: g("dataNascimento"),
+    dataNascimento: fmtData(g("dataNascimento")),
     nomeMae: g("nomeMae"),
     municipio: [g("municipio"), g("uf")].filter(Boolean).join(" / "),
     telefone: g("telefone"),
