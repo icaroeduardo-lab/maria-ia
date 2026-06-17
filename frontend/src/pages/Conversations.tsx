@@ -90,14 +90,29 @@ export function Conversations() {
 }
 
 type Aba = "resumo" | "dados" | "historico";
-interface MsgHist { role: string; content: string | { type: string; text?: string; options?: string[] }[] }
+type Bloco = { type: string; text?: string; options?: string[]; image_url?: { url: string } };
+interface MsgHist { role: string; content: string | Bloco[] }
 
-function textoDoConteudo(content: MsgHist["content"]): string {
-  if (typeof content === "string") return content;
-  return content
-    .map((b) => (b.type === "text" ? b.text ?? "" : b.type === "options" ? `[opções: ${(b.options ?? []).join(", ")}]` : b.type === "boolean" ? "[Sim/Não]" : b.type === "image_url" ? "[imagem]" : ""))
-    .filter(Boolean)
-    .join(" ");
+// renderiza os blocos da mensagem; imagem fixa (imagens/) aparece, ficha (fichas/, efêmera) vira texto
+function renderHistorico(content: MsgHist["content"]) {
+  const blocos: Bloco[] = typeof content === "string" ? [{ type: "text", text: content }] : content;
+  return blocos.map((b, i) => {
+    if (b.type === "text") return b.text ? <span key={i} className="whitespace-pre-wrap">{b.text}</span> : null;
+    if (b.type === "options") return <span key={i} className="opacity-70">[opções: {(b.options ?? []).join(", ")}]</span>;
+    if (b.type === "boolean") return <span key={i} className="opacity-70"> [Sim/Não]</span>;
+    if (b.type === "image_url") {
+      const url = b.image_url?.url ?? "";
+      return url.includes("/fichas/")
+        ? <span key={i} className="opacity-70">🗎 [ficha do assistido]</span>
+        : <img key={i} src={url} className="max-w-[140px] rounded mt-1" alt="" />;
+    }
+    return null;
+  });
+}
+
+function temConteudo(content: MsgHist["content"]): boolean {
+  if (typeof content === "string") return content.trim().length > 0;
+  return content.some((b) => (b.type === "text" && b.text?.trim()) || b.type !== "text");
 }
 
 function Detalhe({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
@@ -183,12 +198,11 @@ function Detalhe({ sessionId, onClose }: { sessionId: string; onClose: () => voi
               {hist?.messages.length === 0 && <p className="text-sm text-slate-400">Sem histórico disponível.</p>}
               {hist?.messages.map((msg, i) => {
                 const ai = msg.role === "ai";
-                const txt = textoDoConteudo(msg.content);
-                if (!txt.trim()) return null;
+                if (!temConteudo(msg.content)) return null;
                 return (
                   <div key={i} className={`flex ${ai ? "justify-start" : "justify-end"}`}>
-                    <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap ${ai ? "bg-slate-100 text-slate-800" : "bg-emerald-600 text-white"}`}>
-                      {txt}
+                    <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${ai ? "bg-slate-100 text-slate-800" : "bg-emerald-600 text-white"}`}>
+                      {renderHistorico(msg.content)}
                     </div>
                   </div>
                 );
