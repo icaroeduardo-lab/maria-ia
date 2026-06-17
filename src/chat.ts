@@ -3,6 +3,7 @@ import type { BaseMessage } from "@langchain/core/messages";
 import { graph as graphEstatico } from "./graph.js";
 import { graphDoFlow, subfluxosReferenciados } from "./engine/builder.js";
 import { prisma } from "./db.js";
+import { montarMetadados, gerarResumoTexto } from "./resumo.js";
 
 // Grafo a usar: flow ativo (compilado dinamicamente, com cache) ou o grafo
 // estático padrão. Troca de flow ativo afeta conversas novas.
@@ -65,6 +66,16 @@ async function rastrearConversa(
   const atual = await graph.getState(config);
   const v = atual.values as Record<string, unknown>;
   const emAndamento = (atual.next?.length ?? 0) > 0;
+  const coletados = (v.dadosColetados as Record<string, unknown>) ?? {};
+
+  // no fim do atendimento: gera resumo + metadados limpos (envio/registro à DPERJ)
+  let resumo: string | null = null;
+  let metadados: object | null = null;
+  if (!emAndamento) {
+    const m = montarMetadados(coletados);
+    metadados = m as object;
+    resumo = await gerarResumoTexto(m).catch(() => null);
+  }
 
   const dados = {
     channel: canal,
@@ -72,9 +83,11 @@ async function rastrearConversa(
     status: emAndamento ? "active" : "completed",
     categoria: (v.categoria as string) || null,
     ultimaEtapa: emAndamento ? atual.next[0] : "fim",
-    dadosColetados: (v.dadosColetados as object) ?? {},
+    dadosColetados: coletados as object,
     protocoloDperj: (v.protocolo as string) || null,
     completedAt: emAndamento ? null : new Date(),
+    ...(resumo !== null && { resumo }),
+    ...(metadados !== null && { metadados }),
   };
 
   await prisma.conversation.upsert({

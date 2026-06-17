@@ -26,6 +26,8 @@ model Conversation {
   categoria      String?
   ultimaEtapa    String? // último node executado (análise de abandono)
   dadosColetados Json      @default("{}")
+  resumo         String?   // resumo do caso (gerado no fim do atendimento)
+  metadados      Json?     // metadados limpos: identidade + caso + encaminhamento
   protocoloDperj String?
   startedAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

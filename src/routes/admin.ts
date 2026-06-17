@@ -6,6 +6,7 @@ import { prisma } from "../db.js";
 import { autenticar, exigirAdmin } from "./auth.js";
 import { graphDoFlow, graphEstatico, subfluxosReferenciados } from "../engine/builder.js";
 import { ESTILO_DEFAULT, invalidarEstilo } from "../config.js";
+import { montarMetadados, gerarResumoTexto, type Metadados } from "../resumo.js";
 
 // API do painel admin (registrada com prefix /admin). Tudo exige JWT;
 // mutações exigem role admin. Exige DATABASE_URL (Postgres).
@@ -287,11 +288,22 @@ export async function adminRoutes(app: FastifyInstance) {
 
     const estadoFinal = await graph.getState(config);
     const done = (estadoFinal.next?.length ?? 0) === 0;
+    const coletados = ((estadoFinal.values as Record<string, unknown>)?.dadosColetados ?? {}) as Record<string, unknown>;
+
+    // ao encerrar, devolve resumo + metadados limpos (pra visualizar o fechamento)
+    let resumo: string | undefined;
+    let metadados: object | undefined;
+    if (done) {
+      metadados = montarMetadados(coletados);
+      resumo = await gerarResumoTexto(metadados as Metadados).catch(() => undefined);
+    }
 
     return {
       messages: newMessages.map((m) => ({ role: m.getType(), content: m.content })),
       done,
-      dadosColetados: (estadoFinal.values as Record<string, unknown>)?.dadosColetados ?? {},
+      dadosColetados: coletados,
+      ...(resumo !== undefined && { resumo }),
+      ...(metadados !== undefined && { metadados }),
     };
   });
 }

@@ -285,8 +285,8 @@ function baseUrlInterna(): string {
 
 // ── Funções de nó ─────────────────────────────────────────────────────────────
 
-// ctx.perguntas = todas as perguntas do fluxo (usado pelo classify p/ extração antecipada)
-function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[] }) {
+// ctx.perguntas = todas as perguntas; ctx.perguntasPorCategoria = perguntas por tema (classify)
+function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCategoria?: Record<string, Pergunta[]> }) {
   switch (node.type) {
     case "mensagem":
       return async (state: GraphState) => {
@@ -337,7 +337,7 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[] }) {
       // Fallback por palavra-chave quando o modelo não está disponível.
       const opcoes = (node.data.opcoes ?? []).filter(Boolean);
       const chave = node.data.chave ?? "categoria";
-      const perguntas = ctx?.perguntas ?? [];
+      const porCategoria = ctx?.perguntasPorCategoria ?? {};
       const usarRag = node.data.usarRag !== false; // RAG ligado por padrão (mais acertivo)
       return async (state: GraphState) => {
         const fala = ultimaFalaUsuario(state);
@@ -351,11 +351,10 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[] }) {
             console.warn("[classificar] RAG indisponível:", String(err).slice(0, 100));
           }
         }
-        // classifica o tema E extrai o que já foi dito (pré-preenche perguntas)
-        const [categoria, extra] = await Promise.all([
-          classificarTexto(fala, opcoes, node.data.prompt, contextoRag),
-          extrairDoRelato(fala, perguntas, state.dadosColetados),
-        ]);
+        // 1º classifica; depois extrai SÓ as perguntas do tema escolhido (sem cross-fill)
+        const categoria = await classificarTexto(fala, opcoes, node.data.prompt, contextoRag);
+        const perguntasTema = porCategoria[categoria.toLowerCase()] ?? ctx?.perguntas ?? [];
+        const extra = await extrairDoRelato(fala, perguntasTema, state.dadosColetados);
         return { dadosColetados: { [chave]: categoria, ...extra }, categoria };
       };
     }
@@ -541,9 +540,25 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
     return n && (n.type === "pergunta" || n.type === "subgrafo") ? `cap_${id}` : id;
   };
 
+  // perguntas alcançáveis a partir de um nó (p/ extração por tema)
+  const perguntasAlcancaveis = (id: string) => {
+    const r = alcancaveisDe(id);
+    return nodesUsados.filter((n) => n.type === "pergunta" && r.has(n.id)).map(perguntaDoNode);
+  };
+
   // nodes do flow (+ gate/captura/encerramento auxiliares)
   for (const node of nodesUsados) {
-    builder.addNode(node.id, criarNode(node, { perguntas: todasPerguntas }));
+    // classify: mapeia categoria → perguntas do tema (extrai só do tema escolhido, sem cross-fill)
+    let ctx: { perguntas: Pergunta[]; perguntasPorCategoria?: Record<string, Pergunta[]> } = { perguntas: todasPerguntas };
+    if (node.type === "classificar") {
+      const porCat: Record<string, Pergunta[]> = {};
+      for (const e of edgesUsados.filter((e) => e.source === node.id)) {
+        const lbl = (e.label ?? "").toLowerCase().trim();
+        if (lbl) porCat[lbl] = perguntasAlcancaveis(e.target);
+      }
+      ctx = { perguntas: todasPerguntas, perguntasPorCategoria: porCat };
+    }
+    builder.addNode(node.id, criarNode(node, ctx));
     if (node.type === "pergunta") {
       builder.addNode(`gate_${node.id}`, async () => ({})); // no-op; decisão na conditional edge
       builder.addNode(`cap_${node.id}`, criarCaptura(perguntaDoNode(node)));
