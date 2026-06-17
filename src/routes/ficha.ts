@@ -6,6 +6,10 @@ import { randomUUID } from "crypto";
 // Gera uma "ficha" do assistido: escreve os dados (consultados pelo CPF) por cima
 // de uma imagem de prancheta e hospeda o resultado no S3. Usado pelo fluxo via
 // nó api (chave=ficha) + nó mensagem com imagem {{ficha.url}}.
+//
+// As imagens contêm PII e são efêmeras: o bucket tem uma regra de lifecycle
+// ("expira-fichas-1d") que apaga tudo sob o prefixo "fichas/" após 1 dia.
+// A imagem só precisa existir durante a conversa (WhatsApp baixa a mídia no envio).
 
 const BG_PADRAO = "https://maria-ia.s3.us-east-1.amazonaws.com/e4111b2a-27ad-48b2-be19-2b68bebeab3c.webp";
 const BUCKET = process.env.S3_BUCKET ?? "maria-ia";
