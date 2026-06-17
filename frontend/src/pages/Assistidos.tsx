@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useAuth } from "../store";
+import { mascararCpf, mascararTelefone } from "../lib/mask";
 
 interface Assistido {
   id: string;
@@ -36,9 +37,6 @@ const CAMPOS: { chave: keyof Assistido; label: string }[] = [
   { chave: "logradouro", label: "Logradouro" },
   { chave: "numero", label: "Número" },
 ];
-
-const fmtCpf = (c: string) =>
-  c.length === 11 ? c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : c;
 
 const inputCls = "mt-1 w-full border border-slate-300 rounded px-2 py-1.5 text-sm";
 
@@ -121,10 +119,10 @@ export function Assistidos() {
             )}
             {data?.itens.map((a) => (
               <tr key={a.id} className="border-t border-slate-100 hover:bg-slate-50">
-                <td className="px-4 py-2 font-mono">{fmtCpf(a.cpf)}</td>
+                <td className="px-4 py-2 font-mono">{mascararCpf(a.cpf)}</td>
                 <td className="px-4 py-2">{a.nome}</td>
                 <td className="px-4 py-2">{a.municipio ? `${a.municipio}${a.uf ? "/" + a.uf : ""}` : "—"}</td>
-                <td className="px-4 py-2">{a.telefone || "—"}</td>
+                <td className="px-4 py-2">{a.telefone ? mascararTelefone(a.telefone) : "—"}</td>
                 <td className="px-4 py-2 text-right whitespace-nowrap">
                   <button
                     className="text-emerald-700 hover:underline mr-3"

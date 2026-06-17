@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../lib/api";
+import { mascararCampo, ehSensivel } from "../lib/mask";
 
 interface Conversa {
   sessionId: string;
@@ -117,6 +118,7 @@ function temConteudo(content: MsgHist["content"]): boolean {
 
 function Detalhe({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
   const [aba, setAba] = useState<Aba>("resumo");
+  const [revelar, setRevelar] = useState(false);
   const { data: c } = useQuery({
     queryKey: ["conversation", sessionId],
     queryFn: () => api<ConversaDetalhe>(`/admin/conversations/${encodeURIComponent(sessionId)}`),
@@ -164,10 +166,18 @@ function Detalhe({ sessionId, onClose }: { sessionId: string; onClose: () => voi
             <>
               {m?.assistido && (
                 <section className="mb-4">
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase mb-1">Assistido</h3>
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase">Assistido</h3>
+                    <button className="text-xs text-emerald-700 hover:underline" onClick={() => setRevelar((r) => !r)}>
+                      {revelar ? "🙈 ocultar dados" : "👁 revelar dados"}
+                    </button>
+                  </div>
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                     {Object.entries(m.assistido).filter(([, v]) => v).map(([k, v]) => (
-                      <div key={k}><dt className="inline text-slate-500">{k}: </dt><dd className="inline text-slate-800">{v}</dd></div>
+                      <div key={k}>
+                        <dt className="inline text-slate-500">{k}: </dt>
+                        <dd className="inline text-slate-800 font-mono">{revelar || !ehSensivel(k) ? v : mascararCampo(k, v)}</dd>
+                      </div>
                     ))}
                   </dl>
                 </section>
