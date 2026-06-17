@@ -25,7 +25,6 @@ interface Metadados {
   relato: string;
   encaminhamento?: Record<string, unknown>;
   protocolo: string | null;
-  ficha_url: string | null;
 }
 
 const CORES: Record<string, string> = {
@@ -142,10 +141,6 @@ function Detalhe({ sessionId, onClose }: { sessionId: string; onClose: () => voi
             <pre className="text-xs bg-slate-50 rounded p-2 overflow-x-auto">{JSON.stringify(m.encaminhamento, null, 2)}</pre>
           </section>
         )}
-
-        <div className="flex gap-3 text-sm">
-          {m?.ficha_url && <a className="text-emerald-700 hover:underline" href={m.ficha_url} target="_blank" rel="noreferrer">Ver ficha 🖼️</a>}
-        </div>
 
         {!c?.resumo && c && (
           <p className="text-sm text-slate-400">Conversa sem resumo (ainda em andamento ou anterior a este recurso).</p>

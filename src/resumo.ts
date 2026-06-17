@@ -36,14 +36,12 @@ export interface Metadados {
   relato: string;
   encaminhamento?: Record<string, unknown>;
   protocolo: string | null;
-  ficha_url: string | null;
 }
 
 export function montarMetadados(dados: Record<string, unknown>): Metadados {
   const rc = parseJson(dados.resultado_cpf) as { dados?: Record<string, string> } | null;
   const id = rc?.dados ?? {};
   const ag = parseJson(dados.agendamento) as Record<string, string> | null;
-  const ficha = parseJson(dados.ficha) as { url?: string } | null;
 
   // caso = só campos coletados do tema (texto simples, fora os de sistema)
   const caso: Record<string, string> = {};
@@ -69,7 +67,6 @@ export function montarMetadados(dados: Record<string, unknown>): Metadados {
     relato: (dados.relato as string) ?? "",
     encaminhamento: ag ? { tipo: "agendamento", ...ag } : undefined,
     protocolo: ag?.agendamento_id ?? (dados.protocolo as string) ?? null,
-    ficha_url: ficha?.url ?? null,
   };
 }
 
