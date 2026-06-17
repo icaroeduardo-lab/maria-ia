@@ -240,20 +240,30 @@ async function reescreverPergunta(
   try {
     const fala = ultimaFalaUsuario(state);
     const primeira = (state.perguntasFeitas?.length ?? 0) === 0;
+    // nome do assistido (cadastro existente ou novo) p/ tratamento pessoal
+    const nomeCompleto = resolverCampo(state.dadosColetados, "resultado_cpf.dados.nome") || resolverCampo(state.dadosColetados, "nome");
+    const primeiroNome = nomeCompleto.split(" ")[0];
     const regras = [
-      "Você (Maria) está PERGUNTANDO ao cidadão para COLETAR uma informação. Reescreva a PERGUNTA abaixo de forma curta, simples e acolhedora, como numa conversa real.",
+      "Você (Maria) está PERGUNTANDO ao cidadão para COLETAR uma informação. Reescreva a PERGUNTA abaixo de forma simples, calorosa e EMPÁTICA, como numa conversa real.",
+      "Seja humano e acolhedor: demonstre que entende que pode ser um momento delicado e passe segurança de que você vai ajudar. Ex: \"Imagino que seja um momento difícil, e pode contar comigo nisso.\"",
+      "Mas NÃO repita a mesma frase de empatia em toda mensagem — varie, e use a empatia com naturalidade (nem toda pergunta precisa de consolo).",
       "Formule como uma pergunta DIRETA pedindo o dado ao cidadão. NUNCA inverta (não diga que a pessoa quer saber algo).",
       "Mantenha EXATAMENTE a mesma informação pedida. Não acrescente nem troque por outra pergunta.",
-      "No máximo 2 frases. Não repita saudação (já cumprimentou).",
+      "No máximo 3 frases curtas. Não repita saudação (já cumprimentou).",
       "Preserve links, números, formatos (ex: CPF, datas) e termos legais exatamente como estão.",
-      primeira ? "" : "Pode reconhecer brevemente o que a pessoa acabou de dizer, sem exagero.",
+      primeira ? "" : "Reconheça brevemente o que a pessoa acabou de dizer, com empatia, antes de perguntar.",
       p.tipo === "sim_nao" ? "A pergunta deve poder ser respondida com Sim ou Não." : "",
       p.tipo === "opcoes" ? "NÃO liste as opções no texto (elas aparecem como botões)." : "",
     ].filter(Boolean).join("\n");
 
     const res = await model.invoke([
       new SystemMessage(`${estilo}\n\n${regras}`),
-      new HumanMessage(`Pergunta a fazer: "${textoBase}"${fala ? `\nÚltima fala da pessoa: "${fala}"` : ""}\n\nResponda só com a pergunta reescrita.`),
+      new HumanMessage(
+        `Pergunta a fazer: "${textoBase}"` +
+        (primeiroNome ? `\nNome da pessoa: ${primeiroNome} (pode usar o nome com naturalidade, sem repetir toda vez)` : "") +
+        (fala ? `\nÚltima fala da pessoa: "${fala}"` : "") +
+        `\n\nResponda só com a pergunta reescrita.`
+      ),
     ]);
     const txt = String(res.content).trim();
     return txt || textoBase;
