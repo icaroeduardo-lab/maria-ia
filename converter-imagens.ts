@@ -12,8 +12,9 @@ const REGION = process.env.AWS_REGION ?? "us-east-1";
 const s3 = new S3Client({ region: REGION });
 const prisma = new PrismaClient();
 
+// processa qualquer imagem http, exceto as já otimizadas (em imagens/) e a ficha gerada
 const precisaConverter = (u: unknown): u is string =>
-  typeof u === "string" && u.startsWith("http");
+  typeof u === "string" && u.startsWith("http") && !u.includes("/imagens/") && !u.includes("/fichas/");
 
 const cache = new Map<string, string>(); // url antiga → nova
 async function converter(url: string): Promise<string> {
