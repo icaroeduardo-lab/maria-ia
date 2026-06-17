@@ -6,6 +6,7 @@ import { Flows } from "./pages/Flows";
 import { Builder } from "./pages/Builder";
 import { Conversations } from "./pages/Conversations";
 import { Assistidos } from "./pages/Assistidos";
+import { Configuracoes } from "./pages/Configuracoes";
 import { TestChat } from "./pages/TestChat";
 
 function Layout() {
@@ -20,6 +21,7 @@ function Layout() {
           <Link to="/flows" className="hover:underline [&.active]:font-bold">Fluxos</Link>
           <Link to="/conversations" className="hover:underline [&.active]:font-bold">Conversas</Link>
           <Link to="/assistidos" className="hover:underline [&.active]:font-bold">Assistidos</Link>
+          <Link to="/config" className="hover:underline [&.active]:font-bold">Estilo IA</Link>
           <Link to="/test-chat" className="hover:underline [&.active]:font-bold">Testar Fluxo</Link>
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm">
@@ -61,11 +63,12 @@ const flowsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/f
 const builderRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/flows/$flowId", component: Builder });
 const conversationsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/conversations", component: Conversations });
 const assistidosRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/assistidos", component: Assistidos });
+const configRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/config", component: Configuracoes });
 const testChatRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/test-chat", component: TestChat });
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  protectedRoute.addChildren([dashboardRoute, flowsRoute, builderRoute, conversationsRoute, assistidosRoute, testChatRoute]),
+  protectedRoute.addChildren([dashboardRoute, flowsRoute, builderRoute, conversationsRoute, assistidosRoute, configRoute, testChatRoute]),
 ]);
 
 export const router = createRouter({ routeTree });

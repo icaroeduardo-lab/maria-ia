@@ -4,6 +4,7 @@ import { ChatBedrockConverse } from "@langchain/aws";
 import { AmazonKnowledgeBaseRetriever } from "@langchain/aws";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { z } from "zod";
+import { obterEstilo } from "../config.js";
 import { GraphAnnotation, type GraphState } from "../state.js";
 import { checkpointer, graph as graphEstatico } from "../graph.js";
 import { mensagemPergunta, proxima, type Pergunta, type TipoPergunta } from "../perguntas.js";
@@ -269,8 +270,11 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[] }) {
           const docs = await retriever.invoke(fala);
           contexto = `\n\n<contexto>\n${docs.map((d) => d.pageContent).join("\n\n")}\n</contexto>`;
         }
+        // preâmbulo de estilo global (linguagem simples) + instrução do nó + RAG
+        const estilo = await obterEstilo();
+        const instrucao = node.data.prompt ? `${estilo}\n\n${node.data.prompt}` : estilo;
         const res = await model.invoke([
-          new SystemMessage((node.data.prompt ?? "Você é a Maria, assistente da Defensoria Pública do RJ.") + contexto),
+          new SystemMessage(instrucao + contexto),
           new HumanMessage(fala || "Olá"),
         ]);
         return { messages: [new AIMessage(res.content as string)] };

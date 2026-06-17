@@ -5,6 +5,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import { prisma } from "../db.js";
 import { autenticar, exigirAdmin } from "./auth.js";
 import { graphDoFlow, graphEstatico, subfluxosReferenciados } from "../engine/builder.js";
+import { ESTILO_DEFAULT, invalidarEstilo } from "../config.js";
 
 // API do painel admin (registrada com prefix /admin). Tudo exige JWT;
 // mutações exigem role admin. Exige DATABASE_URL (Postgres).
@@ -221,6 +222,23 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!existe) return reply.code(404).send({ erro: "assistido não encontrado" });
     await db.assistido.delete({ where: { id } });
     return { ok: true };
+  });
+
+  // ── Configuração: preâmbulo de estilo da IA ─────────────────────────────────
+  app.get("/config", async () => {
+    const c = await db.config.findUnique({ where: { id: "default" } });
+    return { estiloPrompt: c?.estiloPrompt ?? "", padrao: ESTILO_DEFAULT };
+  });
+
+  app.put("/config", { preHandler: [exigirAdmin] }, async (req) => {
+    const { estiloPrompt = "" } = (req.body ?? {}) as { estiloPrompt?: string };
+    const c = await db.config.upsert({
+      where: { id: "default" },
+      update: { estiloPrompt },
+      create: { id: "default", estiloPrompt },
+    });
+    invalidarEstilo();
+    return c;
   });
 
   // ── Chat de teste (não conta nas analytics) ─────────────────────────────────
