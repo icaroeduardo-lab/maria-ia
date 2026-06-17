@@ -3,6 +3,7 @@ import { AIMessage } from "@langchain/core/messages";
 import { ChatBedrockConverse } from "@langchain/aws";
 import { AmazonKnowledgeBaseRetriever } from "@langchain/aws";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { z } from "zod";
 import { GraphAnnotation, type GraphState } from "../state.js";
 import { checkpointer, graph as graphEstatico } from "../graph.js";
 import { mensagemPergunta, proxima, type Pergunta, type TipoPergunta } from "../perguntas.js";
@@ -166,6 +167,63 @@ function classificarPorPalavraChave(fala: string, opcoes: string[]): string {
   return categoriaPadrao(opcoes); // default → "outros" (não a última, que pode ser fora_competencia)
 }
 
+// ── Extração antecipada: a IA preenche o que o usuário já disse no relato ──────
+const PLACEHOLDER = /unknown|n\/a|^null$|undefined|não informado|nao informado|<.+>|^[-?.]+$/i;
+const normSimNao = (v: string) => {
+  const s = v.trim().toLowerCase();
+  if (s === "true" || s.startsWith("s")) return "sim";
+  if (s === "false" || s.startsWith("n")) return "não";
+  return v;
+};
+const casarOpcaoGen = (p: Pergunta, v: string) => {
+  const t = v.trim().toLowerCase();
+  return p.opcoes?.find((o) => o.toLowerCase() === t || o.toLowerCase().includes(t) || t.includes(o.toLowerCase()));
+};
+
+// Dado o relato livre, extrai valores para as perguntas ainda não respondidas.
+// Só preenche o que foi dito EXPLICITAMENTE (guards anti-alucinação).
+async function extrairDoRelato(
+  relato: string,
+  perguntas: Pergunta[],
+  jaColetados: Record<string, unknown>
+): Promise<Record<string, string>> {
+  const pendentes = perguntas.filter((p) => p.texto && !(p.chave in jaColetados));
+  if (!relato.trim() || !pendentes.length) return {};
+
+  const shape: Record<string, z.ZodType> = {};
+  for (const p of pendentes) {
+    const desc = p.tipo === "opcoes" && p.opcoes?.length ? `${p.texto} (opções: ${p.opcoes.join(", ")})` : p.texto;
+    shape[p.chave] = z.string().nullish().describe(desc);
+  }
+
+  try {
+    const system = `Você extrai dados do relato de um cidadão (Defensoria Pública do RJ).
+- Extraia APENAS o que foi dito EXPLICITAMENTE no relato. NUNCA deduza, suponha ou invente.
+- Em dúvida, deixe null. Campos sim/não: só preencha se afirmado claramente, use "sim" ou "não".`;
+    const out = await model.withStructuredOutput(z.object(shape)).invoke([
+      new SystemMessage(system),
+      new HumanMessage(`Relato: "${relato}"\n\nExtraia os dados informados (deixe null o que não foi dito).`),
+    ]);
+
+    const updates: Record<string, string> = {};
+    for (const [k, v] of Object.entries(out)) {
+      if (typeof v !== "string" || !v.trim() || PLACEHOLDER.test(v.trim())) continue;
+      const p = pendentes.find((x) => x.chave === k);
+      if (!p) continue;
+      if (["true", "false"].includes(v.trim().toLowerCase()) && p.tipo !== "sim_nao") continue;
+      if (p.tipo === "sim_nao") { const n = normSimNao(v); if (n === "sim" || n === "não") updates[k] = n; continue; }
+      if (p.tipo === "opcoes") { const o = casarOpcaoGen(p, v); if (o) updates[k] = o; continue; }
+      if (p.validar && !p.validar(v)) continue;
+      updates[k] = v.trim();
+    }
+    if (Object.keys(updates).length) console.log(`[extrair] pré-preenchido: ${Object.keys(updates).join(", ")}`);
+    return updates;
+  } catch (err) {
+    console.warn("[extrair] falha:", String(err).slice(0, 120));
+    return {};
+  }
+}
+
 // interpola {{chave}} / {{chave.sub}} com dadosColetados — ex: "CPF: {{cpf}}"
 function interpolar(txt: string, dados: Record<string, unknown>): string {
   return txt.replace(/\{\{([\w.]+)\}\}/g, (_, k) => resolverCampo(dados, k));
@@ -178,7 +236,8 @@ function baseUrlInterna(): string {
 
 // ── Funções de nó ─────────────────────────────────────────────────────────────
 
-function criarNode(node: FlowNode) {
+// ctx.perguntas = todas as perguntas do fluxo (usado pelo classify p/ extração antecipada)
+function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[] }) {
   switch (node.type) {
     case "mensagem":
       return async (state: GraphState) => {
@@ -221,10 +280,15 @@ function criarNode(node: FlowNode) {
       // Fallback por palavra-chave quando o modelo não está disponível.
       const opcoes = (node.data.opcoes ?? []).filter(Boolean);
       const chave = node.data.chave ?? "categoria";
+      const perguntas = ctx?.perguntas ?? [];
       return async (state: GraphState) => {
         const fala = ultimaFalaUsuario(state);
-        const categoria = await classificarTexto(fala, opcoes, node.data.prompt);
-        return { dadosColetados: { [chave]: categoria }, categoria };
+        // classifica o tema E extrai o que já foi dito (pré-preenche perguntas)
+        const [categoria, extra] = await Promise.all([
+          classificarTexto(fala, opcoes, node.data.prompt),
+          extrairDoRelato(fala, perguntas, state.dadosColetados),
+        ]);
+        return { dadosColetados: { [chave]: categoria, ...extra }, categoria };
       };
     }
 
@@ -395,10 +459,25 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
   const builder = new StateGraph(GraphAnnotation) as any;
   const interrupts: string[] = [];
 
-  // nodes do flow (+ captura/encerramento auxiliares)
+  // todas as perguntas do fluxo → o classify usa p/ extração antecipada
+  const todasPerguntas = nodesUsados.filter((n) => n.type === "pergunta").map(perguntaDoNode);
+
+  // entrada efetiva de um nó: pergunta entra pelo gate (que pula se já respondida)
+  const entrada = (id: string) => {
+    const n = porId.get(id);
+    return n && n.type === "pergunta" ? `gate_${id}` : id;
+  };
+  // origem efetiva: perguntas/subgrafos saem do node de captura
+  const origem = (id: string) => {
+    const n = porId.get(id);
+    return n && (n.type === "pergunta" || n.type === "subgrafo") ? `cap_${id}` : id;
+  };
+
+  // nodes do flow (+ gate/captura/encerramento auxiliares)
   for (const node of nodesUsados) {
-    builder.addNode(node.id, criarNode(node));
+    builder.addNode(node.id, criarNode(node, { perguntas: todasPerguntas }));
     if (node.type === "pergunta") {
+      builder.addNode(`gate_${node.id}`, async () => ({})); // no-op; decisão na conditional edge
       builder.addNode(`cap_${node.id}`, criarCaptura(perguntaDoNode(node)));
       interrupts.push(node.id);
     }
@@ -413,55 +492,54 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
     }
   }
 
-  builder.addEdge(START, inicio.id);
-
-  // origem efetiva de uma edge: perguntas/subgrafos saem do node de captura
-  const origem = (id: string) => {
-    const n = porId.get(id);
-    return n && (n.type === "pergunta" || n.type === "subgrafo") ? `cap_${id}` : id;
-  };
+  builder.addEdge(START, entrada(inicio.id));
 
   for (const node of nodesUsados) {
     const saidas = edgesUsados.filter((e) => e.source === node.id);
 
-    if (node.type === "pergunta") builder.addEdge(node.id, `cap_${node.id}`);
+    if (node.type === "pergunta") {
+      const k = node.data.chave ?? node.id;
+      const proximo = saidas[0]?.target;
+      const destinoSkip = proximo ? entrada(proximo) : END;
+      // gate: já respondida → pula direto pro próximo; senão → faz a pergunta
+      builder.addConditionalEdges(
+        `gate_${node.id}`,
+        (state: GraphState) => {
+          const v = resolverCampo(state.dadosColetados, k);
+          return v != null && String(v).trim() !== "" ? "PULAR" : "PERGUNTAR";
+        },
+        { PULAR: destinoSkip, PERGUNTAR: node.id }
+      );
+      builder.addEdge(node.id, `cap_${node.id}`); // [INT] após perguntar
+      if (!saidas.length) builder.addEdge(`cap_${node.id}`, END);
+      else for (const e of saidas) builder.addEdge(`cap_${node.id}`, entrada(e.target));
+      continue;
+    }
 
     if (node.type === "subgrafo") {
-      // loop: pergunta → [INT] → extrator → (pendente? volta : segue)
       builder.addEdge(node.id, `cap_${node.id}`);
       const perguntas = servicoDe(node.data.servico ?? "outros").perguntas;
-      const destino = saidas[0]?.target;
+      const destino = saidas[0] ? entrada(saidas[0].target) : END;
       builder.addConditionalEdges(
         `cap_${node.id}`,
-        (state: GraphState) => (proxima(perguntas, state.dadosColetados) ? node.id : destino ?? END),
-        destino ? { [node.id]: node.id, [destino]: destino } : { [node.id]: node.id, [END]: END }
+        (state: GraphState) => (proxima(perguntas, state.dadosColetados) ? node.id : destino),
+        { [node.id]: node.id, [destino]: destino, [END]: END }
       );
       continue;
     }
 
-    if (node.type === "condicao") {
-      const campo = node.data.campo ?? "";
+    if (node.type === "condicao" || node.type === "classificar") {
+      const campo = node.type === "condicao" ? (node.data.campo ?? "") : (node.data.chave ?? "categoria");
       const rota = (state: GraphState) => {
-        const valor = resolverCampoCondicao(state.dadosColetados, campo);
+        const valor = node.type === "condicao"
+          ? resolverCampoCondicao(state.dadosColetados, campo)
+          : (resolverCampo(state.dadosColetados, campo) || "").toLowerCase().trim();
         const match = saidas.find((e) => (e.label ?? "").toLowerCase().trim() === valor);
         const fallback = saidas.find((e) => !e.label || e.label === "*");
-        return (match ?? fallback ?? saidas[0])?.target ?? END;
+        const alvo = (match ?? fallback ?? saidas[0])?.target;
+        return alvo ? entrada(alvo) : END;
       };
-      const destinos = Object.fromEntries(saidas.map((e) => [e.target, e.target]));
-      builder.addConditionalEdges(node.id, rota, { ...destinos, [END]: END });
-      continue;
-    }
-
-    if (node.type === "classificar") {
-      // o node já gravou dadosColetados[chave]=categoria; roteia direto pelas setas
-      const chave = node.data.chave ?? "categoria";
-      const rota = (state: GraphState) => {
-        const valor = (resolverCampo(state.dadosColetados, chave) || "").toLowerCase().trim();
-        const match = saidas.find((e) => (e.label ?? "").toLowerCase().trim() === valor);
-        const fallback = saidas.find((e) => !e.label || e.label === "*");
-        return (match ?? fallback ?? saidas[0])?.target ?? END;
-      };
-      const destinos = Object.fromEntries(saidas.map((e) => [e.target, e.target]));
+      const destinos = Object.fromEntries(saidas.map((e) => [entrada(e.target), entrada(e.target)]));
       builder.addConditionalEdges(node.id, rota, { ...destinos, [END]: END });
       continue;
     }
@@ -471,7 +549,7 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
     if (!saidas.length) {
       builder.addEdge(origem(node.id), END);
     } else {
-      for (const e of saidas) builder.addEdge(origem(node.id), e.target);
+      for (const e of saidas) builder.addEdge(origem(node.id), entrada(e.target));
     }
   }
 
