@@ -12,6 +12,7 @@ import { adminRoutes } from "./routes/admin.js";
 import { processarFila } from "./dperj.js";
 import { mockRoutes } from "./routes/mock.js";
 import { assistidosFlowRoutes } from "./routes/assistidos.js";
+import { fichaRoutes } from "./routes/ficha.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = Fastify();
@@ -38,6 +39,7 @@ await app.register(authRoutes);
 await app.register(adminRoutes, { prefix: "/admin" });
 await app.register(mockRoutes);
 await app.register(assistidosFlowRoutes);
+await app.register(fichaRoutes);
 
 // retry de envios à DPERJ que falharam (fila local em data/fila-envios.db)
 setInterval(() => processarFila().catch(console.error), 5 * 60 * 1000).unref();

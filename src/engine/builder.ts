@@ -178,7 +178,7 @@ function criarNode(node: FlowNode) {
     case "mensagem":
       return async (state: GraphState) => {
         const blocos: object[] = [];
-        if (node.data.imagem) blocos.push({ type: "image_url", image_url: { url: node.data.imagem } });
+        if (node.data.imagem) blocos.push({ type: "image_url", image_url: { url: interpolar(String(node.data.imagem), state.dadosColetados) } });
         if (node.data.texto) blocos.push({ type: "text", text: interpolar(String(node.data.texto), state.dadosColetados) });
         return { messages: [new AIMessage({ content: blocos as never })] };
       };
@@ -186,7 +186,11 @@ function criarNode(node: FlowNode) {
     case "pergunta": {
       const p = perguntaDoNode(node);
       return async (state: GraphState) => ({
-        messages: [mensagemPergunta({ ...p, texto: interpolar(p.texto, state.dadosColetados) })],
+        messages: [mensagemPergunta({
+          ...p,
+          texto: interpolar(p.texto, state.dadosColetados),
+          imagem: p.imagem ? interpolar(p.imagem, state.dadosColetados) : undefined,
+        })],
         perguntasFeitas: [p.chave],
         ultimaPergunta: p.chave,
       });
