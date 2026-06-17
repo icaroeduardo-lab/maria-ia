@@ -1,7 +1,7 @@
 import { HumanMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
 import { graph as graphEstatico } from "./graph.js";
-import { graphDoFlow } from "./engine/builder.js";
+import { graphDoFlow, subfluxosReferenciados } from "./engine/builder.js";
 import { prisma } from "./db.js";
 
 // Grafo a usar: flow ativo (compilado dinamicamente, com cache) ou o grafo
@@ -11,7 +11,9 @@ async function obterGraph(): Promise<{ graph: typeof graphEstatico; flowId: stri
   try {
     const ativo = await prisma.flow.findFirst({ where: { active: true } });
     if (!ativo) return { graph: graphEstatico, flowId: null };
-    return { graph: graphDoFlow(ativo) as typeof graphEstatico, flowId: ativo.id };
+    const refs = subfluxosReferenciados(ativo.nodes);
+    const subflows = refs.length ? await prisma.flow.findMany({ where: { id: { in: refs } } }) : [];
+    return { graph: graphDoFlow(ativo, subflows) as typeof graphEstatico, flowId: ativo.id };
   } catch (err) {
     console.error("[engine] falha ao carregar flow ativo, usando grafo estático:", err);
     return { graph: graphEstatico, flowId: null };

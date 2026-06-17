@@ -4,7 +4,7 @@ import type { BaseMessage } from "@langchain/core/messages";
 import { HumanMessage } from "@langchain/core/messages";
 import { prisma } from "../db.js";
 import { autenticar, exigirAdmin } from "./auth.js";
-import { graphDoFlow, graphEstatico } from "../engine/builder.js";
+import { graphDoFlow, graphEstatico, subfluxosReferenciados } from "../engine/builder.js";
 
 // API do painel admin (registrada com prefix /admin). Tudo exige JWT;
 // mutações exigem role admin. Exige DATABASE_URL (Postgres).
@@ -237,8 +237,10 @@ export async function adminRoutes(app: FastifyInstance) {
     if (flowId) {
       const flow = await db.flow.findUnique({ where: { id: flowId } });
       if (!flow) return reply.code(404).send({ erro: "fluxo não encontrado" });
+      const refs = subfluxosReferenciados(flow.nodes);
+      const subflows = refs.length ? await db.flow.findMany({ where: { id: { in: refs } } }) : [];
       try {
-        graph = graphDoFlow(flow) as typeof graph;
+        graph = graphDoFlow(flow, subflows) as typeof graph;
       } catch (err) {
         return reply.code(422).send({ erro: `flow inválido: ${String(err)}` });
       }

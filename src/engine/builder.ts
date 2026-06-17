@@ -17,11 +17,11 @@ import { servicoDe } from "../registro-perguntas.js";
 
 export interface FlowNode {
   id: string;
-  type: "mensagem" | "pergunta" | "condicao" | "ia" | "classificar" | "api" | "subgrafo" | "atribuir" | "encerrar";
+  type: "mensagem" | "pergunta" | "condicao" | "ia" | "classificar" | "api" | "subgrafo" | "subfluxo" | "atribuir" | "encerrar";
   position?: { x: number; y: number }; // usado só pelo frontend
   data: {
     label?: string;
-    titulo?: string;           // identificação no canvas (api | condicao | classificar)
+    titulo?: string;           // identificação no canvas (api | condicao | classificar | subfluxo)
     texto?: string;            // mensagem | pergunta
     imagem?: string;           // mensagem (url)
     chave?: string;            // pergunta | api | atribuir | classificar (campo onde grava a categoria)
@@ -33,9 +33,13 @@ export interface FlowNode {
     url?: string;              // api
     metodo?: "GET" | "POST";   // api
     servico?: string;          // subgrafo: categoria (familia_pensao | trabalhista | ...)
+    refFlowId?: string;        // subfluxo: id do Flow embutido (tema editável no painel)
     valor?: string;            // atribuir
   };
 }
+
+// Sub-flows referenciados por nós "subfluxo", indexados por id (carregados do banco)
+export type SubflowMap = Record<string, { nodes: FlowNode[]; edges: FlowEdge[] }>;
 
 export interface FlowEdge {
   id: string;
@@ -274,14 +278,11 @@ function criarCaptura(p: Pergunta) {
 
 // ── Compilação ────────────────────────────────────────────────────────────────
 
-export function buildGraphFromFlow(flow: FlowJSON) {
-  const nodes = flow.nodes ?? [];
-  const edges = flow.edges ?? [];
-  if (!nodes.length) throw new Error("flow sem nodes");
-
+// adjacência + alcançáveis a partir de um id
+function alcancabilidade(edges: FlowEdge[]) {
   const adj = new Map<string, string[]>();
   for (const e of edges) (adj.get(e.source) ?? adj.set(e.source, []).get(e.source)!).push(e.target);
-  const alcancaveisDe = (id: string) => {
+  return (id: string) => {
     const vis = new Set<string>();
     const pilha = [id];
     while (pilha.length) {
@@ -292,9 +293,11 @@ export function buildGraphFromFlow(flow: FlowJSON) {
     }
     return vis;
   };
+}
 
-  // entrada: entre os nós sem edge de entrada, o que ALCANÇA mais nós.
-  // (ignora órfãos/desativados; tolera nó de boas-vindas novo antes do lgpd)
+// entrada: entre os nós sem edge de entrada, o que ALCANÇA mais nós
+function entradaDe(nodes: FlowNode[], edges: FlowEdge[]): FlowNode {
+  const alcancaveisDe = alcancabilidade(edges);
   const comEntrada = new Set(edges.map((e) => e.target));
   const candidatos = nodes.filter((n) => !comEntrada.has(n.id));
   let inicio = nodes[0];
@@ -303,6 +306,57 @@ export function buildGraphFromFlow(flow: FlowJSON) {
     const tam = alcancaveisDe(c.id).size;
     if (tam > melhor) { melhor = tam; inicio = c; }
   }
+  return inicio;
+}
+
+// Substitui cada nó "subfluxo" pelos nós/edges do flow referenciado (ids prefixados).
+// Entradas do nó → entrada do sub-flow; terminais do sub-flow → saídas do nó.
+function expandirSubfluxos(nodes: FlowNode[], edges: FlowEdge[], subflows: SubflowMap): { nodes: FlowNode[]; edges: FlowEdge[] } {
+  let N = [...nodes];
+  let E = [...edges];
+  for (const node of nodes) {
+    if (node.type !== "subfluxo") continue;
+    const sub = node.data.refFlowId ? subflows[node.data.refFlowId] : undefined;
+    const entradasNode = edges.filter((e) => e.target === node.id);
+    const saidasNode = edges.filter((e) => e.source === node.id);
+    // remove o nó subfluxo e suas edges
+    N = N.filter((n) => n.id !== node.id);
+    E = E.filter((e) => e.source !== node.id && e.target !== node.id);
+
+    if (!sub || !sub.nodes?.length) {
+      // sem ref válida → vira pass-through: liga entradas direto às saídas
+      for (const ent of entradasNode) for (const sai of saidasNode)
+        E.push({ id: `pt_${ent.source}_${sai.target}`, source: ent.source, target: sai.target, label: ent.label });
+      continue;
+    }
+
+    const pfx = `sf_${node.id}_`;
+    const subNodes = sub.nodes.map((n) => ({ ...n, id: pfx + n.id }));
+    const subEdges = sub.edges.map((e) => ({ ...e, id: pfx + e.id, source: pfx + e.source, target: pfx + e.target }));
+    const entrada = pfx + entradaDe(sub.nodes, sub.edges).id;
+    const comSaida = new Set(sub.edges.map((e) => e.source));
+    const terminais = sub.nodes.filter((n) => !comSaida.has(n.id)).map((n) => pfx + n.id);
+
+    N = N.concat(subNodes);
+    E = E.concat(subEdges);
+    // entradas do nó subfluxo → entrada do sub-flow (preserva label da condição)
+    for (const ent of entradasNode)
+      E.push({ id: `in_${ent.source}_${entrada}`, source: ent.source, target: entrada, label: ent.label });
+    // terminais do sub-flow → cada saída do nó subfluxo
+    for (const term of terminais) for (const sai of saidasNode)
+      E.push({ id: `out_${term}_${sai.target}`, source: term, target: sai.target, label: sai.label });
+  }
+  return { nodes: N, edges: E };
+}
+
+export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
+  const expandido = expandirSubfluxos(flow.nodes ?? [], flow.edges ?? [], subflows);
+  const nodes = expandido.nodes;
+  const edges = expandido.edges;
+  if (!nodes.length) throw new Error("flow sem nodes");
+
+  const alcancaveisDe = alcancabilidade(edges);
+  const inicio = entradaDe(nodes, edges);
 
   // poda nós inalcançáveis a partir da entrada (desconectados/desativados não
   // quebram o grafo — LangGraph rejeitaria UnreachableNode)
@@ -401,15 +455,27 @@ export function buildGraphFromFlow(flow: FlowJSON) {
 
 const cache = new Map<string, { versao: string; graph: ReturnType<typeof buildGraphFromFlow> }>();
 
-export function graphDoFlow(flow: { id: string; updatedAt: Date; nodes: unknown; edges: unknown }) {
-  const versao = flow.updatedAt.toISOString();
+type FlowRow = { id: string; updatedAt: Date; nodes: unknown; edges: unknown };
+
+// ids de flows referenciados por nós "subfluxo"
+export function subfluxosReferenciados(nodes: unknown): string[] {
+  const arr = (nodes as FlowNode[]) ?? [];
+  return [...new Set(arr.filter((n) => n.type === "subfluxo" && n.data?.refFlowId).map((n) => n.data.refFlowId!))];
+}
+
+export function graphDoFlow(flow: FlowRow, subflowRows: FlowRow[] = []) {
+  // versão = updatedAt do principal + dos sub-flows (recompila se qualquer um muda)
+  const versao = [flow, ...subflowRows].map((f) => `${f.id}:${f.updatedAt.toISOString()}`).sort().join("|");
   const hit = cache.get(flow.id);
   if (hit && hit.versao === versao) return hit.graph;
-  const compilado = buildGraphFromFlow({
-    id: flow.id,
-    nodes: flow.nodes as FlowNode[],
-    edges: flow.edges as FlowEdge[],
-  });
+
+  const subflows: SubflowMap = {};
+  for (const s of subflowRows) subflows[s.id] = { nodes: s.nodes as FlowNode[], edges: s.edges as FlowEdge[] };
+
+  const compilado = buildGraphFromFlow(
+    { id: flow.id, nodes: flow.nodes as FlowNode[], edges: flow.edges as FlowEdge[] },
+    subflows
+  );
   cache.set(flow.id, { versao, graph: compilado });
   return compilado;
 }

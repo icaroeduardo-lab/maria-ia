@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "@tanstack/react-router";
+import { useParams, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ReactFlow, Background, Controls, MiniMap, addEdge, useNodesState, useEdgesState,
@@ -16,7 +16,8 @@ const TIPOS = [
   { tipo: "ia", label: "IA Livre", cor: "#7c3aed" },
   { tipo: "classificar", label: "Classificar (IA)", cor: "#9333ea" },
   { tipo: "api", label: "Chamada API", cor: "#475569" },
-  { tipo: "subgrafo", label: "Subgrafo", cor: "#0891b2" },
+  { tipo: "subgrafo", label: "Subgrafo (código)", cor: "#0891b2" },
+  { tipo: "subfluxo", label: "Subfluxo (tema)", cor: "#0d9488" },
   { tipo: "atribuir", label: "Atribuir campo", cor: "#64748b" },
   { tipo: "encerrar", label: "Encerrar", cor: "#dc2626" },
 ] as const;
@@ -57,6 +58,39 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const inputCls = "mt-1 w-full border border-slate-300 rounded px-2 py-1.5 bg-white";
+
+// editor do nó subfluxo: escolhe qual fluxo-tema embutir + link p/ editá-lo
+function EditorSubfluxo({ d, set }: { d: DataNo; set: (k: string, v: unknown) => void }) {
+  const { flowId } = useParams({ from: "/protected/flows/$flowId" });
+  const { data: flows } = useQuery({
+    queryKey: ["flows"],
+    queryFn: () => api<{ id: string; name: string }[]>("/admin/flows"),
+  });
+  const opcoes = (flows ?? []).filter((f) => f.id !== flowId);
+  const ref = String(d.refFlowId ?? "");
+  return (
+    <>
+      <Campo label="Título (identificação)">
+        <input className={inputCls} value={String(d.titulo ?? "")} onChange={(e) => set("titulo", e.target.value)} />
+      </Campo>
+      <Campo label="Fluxo-tema embutido">
+        <select className={inputCls} value={ref} onChange={(e) => set("refFlowId", e.target.value)}>
+          <option value="">— selecione —</option>
+          {opcoes.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+        </select>
+      </Campo>
+      {ref && (
+        <Link to="/flows/$flowId" params={{ flowId: ref }} className="text-sm text-emerald-700 hover:underline">
+          ✎ Editar este fluxo-tema
+        </Link>
+      )}
+      <p className="text-xs text-slate-500">
+        As perguntas do tema vivem no fluxo selecionado. Edite-o como qualquer fluxo;
+        ele é embutido aqui em tempo de execução.
+      </p>
+    </>
+  );
+}
 
 function EditorNo({ no, onChange, onRemove }: {
   no: Node; onChange: (data: Record<string, unknown>) => void; onRemove: () => void;
@@ -162,6 +196,8 @@ function EditorNo({ no, onChange, onRemove }: {
           </select>
         </Campo>
       )}
+
+      {d.tipo === "subfluxo" && <EditorSubfluxo d={d} set={set} />}
 
       {d.tipo === "atribuir" && <>{texto("chave", "Campo")}{texto("valor", "Valor")}</>}
 
