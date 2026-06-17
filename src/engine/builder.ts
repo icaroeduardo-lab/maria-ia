@@ -171,6 +171,11 @@ function interpolar(txt: string, dados: Record<string, unknown>): string {
   return txt.replace(/\{\{([\w.]+)\}\}/g, (_, k) => resolverCampo(dados, k));
 }
 
+// base do próprio servidor para chamadas internas do fluxo (nós api com url relativa)
+function baseUrlInterna(): string {
+  return process.env.SELF_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+}
+
 // ── Funções de nó ─────────────────────────────────────────────────────────────
 
 function criarNode(node: FlowNode) {
@@ -227,7 +232,10 @@ function criarNode(node: FlowNode) {
       return async (state: GraphState) => {
         if (!node.data.url) return {};
         try {
-          const res = await fetch(node.data.url, {
+          // url relativa ("/api/...") resolve contra SELF_URL → portável (não fixa localhost)
+          const interpolada = interpolar(String(node.data.url), state.dadosColetados);
+          const url = interpolada.startsWith("/") ? `${baseUrlInterna()}${interpolada}` : interpolada;
+          const res = await fetch(url, {
             method: node.data.metodo ?? "POST",
             headers: { "Content-Type": "application/json" },
             body: node.data.metodo === "GET" ? undefined : JSON.stringify(state.dadosColetados),
