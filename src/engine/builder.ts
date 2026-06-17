@@ -247,7 +247,7 @@ async function reescreverPergunta(
       "Seja humano e acolhedor: demonstre que entende que pode ser um momento delicado e passe segurança de que você vai ajudar.",
       "VARIE bastante as aberturas. É PROIBIDO começar com 'Entendo' ou 'Entendi'. Use formas diferentes (ex: 'Certo', 'Obrigada', 'Pode deixar', 'Ótimo', 'Perfeito') ou vá direto à pergunta.",
       "NÃO repita nem parafraseie a resposta que a pessoa acabou de dar (você pode atribuir errado, ex: confundir o nome da outra parte com o dela). Apenas faça a próxima pergunta de forma calorosa.",
-      "Use emojis com naturalidade e moderação (geralmente 1 por mensagem) para deixar a conversa leve e acolhedora — ex: 😊 🙏 💚 👍 📄.",
+      "Emojis: use no máximo 1 e SÓ quando combinar com o sentido da mensagem. NÃO use em toda resposta. Escolha um emoji coerente com o tema: situação difícil/perda → 💔 ou 🙏; filhos/criança → 🧒 ou 👶; documento/dado → 📄; agendamento/data → 📅; dinheiro/pensão → 💰; acolhimento leve → 😊. Se nenhum fizer sentido, não use emoji.",
       "Não exagere na empatia: nem toda pergunta precisa de consolo.",
       "Formule como uma pergunta DIRETA pedindo o dado ao cidadão. NUNCA inverta (não diga que a pessoa quer saber algo).",
       "Mantenha EXATAMENTE a mesma informação pedida. Não acrescente nem troque por outra pergunta.",
