@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import type { BaseMessage, MessageContent } from "@langchain/core/messages";
+import { AIMessage } from "@langchain/core/messages";
 import { processarMensagem } from "../chat.js";
+import { transcreverAudioWA } from "../transcribe.js";
 
 // Canal WhatsApp Business Cloud API (Meta).
 // GET  /webhook/whatsapp → verificação do webhook (challenge)
@@ -16,7 +18,8 @@ const API_VERSION = () => process.env.WA_API_VERSION ?? "v23.0";
 interface MensagemRecebida {
   id: string;
   from: string;   // wa_id, ex: "5521999990000"
-  texto: string;
+  texto?: string;
+  audioId?: string; // mensagem de voz → transcrita via AWS Transcribe
 }
 
 // Extrai mensagens de um body de webhook da Meta (entry[].changes[].value.messages[])
@@ -28,6 +31,12 @@ export function extrairMensagens(body: unknown): MensagemRecebida[] {
       value?: { messages?: Record<string, unknown>[] };
     }[]) {
       for (const msg of change.value?.messages ?? []) {
+        // áudio (voz): guarda o id da mídia p/ transcrever no handler
+        if (msg.type === "audio") {
+          const audioId = (msg.audio as { id?: string })?.id;
+          if (audioId) out.push({ id: String(msg.id), from: String(msg.from), audioId });
+          continue;
+        }
         const texto = textoDaMensagem(msg);
         if (texto === null) continue;
         out.push({ id: String(msg.id), from: String(msg.from), texto });
@@ -184,7 +193,19 @@ export async function whatsappRoutes(app: FastifyInstance) {
     (async () => {
       for (const msg of extrairMensagens(req.body)) {
         if (jaProcessado(msg.id)) continue;
-        const { newMessages } = await processarMensagem(`wa:${msg.from}`, msg.texto, "whatsapp");
+        let texto = msg.texto;
+        // mensagem de voz → transcreve (AWS Transcribe) e usa como texto
+        if (msg.audioId) {
+          texto = await transcreverAudioWA(msg.audioId, process.env.WA_ACCESS_TOKEN);
+          if (!texto) {
+            await enviarWhatsApp(msg.from, [
+              new AIMessage("Desculpe, não consegui entender o áudio. Pode escrever ou enviar novamente? 🎤"),
+            ]);
+            continue;
+          }
+        }
+        if (texto == null) continue;
+        const { newMessages } = await processarMensagem(`wa:${msg.from}`, texto, "whatsapp");
         await enviarWhatsApp(msg.from, newMessages);
       }
     })().catch((err) => console.error("[whatsapp] erro no processamento:", err));
