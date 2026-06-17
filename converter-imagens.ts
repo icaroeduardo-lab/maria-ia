@@ -13,13 +13,17 @@ const s3 = new S3Client({ region: REGION });
 const prisma = new PrismaClient();
 
 const precisaConverter = (u: unknown): u is string =>
-  typeof u === "string" && /\.webp(\?|$)/i.test(u) && u.startsWith("http");
+  typeof u === "string" && u.startsWith("http");
 
 const cache = new Map<string, string>(); // url antiga → nova
 async function converter(url: string): Promise<string> {
   if (cache.has(url)) return cache.get(url)!;
   const entrada = Buffer.from(await (await fetch(url)).arrayBuffer());
-  const jpg = await sharp(entrada).jpeg({ quality: 85, mozjpeg: true }).toBuffer();
+  // JPEG + largura máx 820px → leve para conexão lenta e compatível com WhatsApp
+  const jpg = await sharp(entrada)
+    .resize({ width: 820, withoutEnlargement: true })
+    .jpeg({ quality: 82, mozjpeg: true })
+    .toBuffer();
   const key = `imagens/${randomUUID()}.jpg`;
   await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: jpg, ContentType: "image/jpeg" }));
   const nova = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
