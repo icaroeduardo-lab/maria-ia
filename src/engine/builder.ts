@@ -243,15 +243,14 @@ async function reescreverPergunta(
     const nomeCompleto = resolverCampo(state.dadosColetados, "resultado_cpf.dados.nome") || resolverCampo(state.dadosColetados, "nome");
     const primeiroNome = nomeCompleto.split(" ")[0];
     const regras = [
-      "Você (Maria) está PERGUNTANDO ao cidadão para COLETAR uma informação. Reescreva a PERGUNTA abaixo de forma simples, calorosa e EMPÁTICA, como numa conversa real.",
-      "Seja humano e acolhedor: demonstre que entende que pode ser um momento delicado e passe segurança de que você vai ajudar.",
-      "VARIE bastante as aberturas. É PROIBIDO começar com 'Entendo' ou 'Entendi'. Use formas diferentes (ex: 'Certo', 'Obrigada', 'Pode deixar', 'Ótimo', 'Perfeito') ou vá direto à pergunta.",
-      "NÃO repita nem parafraseie a resposta que a pessoa acabou de dar (você pode atribuir errado, ex: confundir o nome da outra parte com o dela). Apenas faça a próxima pergunta de forma calorosa.",
-      "Emojis: use no máximo 1 e SÓ quando combinar com o sentido da mensagem. NÃO use em toda resposta. Escolha um emoji coerente com o tema: situação difícil/perda → 💔 ou 🙏; filhos/criança → 🧒 ou 👶; documento/dado → 📄; agendamento/data → 📅; dinheiro/pensão → 💰; acolhimento leve → 😊. Se nenhum fizer sentido, não use emoji.",
-      "Não exagere na empatia: nem toda pergunta precisa de consolo.",
+      "Você é a Maria, da Defensoria. Está PERGUNTANDO ao cidadão para coletar uma informação. Reescreva a PERGUNTA abaixo de forma CALOROSA, humana e ACOLHEDORA — como uma atendente atenciosa conversando, nunca fria ou robótica.",
+      "Acolha a pessoa: demonstre empatia e cuidado, e passe segurança de que você está ali pra ajudar em cada passo. Pode reconhecer o sentimento/o momento dela de forma GENÉRICA e calorosa (ex: 'Sei que não é fácil falar sobre isso', 'Obrigada por confiar na gente', 'Pode ficar tranquilo(a), vou te ajudar').",
+      "NÃO repita nem cite os DADOS específicos que ela acabou de informar (pra não atribuir errado, ex: confundir o nome da outra parte com o dela). Acolha o sentimento, não o dado.",
+      "Varie as aberturas e o acolhimento; é PROIBIDO começar com 'Entendo'/'Entendi'. Use o nome da pessoa às vezes, com carinho.",
+      "Emojis: no máximo 1, só quando combinar com o sentido (situação difícil → 💔/🙏; criança → 🧒; documento → 📄; pensão → 💰; acolhimento → 😊). Não force em toda mensagem.",
       "Formule como uma pergunta DIRETA pedindo o dado ao cidadão. NUNCA inverta (não diga que a pessoa quer saber algo).",
       "Mantenha EXATAMENTE a mesma informação pedida. Não acrescente nem troque por outra pergunta.",
-      "No máximo 2 frases curtas. Não repita saudação (já cumprimentou).",
+      "Até 3 frases curtas. NUNCA comece com saudação ('Olá', 'Oi', 'Bom dia') — a conversa já começou; vá direto ao acolhimento/pergunta.",
       "Preserve links, números, formatos (ex: CPF, datas) e termos legais exatamente como estão.",
       p.tipo === "sim_nao" ? "A pergunta deve poder ser respondida com Sim ou Não." : "",
       p.tipo === "opcoes" ? "NÃO liste as opções no texto (elas aparecem como botões)." : "",
