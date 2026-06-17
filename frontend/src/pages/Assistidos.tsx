@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useAuth } from "../store";
-import { mascararCpf, mascararTelefone } from "../lib/mask";
 
 interface Assistido {
   id: string;
@@ -119,10 +118,10 @@ export function Assistidos() {
             )}
             {data?.itens.map((a) => (
               <tr key={a.id} className="border-t border-slate-100 hover:bg-slate-50">
-                <td className="px-4 py-2 font-mono">{mascararCpf(a.cpf)}</td>
+                <td className="px-4 py-2 font-mono">{a.cpf}</td>
                 <td className="px-4 py-2">{a.nome}</td>
                 <td className="px-4 py-2">{a.municipio ? `${a.municipio}${a.uf ? "/" + a.uf : ""}` : "—"}</td>
-                <td className="px-4 py-2">{a.telefone ? mascararTelefone(a.telefone) : "—"}</td>
+                <td className="px-4 py-2">{a.telefone || "—"}</td>
                 <td className="px-4 py-2 text-right whitespace-nowrap">
                   <button
                     className="text-emerald-700 hover:underline mr-3"
@@ -173,11 +172,20 @@ function EditorAssistido({
   onCancelar: () => void;
   onSalvar: (a: Partial<Assistido>) => void;
 }) {
-  const [form, setForm] = useState<Record<string, string>>(() => {
-    const f: Record<string, string> = {};
-    for (const { chave } of CAMPOS) f[chave] = String(assistido[chave] ?? "");
-    return f;
+  // busca o registro COMPLETO (a lista vem mascarada; admin recebe full + auditado)
+  const { data: completo } = useQuery({
+    queryKey: ["assistido", assistido.id],
+    queryFn: () => api<Assistido>(`/admin/assistidos/${assistido.id}`),
+    enabled: !novo && !!assistido.id,
   });
+  const fonte = completo ?? assistido;
+
+  const [form, setForm] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const f: Record<string, string> = {};
+    for (const { chave } of CAMPOS) f[chave] = String((fonte as Record<string, unknown>)[chave] ?? "");
+    setForm(f);
+  }, [fonte]);
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
   return (

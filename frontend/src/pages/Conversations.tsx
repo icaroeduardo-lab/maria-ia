@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../lib/api";
-import { mascararCampo, ehSensivel } from "../lib/mask";
 
 interface Conversa {
   sessionId: string;
@@ -118,7 +117,21 @@ function temConteudo(content: MsgHist["content"]): boolean {
 
 function Detalhe({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
   const [aba, setAba] = useState<Aba>("resumo");
-  const [revelar, setRevelar] = useState(false);
+  const [full, setFull] = useState<Record<string, string | null> | null>(null);
+  const [revelando, setRevelando] = useState(false);
+
+  async function revelar() {
+    if (full) { setFull(null); return; } // ocultar
+    setRevelando(true);
+    try {
+      const r = await api<{ assistido: Record<string, string | null> | null }>(
+        `/admin/conversations/${encodeURIComponent(sessionId)}/revelar`,
+        { method: "POST" }
+      );
+      setFull(r.assistido);
+    } catch { /* sem permissão / erro */ }
+    finally { setRevelando(false); }
+  }
   const { data: c } = useQuery({
     queryKey: ["conversation", sessionId],
     queryFn: () => api<ConversaDetalhe>(`/admin/conversations/${encodeURIComponent(sessionId)}`),
@@ -168,18 +181,19 @@ function Detalhe({ sessionId, onClose }: { sessionId: string; onClose: () => voi
                 <section className="mb-4">
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="text-xs font-semibold text-slate-500 uppercase">Assistido</h3>
-                    <button className="text-xs text-emerald-700 hover:underline" onClick={() => setRevelar((r) => !r)}>
-                      {revelar ? "🙈 ocultar dados" : "👁 revelar dados"}
+                    <button className="text-xs text-emerald-700 hover:underline disabled:opacity-50" disabled={revelando} onClick={revelar}>
+                      {full ? "🙈 ocultar dados" : revelando ? "..." : "👁 revelar dados"}
                     </button>
                   </div>
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                    {Object.entries(m.assistido).filter(([, v]) => v).map(([k, v]) => (
+                    {Object.entries(full ?? m.assistido).filter(([, v]) => v).map(([k, v]) => (
                       <div key={k}>
                         <dt className="inline text-slate-500">{k}: </dt>
-                        <dd className="inline text-slate-800 font-mono">{revelar || !ehSensivel(k) ? v : mascararCampo(k, v)}</dd>
+                        <dd className="inline text-slate-800 font-mono">{v}</dd>
                       </div>
                     ))}
                   </dl>
+                  {full && <p className="text-xs text-amber-600 mt-1">Dados revelados — acesso registrado.</p>}
                 </section>
               )}
               {m?.caso && Object.keys(m.caso).length > 0 && (

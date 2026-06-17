@@ -44,6 +44,19 @@ model User {
   role  String @default("viewer") // "admin" | "viewer"
 }
 
+// Auditoria de acesso a dados sensíveis (quem revelou PII, quando)
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  userEmail String
+  acao      String // "revelar"
+  alvoTipo  String // "assistido" | "conversa"
+  alvoId    String
+  criadoEm  DateTime @default(now())
+
+  @@index([criadoEm])
+}
+
 // Configuração global (singleton id="default"): preâmbulo de estilo aplicado
 // a toda geração de texto da IA (linguagem simples, tom da Defensoria).
 model Config {

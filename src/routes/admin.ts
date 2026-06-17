@@ -7,6 +7,7 @@ import { autenticar, exigirAdmin } from "./auth.js";
 import { graphDoFlow, graphEstatico, subfluxosReferenciados } from "../engine/builder.js";
 import { ESTILO_DEFAULT, invalidarEstilo } from "../config.js";
 import { montarMetadados, gerarResumoTexto, type Metadados } from "../resumo.js";
+import { mascararAssistido } from "../mask.js";
 
 // API do painel admin (registrada com prefix /admin). Tudo exige JWT;
 // mutações exigem role admin. Exige DATABASE_URL (Postgres).
@@ -18,6 +19,13 @@ export async function adminRoutes(app: FastifyInstance) {
   const db = prisma;
 
   app.addHook("preHandler", autenticar);
+
+  // registra acesso a PII (quem revelou o quê)
+  const registrarAuditoria = async (user: { sub: string; email: string }, alvoTipo: string, alvoId: string) => {
+    await db.auditLog.create({
+      data: { userId: user.sub, userEmail: user.email, acao: "revelar", alvoTipo, alvoId },
+    }).catch((e) => console.error("[auditoria] falha:", e));
+  };
 
   // ── Fluxos ────────────────────────────────────────────────────────────────
   app.get("/flows", async () =>
@@ -100,7 +108,33 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get("/conversations/:sessionId", async (req, reply) => {
     const { sessionId } = req.params as { sessionId: string };
     const conv = await db.conversation.findUnique({ where: { sessionId } });
-    return conv ?? reply.code(404).send({ erro: "conversa não encontrada" });
+    if (!conv) return reply.code(404).send({ erro: "conversa não encontrada" });
+    // mascara o assistido dentro dos metadados (PII)
+    const md = conv.metadados as { assistido?: Record<string, unknown> } | null;
+    if (md?.assistido) {
+      return { ...conv, metadados: { ...md, assistido: mascararAssistido(md.assistido) } };
+    }
+    return conv;
+  });
+
+  // revela os dados do assistido de uma conversa (admin, auditado)
+  app.post("/conversations/:sessionId/revelar", { preHandler: [exigirAdmin] }, async (req, reply) => {
+    const { sessionId } = req.params as { sessionId: string };
+    const conv = await db.conversation.findUnique({ where: { sessionId } });
+    if (!conv) return reply.code(404).send({ erro: "conversa não encontrada" });
+    await registrarAuditoria(req.user, "conversa", sessionId);
+    const md = conv.metadados as { assistido?: Record<string, unknown> } | null;
+    return { assistido: md?.assistido ?? null };
+  });
+
+  // log de auditoria (admin) — quem revelou PII
+  app.get("/audit", { preHandler: [exigirAdmin] }, async (req) => {
+    const page = Math.max(1, Number((req.query as { page?: string }).page ?? 1));
+    const [total, itens] = await Promise.all([
+      db.auditLog.count(),
+      db.auditLog.findMany({ orderBy: { criadoEm: "desc" }, skip: (page - 1) * 50, take: 50 }),
+    ]);
+    return { total, page, itens };
   });
 
   // histórico de mensagens da conversa (lido do checkpoint LangGraph — checkpointer
@@ -205,13 +239,18 @@ export async function adminRoutes(app: FastifyInstance) {
       db.assistido.count({ where }),
       db.assistido.findMany({ where, orderBy: { updatedAt: "desc" }, skip: (page - 1) * 50, take: 50 }),
     ]);
-    return { total, page, itens };
+    // lista sempre mascarada (PII)
+    return { total, page, itens: itens.map((a) => mascararAssistido(a)) };
   });
 
+  // detalhe: admin recebe completo (registrado em auditoria); viewer recebe mascarado
   app.get("/assistidos/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     const a = await db.assistido.findUnique({ where: { id } });
-    return a ?? reply.code(404).send({ erro: "assistido não encontrado" });
+    if (!a) return reply.code(404).send({ erro: "assistido não encontrado" });
+    if (req.user.role !== "admin") return mascararAssistido(a);
+    await registrarAuditoria(req.user, "assistido", id);
+    return a;
   });
 
   app.post("/assistidos", { preHandler: [exigirAdmin] }, async (req, reply) => {
