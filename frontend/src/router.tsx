@@ -7,6 +7,7 @@ import { Builder } from "./pages/Builder";
 import { Conversations } from "./pages/Conversations";
 import { Assistidos } from "./pages/Assistidos";
 import { Configuracoes } from "./pages/Configuracoes";
+import { Auditoria } from "./pages/Auditoria";
 import { TestChat } from "./pages/TestChat";
 
 function Layout() {
@@ -22,6 +23,7 @@ function Layout() {
           <Link to="/conversations" className="hover:underline [&.active]:font-bold">Conversas</Link>
           <Link to="/assistidos" className="hover:underline [&.active]:font-bold">Assistidos</Link>
           <Link to="/config" className="hover:underline [&.active]:font-bold">Estilo IA</Link>
+          <Link to="/auditoria" className="hover:underline [&.active]:font-bold">Auditoria</Link>
           <Link to="/test-chat" className="hover:underline [&.active]:font-bold">Testar Fluxo</Link>
         </nav>
         <div className="ml-auto flex items-center gap-3 text-sm">
@@ -64,11 +66,12 @@ const builderRoute = createRoute({ getParentRoute: () => protectedRoute, path: "
 const conversationsRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/conversations", component: Conversations });
 const assistidosRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/assistidos", component: Assistidos });
 const configRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/config", component: Configuracoes });
+const auditoriaRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/auditoria", component: Auditoria });
 const testChatRoute = createRoute({ getParentRoute: () => protectedRoute, path: "/test-chat", component: TestChat });
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  protectedRoute.addChildren([dashboardRoute, flowsRoute, builderRoute, conversationsRoute, assistidosRoute, configRoute, testChatRoute]),
+  protectedRoute.addChildren([dashboardRoute, flowsRoute, builderRoute, conversationsRoute, assistidosRoute, configRoute, auditoriaRoute, testChatRoute]),
 ]);
 
 export const router = createRouter({ routeTree });
