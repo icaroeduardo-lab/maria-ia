@@ -239,19 +239,20 @@ async function reescreverPergunta(
 ): Promise<string> {
   try {
     const fala = ultimaFalaUsuario(state);
-    const primeira = (state.perguntasFeitas?.length ?? 0) === 0;
     // nome do assistido (cadastro existente ou novo) p/ tratamento pessoal
     const nomeCompleto = resolverCampo(state.dadosColetados, "resultado_cpf.dados.nome") || resolverCampo(state.dadosColetados, "nome");
     const primeiroNome = nomeCompleto.split(" ")[0];
     const regras = [
       "Você (Maria) está PERGUNTANDO ao cidadão para COLETAR uma informação. Reescreva a PERGUNTA abaixo de forma simples, calorosa e EMPÁTICA, como numa conversa real.",
-      "Seja humano e acolhedor: demonstre que entende que pode ser um momento delicado e passe segurança de que você vai ajudar. Ex: \"Imagino que seja um momento difícil, e pode contar comigo nisso.\"",
-      "Mas NÃO repita a mesma frase de empatia em toda mensagem — varie, e use a empatia com naturalidade (nem toda pergunta precisa de consolo).",
+      "Seja humano e acolhedor: demonstre que entende que pode ser um momento delicado e passe segurança de que você vai ajudar.",
+      "VARIE bastante as aberturas. É PROIBIDO começar com 'Entendo' ou 'Entendi'. Use formas diferentes (ex: 'Certo', 'Obrigada', 'Pode deixar', 'Ótimo', 'Perfeito') ou vá direto à pergunta.",
+      "NÃO repita nem parafraseie a resposta que a pessoa acabou de dar (você pode atribuir errado, ex: confundir o nome da outra parte com o dela). Apenas faça a próxima pergunta de forma calorosa.",
+      "Use emojis com naturalidade e moderação (geralmente 1 por mensagem) para deixar a conversa leve e acolhedora — ex: 😊 🙏 💚 👍 📄.",
+      "Não exagere na empatia: nem toda pergunta precisa de consolo.",
       "Formule como uma pergunta DIRETA pedindo o dado ao cidadão. NUNCA inverta (não diga que a pessoa quer saber algo).",
       "Mantenha EXATAMENTE a mesma informação pedida. Não acrescente nem troque por outra pergunta.",
-      "No máximo 3 frases curtas. Não repita saudação (já cumprimentou).",
+      "No máximo 2 frases curtas. Não repita saudação (já cumprimentou).",
       "Preserve links, números, formatos (ex: CPF, datas) e termos legais exatamente como estão.",
-      primeira ? "" : "Reconheça brevemente o que a pessoa acabou de dizer, com empatia, antes de perguntar.",
       p.tipo === "sim_nao" ? "A pergunta deve poder ser respondida com Sim ou Não." : "",
       p.tipo === "opcoes" ? "NÃO liste as opções no texto (elas aparecem como botões)." : "",
     ].filter(Boolean).join("\n");
