@@ -103,6 +103,22 @@ export async function adminRoutes(app: FastifyInstance) {
     return conv ?? reply.code(404).send({ erro: "conversa não encontrada" });
   });
 
+  // histórico de mensagens da conversa (lido do checkpoint LangGraph — checkpointer
+  // compartilhado; thread_id = sessionId). Retorna role + content (texto/blocos).
+  app.get("/conversations/:sessionId/historico", async (req) => {
+    const { sessionId } = req.params as { sessionId: string };
+    try {
+      const st = await graphEstatico.getState({ configurable: { thread_id: sessionId } });
+      const msgs = ((st.values?.messages as { getType: () => string; content: unknown }[]) ?? []).map((m) => ({
+        role: m.getType(),
+        content: m.content,
+      }));
+      return { messages: msgs };
+    } catch {
+      return { messages: [] };
+    }
+  });
+
   // ── Analytics ─────────────────────────────────────────────────────────────
   app.get("/analytics/summary", async () => {
     // conversa ativa parada há 24h+ conta como abandonada

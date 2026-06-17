@@ -89,62 +89,113 @@ export function Conversations() {
   );
 }
 
+type Aba = "resumo" | "dados" | "historico";
+interface MsgHist { role: string; content: string | { type: string; text?: string; options?: string[] }[] }
+
+function textoDoConteudo(content: MsgHist["content"]): string {
+  if (typeof content === "string") return content;
+  return content
+    .map((b) => (b.type === "text" ? b.text ?? "" : b.type === "options" ? `[opções: ${(b.options ?? []).join(", ")}]` : b.type === "boolean" ? "[Sim/Não]" : b.type === "image_url" ? "[imagem]" : ""))
+    .filter(Boolean)
+    .join(" ");
+}
+
 function Detalhe({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+  const [aba, setAba] = useState<Aba>("resumo");
   const { data: c } = useQuery({
     queryKey: ["conversation", sessionId],
     queryFn: () => api<ConversaDetalhe>(`/admin/conversations/${encodeURIComponent(sessionId)}`),
   });
+  const { data: hist } = useQuery({
+    queryKey: ["conversation-historico", sessionId],
+    queryFn: () => api<{ messages: MsgHist[] }>(`/admin/conversations/${encodeURIComponent(sessionId)}/historico`),
+    enabled: aba === "historico",
+  });
   const m = c?.metadados;
+
+  const TABS: [Aba, string][] = [["resumo", "Resumo"], ["dados", "Dados do assistido"], ["historico", "Histórico do chat"]];
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 pt-4">
           <h2 className="text-lg font-bold text-slate-800">Atendimento</h2>
           <button className="text-slate-400 hover:text-slate-700" onClick={onClose}>✕</button>
         </div>
 
-        {!c && <p className="text-slate-400 text-sm">Carregando…</p>}
+        {/* guias */}
+        <div className="flex gap-1 px-5 border-b border-slate-200 mt-3">
+          {TABS.map(([id, label]) => (
+            <button
+              key={id}
+              className={`px-3 py-2 text-sm border-b-2 -mb-px ${aba === id ? "border-emerald-600 text-emerald-700 font-medium" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+              onClick={() => setAba(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-        {c?.resumo && (
-          <section className="mb-4">
-            <h3 className="text-xs font-semibold text-slate-500 uppercase mb-1">Resumo</h3>
-            <p className="text-sm text-slate-800 bg-slate-50 rounded p-3 whitespace-pre-wrap">{c.resumo}</p>
-          </section>
-        )}
+        <div className="p-5 overflow-y-auto">
+          {!c && <p className="text-slate-400 text-sm">Carregando…</p>}
 
-        {m?.assistido && (
-          <section className="mb-4">
-            <h3 className="text-xs font-semibold text-slate-500 uppercase mb-1">Assistido</h3>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-              {Object.entries(m.assistido).filter(([, v]) => v).map(([k, v]) => (
-                <div key={k}><dt className="inline text-slate-500">{k}: </dt><dd className="inline text-slate-800">{v}</dd></div>
-              ))}
-            </dl>
-          </section>
-        )}
+          {aba === "resumo" && c && (
+            c.resumo
+              ? <p className="text-sm text-slate-800 bg-slate-50 rounded p-3 whitespace-pre-wrap">{c.resumo}</p>
+              : <p className="text-sm text-slate-400">Sem resumo (conversa em andamento ou anterior ao recurso).</p>
+          )}
 
-        {m?.caso && Object.keys(m.caso).length > 0 && (
-          <section className="mb-4">
-            <h3 className="text-xs font-semibold text-slate-500 uppercase mb-1">Caso ({m.categoria})</h3>
-            <dl className="text-sm space-y-1">
-              {Object.entries(m.caso).map(([k, v]) => (
-                <div key={k}><dt className="inline text-slate-500">{k}: </dt><dd className="inline text-slate-800">{v}</dd></div>
-              ))}
-            </dl>
-          </section>
-        )}
+          {aba === "dados" && (
+            <>
+              {m?.assistido && (
+                <section className="mb-4">
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase mb-1">Assistido</h3>
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                    {Object.entries(m.assistido).filter(([, v]) => v).map(([k, v]) => (
+                      <div key={k}><dt className="inline text-slate-500">{k}: </dt><dd className="inline text-slate-800">{v}</dd></div>
+                    ))}
+                  </dl>
+                </section>
+              )}
+              {m?.caso && Object.keys(m.caso).length > 0 && (
+                <section className="mb-4">
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase mb-1">Caso ({m.categoria})</h3>
+                  <dl className="text-sm space-y-1">
+                    {Object.entries(m.caso).map(([k, v]) => (
+                      <div key={k}><dt className="inline text-slate-500">{k}: </dt><dd className="inline text-slate-800">{v}</dd></div>
+                    ))}
+                  </dl>
+                </section>
+              )}
+              {m?.encaminhamento && (
+                <section>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase mb-1">Encaminhamento</h3>
+                  <pre className="text-xs bg-slate-50 rounded p-2 overflow-x-auto">{JSON.stringify(m.encaminhamento, null, 2)}</pre>
+                </section>
+              )}
+              {!m && <p className="text-sm text-slate-400">Sem dados estruturados.</p>}
+            </>
+          )}
 
-        {m?.encaminhamento && (
-          <section className="mb-4">
-            <h3 className="text-xs font-semibold text-slate-500 uppercase mb-1">Encaminhamento</h3>
-            <pre className="text-xs bg-slate-50 rounded p-2 overflow-x-auto">{JSON.stringify(m.encaminhamento, null, 2)}</pre>
-          </section>
-        )}
-
-        {!c?.resumo && c && (
-          <p className="text-sm text-slate-400">Conversa sem resumo (ainda em andamento ou anterior a este recurso).</p>
-        )}
+          {aba === "historico" && (
+            <div className="flex flex-col gap-2">
+              {!hist && <p className="text-sm text-slate-400">Carregando histórico…</p>}
+              {hist?.messages.length === 0 && <p className="text-sm text-slate-400">Sem histórico disponível.</p>}
+              {hist?.messages.map((msg, i) => {
+                const ai = msg.role === "ai";
+                const txt = textoDoConteudo(msg.content);
+                if (!txt.trim()) return null;
+                return (
+                  <div key={i} className={`flex ${ai ? "justify-start" : "justify-end"}`}>
+                    <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap ${ai ? "bg-slate-100 text-slate-800" : "bg-emerald-600 text-white"}`}>
+                      {txt}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
