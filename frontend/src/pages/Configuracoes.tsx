@@ -5,6 +5,7 @@ import { useAuth } from "../store";
 
 interface ConfigResp {
   estiloPrompt: string;
+  conversacional: boolean;
   padrao: string;
 }
 
@@ -12,6 +13,7 @@ export function Configuracoes() {
   const { usuario } = useAuth();
   const isAdmin = usuario?.role === "admin";
   const [texto, setTexto] = useState("");
+  const [conversacional, setConversacional] = useState(true);
   const [salvo, setSalvo] = useState(false);
 
   const { data } = useQuery({
@@ -20,11 +22,11 @@ export function Configuracoes() {
   });
 
   useEffect(() => {
-    if (data) setTexto(data.estiloPrompt || "");
+    if (data) { setTexto(data.estiloPrompt || ""); setConversacional(data.conversacional); }
   }, [data]);
 
   const salvar = useMutation({
-    mutationFn: () => api("/admin/config", { method: "PUT", body: JSON.stringify({ estiloPrompt: texto }) }),
+    mutationFn: () => api("/admin/config", { method: "PUT", body: JSON.stringify({ estiloPrompt: texto, conversacional }) }),
     onSuccess: () => { setSalvo(true); setTimeout(() => setSalvo(false), 2500); },
   });
 
@@ -36,6 +38,11 @@ export function Configuracoes() {
         Use para garantir linguagem simples e o tom da Defensoria. As regras de estilo ficam aqui
         (sempre aplicadas) — o RAG continua sendo usado só para o conteúdo dos serviços.
       </p>
+
+      <label className="flex items-center gap-2 mb-4 text-sm">
+        <input type="checkbox" checked={conversacional} disabled={!isAdmin} onChange={(e) => setConversacional(e.target.checked)} />
+        <span><strong>Perguntas conversacionais</strong> — a IA reescreve cada pergunta de forma acolhedora (texto fixo nos nós marcados como "texto fixo")</span>
+      </label>
 
       <textarea
         className="w-full border border-slate-300 rounded-lg p-3 text-sm font-mono min-h-[340px] disabled:bg-slate-50"

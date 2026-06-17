@@ -136,6 +136,9 @@ function EditorNo({ no, onChange, onRemove }: {
               />
             </Campo>
           )}
+          <Campo label="Texto fixo (não reescrever com IA)">
+            <input type="checkbox" className="ml-2" checked={Boolean(d.semReescrita)} onChange={(e) => set("semReescrita", e.target.checked)} />
+          </Campo>
         </>
       )}
 

@@ -227,15 +227,18 @@ export async function adminRoutes(app: FastifyInstance) {
   // ── Configuração: preâmbulo de estilo da IA ─────────────────────────────────
   app.get("/config", async () => {
     const c = await db.config.findUnique({ where: { id: "default" } });
-    return { estiloPrompt: c?.estiloPrompt ?? "", padrao: ESTILO_DEFAULT };
+    return { estiloPrompt: c?.estiloPrompt ?? "", conversacional: c?.conversacional ?? true, padrao: ESTILO_DEFAULT };
   });
 
   app.put("/config", { preHandler: [exigirAdmin] }, async (req) => {
-    const { estiloPrompt = "" } = (req.body ?? {}) as { estiloPrompt?: string };
+    const { estiloPrompt, conversacional } = (req.body ?? {}) as { estiloPrompt?: string; conversacional?: boolean };
     const c = await db.config.upsert({
       where: { id: "default" },
-      update: { estiloPrompt },
-      create: { id: "default", estiloPrompt },
+      update: {
+        ...(estiloPrompt !== undefined && { estiloPrompt }),
+        ...(conversacional !== undefined && { conversacional }),
+      },
+      create: { id: "default", estiloPrompt: estiloPrompt ?? "", conversacional: conversacional ?? true },
     });
     invalidarEstilo();
     return c;

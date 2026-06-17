@@ -45,9 +45,10 @@ model User {
 // Configuração global (singleton id="default"): preâmbulo de estilo aplicado
 // a toda geração de texto da IA (linguagem simples, tom da Defensoria).
 model Config {
-  id           String   @id @default("default")
-  estiloPrompt String   @default("")
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default("default")
+  estiloPrompt  String   @default("")
+  conversacional Boolean @default(true) // IA reescreve perguntas de forma acolhedora
+  updatedAt     DateTime @updatedAt
 }
 
 // Assistido = cidadão atendido (≠ User, que é o operador do painel).

@@ -15,20 +15,33 @@ Regras de linguagem (SEMPRE seguir):
 - Não invente informação. Se não souber, oriente a procurar a Defensoria.
 - Responda só com base no contexto fornecido, quando houver.`;
 
-let cache: { v: string; t: number } | null = null;
+export interface ConfigIA {
+  estilo: string;
+  conversacional: boolean;
+}
+
+let cache: { v: ConfigIA; t: number } | null = null;
 const TTL = 60_000;
 
-export async function obterEstilo(): Promise<string> {
+export async function obterConfig(): Promise<ConfigIA> {
   if (cache && Date.now() - cache.t < TTL) return cache.v;
-  if (!prisma) return ESTILO_DEFAULT;
+  const padrao: ConfigIA = { estilo: ESTILO_DEFAULT, conversacional: true };
+  if (!prisma) return padrao;
   try {
     const c = await prisma.config.findUnique({ where: { id: "default" } });
-    const v = c?.estiloPrompt?.trim() || ESTILO_DEFAULT;
+    const v: ConfigIA = {
+      estilo: c?.estiloPrompt?.trim() || ESTILO_DEFAULT,
+      conversacional: c?.conversacional ?? true,
+    };
     cache = { v, t: Date.now() };
     return v;
   } catch {
-    return ESTILO_DEFAULT;
+    return padrao;
   }
+}
+
+export async function obterEstilo(): Promise<string> {
+  return (await obterConfig()).estilo;
 }
 
 export function invalidarEstilo() {

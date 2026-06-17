@@ -4,7 +4,7 @@ import { ChatBedrockConverse } from "@langchain/aws";
 import { AmazonKnowledgeBaseRetriever } from "@langchain/aws";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { z } from "zod";
-import { obterEstilo } from "../config.js";
+import { obterEstilo, obterConfig } from "../config.js";
 import { GraphAnnotation, type GraphState } from "../state.js";
 import { checkpointer, graph as graphEstatico } from "../graph.js";
 import { mensagemPergunta, proxima, type Pergunta, type TipoPergunta } from "../perguntas.js";
@@ -37,6 +37,7 @@ export interface FlowNode {
     servico?: string;          // subgrafo: categoria (familia_pensao | trabalhista | ...)
     refFlowId?: string;        // subfluxo: id do Flow embutido (tema editável no painel)
     saida?: string;            // sub-flow: nomeia a saída deste nó-folha (casa com label da seta do subfluxo)
+    semReescrita?: boolean;    // pergunta: não reescrever com IA (texto fixo — ex: LGPD/links)
     valor?: string;            // atribuir
   };
 }
@@ -212,6 +213,8 @@ async function extrairDoRelato(
       if (typeof v !== "string" || !v.trim() || PLACEHOLDER.test(v.trim())) continue;
       const p = pendentes.find((x) => x.chave === k);
       if (!p) continue;
+      // descarta quando o LLM ecoa o texto da própria pergunta como "valor"
+      if (v.trim().toLowerCase() === p.texto.trim().toLowerCase()) continue;
       if (["true", "false"].includes(v.trim().toLowerCase()) && p.tipo !== "sim_nao") continue;
       if (p.tipo === "sim_nao") { const n = normSimNao(v); if (n === "sim" || n === "não") updates[k] = n; continue; }
       if (p.tipo === "opcoes") { const o = casarOpcaoGen(p, v); if (o) updates[k] = o; continue; }
@@ -223,6 +226,40 @@ async function extrairDoRelato(
   } catch (err) {
     console.warn("[extrair] falha:", String(err).slice(0, 120));
     return {};
+  }
+}
+
+// Reescreve a pergunta de forma curta, simples e acolhedora (conversacional),
+// preservando exatamente o que está sendo pedido. Falha → texto original.
+async function reescreverPergunta(
+  textoBase: string,
+  p: Pergunta,
+  state: GraphState,
+  estilo: string
+): Promise<string> {
+  try {
+    const fala = ultimaFalaUsuario(state);
+    const primeira = (state.perguntasFeitas?.length ?? 0) === 0;
+    const regras = [
+      "Você (Maria) está PERGUNTANDO ao cidadão para COLETAR uma informação. Reescreva a PERGUNTA abaixo de forma curta, simples e acolhedora, como numa conversa real.",
+      "Formule como uma pergunta DIRETA pedindo o dado ao cidadão. NUNCA inverta (não diga que a pessoa quer saber algo).",
+      "Mantenha EXATAMENTE a mesma informação pedida. Não acrescente nem troque por outra pergunta.",
+      "No máximo 2 frases. Não repita saudação (já cumprimentou).",
+      "Preserve links, números, formatos (ex: CPF, datas) e termos legais exatamente como estão.",
+      primeira ? "" : "Pode reconhecer brevemente o que a pessoa acabou de dizer, sem exagero.",
+      p.tipo === "sim_nao" ? "A pergunta deve poder ser respondida com Sim ou Não." : "",
+      p.tipo === "opcoes" ? "NÃO liste as opções no texto (elas aparecem como botões)." : "",
+    ].filter(Boolean).join("\n");
+
+    const res = await model.invoke([
+      new SystemMessage(`${estilo}\n\n${regras}`),
+      new HumanMessage(`Pergunta a fazer: "${textoBase}"${fala ? `\nÚltima fala da pessoa: "${fala}"` : ""}\n\nResponda só com a pergunta reescrita.`),
+    ]);
+    const txt = String(res.content).trim();
+    return txt || textoBase;
+  } catch (err) {
+    console.warn("[conversacional] falha ao reescrever:", String(err).slice(0, 100));
+    return textoBase;
   }
 }
 
@@ -251,15 +288,20 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[] }) {
 
     case "pergunta": {
       const p = perguntaDoNode(node);
-      return async (state: GraphState) => ({
-        messages: [mensagemPergunta({
-          ...p,
-          texto: interpolar(p.texto, state.dadosColetados),
-          imagem: p.imagem ? interpolar(p.imagem, state.dadosColetados) : undefined,
-        })],
-        perguntasFeitas: [p.chave],
-        ultimaPergunta: p.chave,
-      });
+      const semReescrita = node.data.semReescrita === true;
+      return async (state: GraphState) => {
+        const textoBase = interpolar(p.texto, state.dadosColetados);
+        // conversacional: a IA reescreve a pergunta de forma acolhedora (preserva o pedido)
+        const cfg = await obterConfig();
+        const texto = cfg.conversacional && !semReescrita
+          ? await reescreverPergunta(textoBase, p, state, cfg.estilo)
+          : textoBase;
+        return {
+          messages: [mensagemPergunta({ ...p, texto, imagem: p.imagem ? interpolar(p.imagem, state.dadosColetados) : undefined })],
+          perguntasFeitas: [p.chave],
+          ultimaPergunta: p.chave,
+        };
+      };
     }
 
     case "ia":
