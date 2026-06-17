@@ -126,13 +126,14 @@ function categoriaPadrao(opcoes: string[]): string {
   return opcoes.find((o) => o.toLowerCase() === "outros") ?? opcoes[opcoes.length - 1];
 }
 
-async function classificarTexto(fala: string, opcoes: string[], prompt?: string): Promise<string> {
+async function classificarTexto(fala: string, opcoes: string[], prompt?: string, contextoRag?: string): Promise<string> {
   if (!opcoes.length) return "";
   if (!fala.trim()) return categoriaPadrao(opcoes); // sem relato → catch-all
 
   try {
     const instrucao =
       (prompt ?? "Você classifica o relato de um cidadão em uma categoria de serviço jurídico.") +
+      (contextoRag ? `\n\n<base_de_conhecimento>\n${contextoRag}\n</base_de_conhecimento>` : "") +
       `\n\nCategorias possíveis (responda APENAS com uma delas, exatamente como escrita): ${opcoes.join(", ")}.`;
     const res = await model.invoke([
       new SystemMessage(instrucao),
@@ -281,11 +282,22 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[] }) {
       const opcoes = (node.data.opcoes ?? []).filter(Boolean);
       const chave = node.data.chave ?? "categoria";
       const perguntas = ctx?.perguntas ?? [];
+      const usarRag = node.data.usarRag !== false; // RAG ligado por padrão (mais acertivo)
       return async (state: GraphState) => {
         const fala = ultimaFalaUsuario(state);
+        // contexto da base de conhecimento (serviços DPERJ) p/ classificar melhor
+        let contextoRag: string | undefined;
+        if (usarRag && retriever && fala.trim()) {
+          try {
+            const docs = await retriever.invoke(fala);
+            contextoRag = docs.map((d) => d.pageContent).join("\n\n").slice(0, 4000);
+          } catch (err) {
+            console.warn("[classificar] RAG indisponível:", String(err).slice(0, 100));
+          }
+        }
         // classifica o tema E extrai o que já foi dito (pré-preenche perguntas)
         const [categoria, extra] = await Promise.all([
-          classificarTexto(fala, opcoes, node.data.prompt),
+          classificarTexto(fala, opcoes, node.data.prompt, contextoRag),
           extrairDoRelato(fala, perguntas, state.dadosColetados),
         ]);
         return { dadosColetados: { [chave]: categoria, ...extra }, categoria };

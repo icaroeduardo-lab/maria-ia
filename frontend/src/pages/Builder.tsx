@@ -171,9 +171,12 @@ function EditorNo({ no, onChange, onRemove }: {
             />
           </Campo>
           {texto("prompt", "Instrução extra ao classificador (opcional)", true)}
+          <Campo label="Usar base de conhecimento (RAG) para classificar">
+            <input type="checkbox" className="ml-2" checked={d.usarRag !== false} onChange={(e) => set("usarRag", e.target.checked)} />
+          </Campo>
           <p className="text-xs text-slate-500">
-            A IA lê o relato do usuário e escolhe UMA categoria. Cada seta saindo da
-            condição seguinte usa o nome da categoria como rótulo.
+            A IA lê o relato + a base de serviços DPERJ e escolhe UMA categoria.
+            Cada seta saindo daqui usa o nome da categoria como rótulo.
           </p>
         </>
       )}
