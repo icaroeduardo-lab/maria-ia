@@ -34,6 +34,7 @@ export interface FlowNode {
     metodo?: "GET" | "POST";   // api
     servico?: string;          // subgrafo: categoria (familia_pensao | trabalhista | ...)
     refFlowId?: string;        // subfluxo: id do Flow embutido (tema editável no painel)
+    saida?: string;            // sub-flow: nomeia a saída deste nó-folha (casa com label da seta do subfluxo)
     valor?: string;            // atribuir
   };
 }
@@ -340,16 +341,24 @@ function expandirSubfluxos(nodes: FlowNode[], edges: FlowEdge[], subflows: Subfl
     const subEdges = sub.edges.map((e) => ({ ...e, id: pfx + e.id, source: pfx + e.source, target: pfx + e.target }));
     const entrada = pfx + entradaDe(sub.nodes, sub.edges).id;
     const comSaida = new Set(sub.edges.map((e) => e.source));
-    const terminais = sub.nodes.filter((n) => !comSaida.has(n.id)).map((n) => pfx + n.id);
+    const terminais = sub.nodes.filter((n) => !comSaida.has(n.id)); // nós-folha do sub-flow
 
     N = N.concat(subNodes);
     E = E.concat(subEdges);
     // entradas do nó subfluxo → entrada do sub-flow (preserva label da condição)
     for (const ent of entradasNode)
       E.push({ id: `in_${ent.source}_${entrada}`, source: ent.source, target: entrada, label: ent.label });
-    // terminais do sub-flow → cada saída do nó subfluxo
-    for (const term of terminais) for (const sai of saidasNode)
-      E.push({ id: `out_${term}_${sai.target}`, source: term, target: sai.target, label: sai.label });
+
+    // saídas: cada terminal do sub-flow liga às saídas do nó subfluxo.
+    // Saída nomeada: terminal com data.saida casa com a seta de mesmo label.
+    const semLabel = saidasNode.filter((s) => !s.label);
+    for (const term of terminais) {
+      const nome = (term.data.saida ?? "").toLowerCase().trim();
+      const casados = nome ? saidasNode.filter((s) => (s.label ?? "").toLowerCase().trim() === nome) : [];
+      const alvos = casados.length ? casados : (semLabel.length ? semLabel : saidasNode);
+      for (const sai of alvos)
+        E.push({ id: `out_${pfx}${term.id}_${sai.target}`, source: pfx + term.id, target: sai.target, label: sai.label });
+    }
   }
   return { nodes: N, edges: E };
 }

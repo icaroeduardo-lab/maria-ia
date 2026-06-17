@@ -113,6 +113,7 @@ function EditorNo({ no, onChange, onRemove }: {
         <>
           {texto("texto", "Texto (use {{chave}} para dados coletados)", true)}
           {texto("imagem", "URL da imagem (opcional)")}
+          {texto("saida", "Saída nomeada (só em subfluxo: casa com o rótulo da seta)")}
         </>
       )}
 
