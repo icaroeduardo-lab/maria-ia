@@ -118,9 +118,14 @@ function resolverCampoCondicao(dados: Record<string, unknown>, caminho: string):
 
 // Classifica um texto livre em uma das categorias dadas. Tenta o LLM (Bedrock);
 // se falhar (sem credenciais/rede), cai num matcher por palavra-chave.
+// categoria padrão quando nada casa: "outros" se existir, senão a última
+function categoriaPadrao(opcoes: string[]): string {
+  return opcoes.find((o) => o.toLowerCase() === "outros") ?? opcoes[opcoes.length - 1];
+}
+
 async function classificarTexto(fala: string, opcoes: string[], prompt?: string): Promise<string> {
   if (!opcoes.length) return "";
-  if (!fala.trim()) return opcoes[opcoes.length - 1]; // sem relato → última (geralmente "outros")
+  if (!fala.trim()) return categoriaPadrao(opcoes); // sem relato → catch-all
 
   try {
     const instrucao =
@@ -156,7 +161,7 @@ function classificarPorPalavraChave(fala: string, opcoes: string[]): string {
     const chaves = PALAVRAS_CHAVE[opt.toLowerCase()] ?? [opt.toLowerCase()];
     if (chaves.some((k) => txt.includes(k))) return opt;
   }
-  return opcoes[opcoes.length - 1]; // default → última categoria (ex: "outros")
+  return categoriaPadrao(opcoes); // default → "outros" (não a última, que pode ser fora_competencia)
 }
 
 // interpola {{chave}} / {{chave.sub}} com dadosColetados — ex: "CPF: {{cpf}}"
