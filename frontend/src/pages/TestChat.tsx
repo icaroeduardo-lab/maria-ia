@@ -22,13 +22,14 @@ interface Mensagem {
   content: string | ContentBlock[];
 }
 
-function renderContent(content: string | ContentBlock[]) {
+function renderContent(content: string | ContentBlock[], onImgLoad?: () => void) {
   if (typeof content === "string") return <span className="whitespace-pre-wrap">{content}</span>;
   return (
     <>
       {content.map((block, i) => {
         if (block.type === "text") return <span key={i} className="whitespace-pre-wrap">{block.text}</span>;
-        if (block.type === "image_url") return <img key={i} src={block.image_url?.url} className="max-w-xs rounded mt-1" alt="" />;
+        // onLoad rola pro fim quando a imagem termina de carregar (altura muda)
+        if (block.type === "image_url") return <img key={i} src={block.image_url?.url} className="max-w-xs rounded mt-1" alt="" onLoad={onImgLoad} />;
         return null;
       })}
     </>
@@ -61,8 +62,9 @@ export function TestChat() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const rolarParaFim = () => bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    rolarParaFim();
   }, [mensagens, carregando]);
 
   function resetar(novoFlowId?: string) {
@@ -162,7 +164,7 @@ export function TestChat() {
                   isAI ? "bg-white text-gray-800 rounded-tl-sm" : "bg-[#dcf8c6] text-gray-800 rounded-tr-sm"
                 }`}
               >
-                {renderContent(m.content)}
+                {renderContent(m.content, rolarParaFim)}
               </div>
             </div>
           );
