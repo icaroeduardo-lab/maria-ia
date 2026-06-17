@@ -85,6 +85,7 @@ function perguntaDoNode(node: FlowNode): Pergunta {
     obrigatoria: true,
     tipo: node.data.tipoPergunta ?? "texto",
     opcoes: node.data.opcoes,
+    imagem: node.data.imagem,
   };
 }
 

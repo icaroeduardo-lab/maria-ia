@@ -9,6 +9,7 @@ export interface Pergunta {
   obrigatoria: boolean;
   tipo: TipoPergunta;
   opcoes?: string[];        // para tipo "opcoes"
+  imagem?: string;          // url de imagem exibida antes da pergunta (opcional)
   descricao?: string;       // dica para o extrator (vira description no schema do LLM)
   condicao?: (dados: Record<string, string>) => boolean;  // só pergunta se true
   // valida valor extraído por inferência do LLM; inválido → descarta e pergunta normalmente.
@@ -25,23 +26,12 @@ export function proxima(perguntas: Pergunta[], dados: Record<string, string>): P
 }
 
 export function mensagemPergunta(p: Pergunta): AIMessage {
-  if (p.tipo === "sim_nao") {
-    return new AIMessage({
-      content: [
-        { type: "text", text: p.texto },
-        { type: "boolean", trueLabel: true, falseLabel: false },
-      ],
-    });
-  }
-  if (p.tipo === "opcoes" && p.opcoes?.length) {
-    return new AIMessage({
-      content: [
-        { type: "text", text: p.texto },
-        { type: "options", options: p.opcoes },
-      ],
-    });
-  }
-  return new AIMessage(p.texto);
+  const blocos: object[] = [];
+  if (p.imagem) blocos.push({ type: "image_url", image_url: { url: p.imagem } });
+  blocos.push({ type: "text", text: p.texto });
+  if (p.tipo === "sim_nao") blocos.push({ type: "boolean", trueLabel: true, falseLabel: false });
+  else if (p.tipo === "opcoes" && p.opcoes?.length) blocos.push({ type: "options", options: p.opcoes });
+  return new AIMessage({ content: blocos as never });
 }
 
 // Factory: node que faz a próxima pergunta pendente do grupo e pausa (interruptAfter no grafo)

@@ -120,6 +120,7 @@ function EditorNo({ no, onChange, onRemove }: {
       {d.tipo === "pergunta" && (
         <>
           {texto("texto", "Pergunta", true)}
+          {texto("imagem", "URL da imagem (opcional)")}
           {texto("chave", "Chave (campo onde salva a resposta)")}
           <Campo label="Tipo de resposta">
             <select className={inputCls} value={String(d.tipoPergunta ?? "texto")} onChange={(e) => set("tipoPergunta", e.target.value)}>
