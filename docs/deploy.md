@@ -22,6 +22,16 @@ Postgres gerenciado, sem CLI):
 > Alternativas: **Fly.io** (CLI, `fly launch` usa o Dockerfile + `fly postgres`),
 > **Render**, ou **VPS** com `docker compose up` (usa o `docker-compose.yml`; precisa configurar TLS no nginx).
 
+### Banco no Supabase (opcional)
+Pode usar o Postgres do Supabase em vez do banco do host:
+1. Supabase → projeto → **Connect** → copiar a **Direct connection** (porta **5432**).
+2. `DATABASE_URL=postgresql://postgres:<senha>@db.<ref>.supabase.co:5432/postgres`
+3. Usar a conexão **direta (5432)**, NÃO o pooler (6543) — o pooler em modo transação
+   quebra os prepared statements do Prisma. (Se precisar do pooler: `?pgbouncer=true` + `directUrl` no schema.)
+4. O `start` roda `prisma migrate deploy` (tabelas do Prisma) e o `PostgresSaver.setup()`
+   cria o schema `langgraph` automaticamente. Rodar `pnpm seed` uma vez.
+5. Free tier pausa após inatividade (ok para teste; 24/7 real → plano pago).
+
 ---
 
 ## 2. WhatsApp — número de teste da Meta
