@@ -1,0 +1,1399 @@
+[
+  {
+    "id": "cmqgwg2u70001lt4ocuw3arn9",
+    "name": "Fluxo DPERJ Completo",
+    "active": true,
+    "nodes": [
+      {
+        "id": "lgpd",
+        "data": {
+          "chave": "aceita_lgpd",
+          "texto": "Antes de continuar, preciso que você aceite nosso *Termo de Privacidade*.\n\n📄 Acesse: https://defensoria.rj.def.br/politica-de-privacidade\n\nVocê aceita os termos?",
+          "semReescrita": true,
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 60,
+          "y": 40
+        }
+      },
+      {
+        "id": "confirmou",
+        "data": {
+          "campo": "aceita_lgpd",
+          "titulo": "Aceitou LGPD?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 300,
+          "y": 40
+        }
+      },
+      {
+        "id": "end_recusa",
+        "data": {
+          "texto": "Sem o aceite não podemos prosseguir. Até logo! 👋"
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 300,
+          "y": 400
+        }
+      },
+      {
+        "id": "digitar_cpf",
+        "data": {
+          "chave": "cpf",
+          "texto": "Digite seu *CPF* (somente números). 🔢",
+          "imagem": "https://maria-ia.s3.us-east-1.amazonaws.com/imagens/85269ddf-81e6-4157-b771-84be5c53968d.jpg",
+          "semReescrita": true,
+          "tipoPergunta": "cpf"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 540,
+          "y": 40
+        }
+      },
+      {
+        "id": "api_cpf",
+        "data": {
+          "url": "/api/assistidos/consultar",
+          "chave": "resultado_cpf",
+          "metodo": "POST",
+          "titulo": "Consultar assistido"
+        },
+        "type": "api",
+        "position": {
+          "x": 780,
+          "y": 40
+        }
+      },
+      {
+        "id": "existe",
+        "data": {
+          "campo": "resultado_cpf.encontrado",
+          "titulo": "Tem cadastro?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 1020,
+          "y": 40
+        }
+      },
+      {
+        "id": "confirma_dados",
+        "data": {
+          "texto": "Confira seus dados na ficha acima 👆",
+          "imagem": "{{ficha.url}}"
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 1260,
+          "y": 40
+        }
+      },
+      {
+        "id": "dados_corretos",
+        "data": {
+          "chave": "dados_ok",
+          "texto": "Os dados acima estão corretos?",
+          "semReescrita": true,
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 1500,
+          "y": 40
+        }
+      },
+      {
+        "id": "cond_dados",
+        "data": {
+          "campo": "dados_ok",
+          "titulo": "Dados corretos?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 1740,
+          "y": 40
+        }
+      },
+      {
+        "id": "upd_telefone",
+        "data": {
+          "chave": "telefone",
+          "texto": "Informe o *telefone* correto (com DDD):",
+          "tipoPergunta": "telefone"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 1543.650537489887,
+          "y": 358.1114881397984
+        }
+      },
+      {
+        "id": "api_atualizar",
+        "data": {
+          "url": "/api/assistidos/atualizar",
+          "chave": "resultado_upd",
+          "metodo": "POST",
+          "titulo": "Atualizar assistido"
+        },
+        "type": "api",
+        "position": {
+          "x": 1740,
+          "y": 280
+        }
+      },
+      {
+        "id": "msg_upd",
+        "data": {
+          "texto": "✅ Dados atualizados!\nTelefone: {{resultado_upd.dados.telefone}}"
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 1980,
+          "y": 280
+        }
+      },
+      {
+        "id": "cad_intro",
+        "data": {
+          "texto": "Não encontramos seu cadastro. Vamos criar agora. 📝"
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 1260,
+          "y": 520
+        }
+      },
+      {
+        "id": "cad_nome",
+        "data": {
+          "chave": "nome",
+          "texto": "Qual o seu *nome completo*?",
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 1500,
+          "y": 520
+        }
+      },
+      {
+        "id": "cad_nasc",
+        "data": {
+          "chave": "dataNascimento",
+          "texto": "Sua *data de nascimento* (AAAA-MM-DD)?",
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 1758,
+          "y": 530
+        }
+      },
+      {
+        "id": "cad_telefone",
+        "data": {
+          "chave": "telefone",
+          "texto": "Seu *telefone* com DDD?",
+          "tipoPergunta": "telefone"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 1980,
+          "y": 520
+        }
+      },
+      {
+        "id": "api_cadastrar",
+        "data": {
+          "url": "/api/assistidos/cadastrar",
+          "chave": "resultado_cadastro",
+          "metodo": "POST",
+          "titulo": "Cadastrar assistido"
+        },
+        "type": "api",
+        "position": {
+          "x": 2220,
+          "y": 520
+        }
+      },
+      {
+        "id": "msg_cadastro",
+        "data": {
+          "texto": "✅ *Cadastro realizado!*\nNome: {{resultado_cadastro.dados.nome}}\nProtocolo: {{resultado_cadastro.protocolo}}"
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 2460,
+          "y": 520
+        }
+      },
+      {
+        "id": "kyc",
+        "data": {
+          "url": "/mock/kyc",
+          "chave": "resultado_kyc",
+          "metodo": "POST",
+          "titulo": "Reconhecimento (KYC)"
+        },
+        "type": "api",
+        "position": {
+          "x": 1980,
+          "y": 40
+        }
+      },
+      {
+        "id": "cond_kyc",
+        "data": {
+          "campo": "resultado_kyc.confirmado",
+          "titulo": "KYC confirmado?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 2220,
+          "y": 40
+        }
+      },
+      {
+        "id": "erro_kyc",
+        "data": {
+          "texto": "⚠️ Não conseguimos confirmar sua identidade."
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 2220,
+          "y": 760
+        }
+      },
+      {
+        "id": "tentar_kyc",
+        "data": {
+          "chave": "retry_kyc",
+          "texto": "Deseja tentar novamente?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 2460,
+          "y": 760
+        }
+      },
+      {
+        "id": "cond_retry_kyc",
+        "data": {
+          "campo": "retry_kyc",
+          "titulo": "Tentar KYC?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 2700,
+          "y": 760
+        }
+      },
+      {
+        "id": "contar_historia",
+        "data": {
+          "chave": "relato",
+          "texto": "Estamos aqui para lhe ajudar. 😊\nConte mais sobre seu caso.",
+          "imagem": "https://maria-ia.s3.us-east-1.amazonaws.com/imagens/839dd28f-662d-4b33-aea4-37f9646179c3.jpg",
+          "semReescrita": true,
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 2458.258898873408,
+          "y": 46.96440450636899
+        }
+      },
+      {
+        "id": "classificar",
+        "data": {
+          "chave": "categoria",
+          "opcoes": [
+            "alimentação",
+            "divórcio",
+            "outros",
+            "acompanhar",
+            "fora_competencia"
+          ],
+          "prompt": "Você classifica o relato de um cidadão para a Defensoria Pública do RJ. Escolha UMA categoria:\n- alimentação: pensão alimentícia, sustento de filhos\n- divórcio: separação, divórcio, dissolução de união\n- acompanhar: a pessoa quer acompanhar um processo que JÁ existe\n- fora_competencia: APENAS matéria criminal com réu preso ou questões claramente fora da Defensoria\n- outros: QUALQUER outro assunto cível (vizinhança, INSS, consumo, contratos, etc.) — use como padrão na dúvida",
+          "titulo": "Classificar relato"
+        },
+        "type": "classificar",
+        "position": {
+          "x": 2700,
+          "y": 40
+        }
+      },
+      {
+        "id": "direcionar_nad",
+        "data": {
+          "texto": "📋 Seu caso foi encaminhado ao *NAD*. Em breve entraremos em contato."
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 3180,
+          "y": 40
+        }
+      },
+      {
+        "id": "agendamento_api",
+        "data": {
+          "url": "/mock/agendamento",
+          "chave": "agendamento",
+          "metodo": "POST",
+          "titulo": "Agendar"
+        },
+        "type": "api",
+        "position": {
+          "x": 3180,
+          "y": 400
+        }
+      },
+      {
+        "id": "msg_agendamento",
+        "data": {
+          "texto": "📅 *Agendado!*\nData: {{agendamento.data}}\nUnidade: {{agendamento.unidade}}\nProtocolo: {{agendamento.agendamento_id}}"
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 3420,
+          "y": 400
+        }
+      },
+      {
+        "id": "atendente",
+        "data": {
+          "texto": "👤 Você será encaminhado a um *atendente humano*. Aguarde o contato."
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 2940,
+          "y": 1240
+        }
+      },
+      {
+        "id": "fim",
+        "data": {
+          "texto": "Atendimento encerrado. Obrigada por usar a Maria! 👋"
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 3900,
+          "y": 40
+        }
+      },
+      {
+        "id": "mensagem_mqh106a0",
+        "data": {
+          "texto": "",
+          "imagem": "https://maria-ia.s3.us-east-1.amazonaws.com/imagens/771e5379-0f5f-4056-aadc-70ab4f1876e8.jpg"
+        },
+        "type": "mensagem",
+        "position": {
+          "x": -209.2085781181253,
+          "y": 46.73348765029645
+        }
+      },
+      {
+        "id": "encerrar_mqh13xj4",
+        "data": {},
+        "type": "encerrar",
+        "position": {
+          "x": 301.3170260140494,
+          "y": 550.6292239485304
+        }
+      },
+      {
+        "id": "subgrafo_mqi5e1xk",
+        "data": {},
+        "type": "subgrafo",
+        "position": {
+          "x": 262.2371540096827,
+          "y": 171.7851095051395
+        }
+      },
+      {
+        "id": "sf_alimentacao",
+        "data": {
+          "titulo": "Alimentação",
+          "refFlowId": "cmqi5uu7r0000lt3t9dhegvcb"
+        },
+        "type": "subfluxo",
+        "position": {
+          "x": 700,
+          "y": 1500
+        }
+      },
+      {
+        "id": "sf_divorcio",
+        "data": {
+          "titulo": "Divórcio",
+          "refFlowId": "cmqi5uu850001lt3t8823bqdc"
+        },
+        "type": "subfluxo",
+        "position": {
+          "x": 700,
+          "y": 1640
+        }
+      },
+      {
+        "id": "sf_outros",
+        "data": {
+          "titulo": "Outros",
+          "refFlowId": "cmqi63iy90002lt3tbidplhgd"
+        },
+        "type": "subfluxo",
+        "position": {
+          "x": 700,
+          "y": 1780
+        }
+      },
+      {
+        "id": "sf_acompanhar",
+        "data": {
+          "titulo": "Acompanhar processo",
+          "refFlowId": "cmqi6csra0000ltqlohwncifk"
+        },
+        "type": "subfluxo",
+        "position": {
+          "x": 700,
+          "y": 1920
+        }
+      },
+      {
+        "id": "sf_fora",
+        "data": {
+          "titulo": "Fora de competência",
+          "refFlowId": "cmqi6mz880001ltqlk8bklskq"
+        },
+        "type": "subfluxo",
+        "position": {
+          "x": 700,
+          "y": 2060
+        }
+      },
+      {
+        "id": "api_ficha",
+        "data": {
+          "url": "/api/ficha",
+          "chave": "ficha",
+          "metodo": "POST",
+          "titulo": "Gerar ficha"
+        },
+        "type": "api",
+        "position": {
+          "x": 1196.041476267681,
+          "y": -80.07521988033335
+        }
+      },
+      {
+        "id": "api_casos",
+        "data": {
+          "url": "/api/casos/consultar",
+          "chave": "casos",
+          "metodo": "POST",
+          "titulo": "Consultar casos abertos"
+        },
+        "type": "api",
+        "position": {
+          "x": 2350,
+          "y": -120
+        }
+      },
+      {
+        "id": "cond_tem_casos",
+        "data": {
+          "campo": "casos.tem_casos",
+          "titulo": "Tem casos abertos?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 2632,
+          "y": -64
+        }
+      },
+      {
+        "id": "pergunta_tem_casos",
+        "data": {
+          "chave": "falar_caso",
+          "texto": "⚠️Identificamos que você tem caso(s) em aberto na Defensoria. \n\nVocê quer falar sobre algum deles?",
+          "semReescrita": true,
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 2922,
+          "y": -36
+        }
+      },
+      {
+        "id": "cond_falar_caso",
+        "data": {
+          "campo": "falar_caso",
+          "titulo": "Falar sobre caso?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 3120,
+          "y": 40
+        }
+      },
+      {
+        "id": "msg_lista_casos",
+        "data": {
+          "texto": "Estes são os seus casos em aberto:\n\n{{casos.lista}}"
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 3360,
+          "y": 40
+        }
+      },
+      {
+        "id": "pergunta_sel_caso",
+        "data": {
+          "chave": "caso_escolhido",
+          "texto": "Qual deles você gostaria de tratar? Pode me dizer o número ou o tipo do caso.",
+          "semReescrita": true,
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 3600,
+          "y": 40
+        }
+      },
+      {
+        "id": "msg_provisoria",
+        "data": {
+          "texto": "Perfeito! 💚 Em breve você poderá tratar desse caso por aqui. Por enquanto, nossa equipe vai dar andamento. Obrigada!"
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 3840,
+          "y": 40
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e_0",
+        "source": "lgpd",
+        "target": "confirmou"
+      },
+      {
+        "id": "e_1",
+        "label": "true",
+        "source": "confirmou",
+        "target": "digitar_cpf"
+      },
+      {
+        "id": "e_2",
+        "label": "false",
+        "source": "confirmou",
+        "target": "end_recusa"
+      },
+      {
+        "id": "e_3",
+        "source": "digitar_cpf",
+        "target": "api_cpf"
+      },
+      {
+        "id": "e_4",
+        "source": "api_cpf",
+        "target": "existe"
+      },
+      {
+        "id": "e_6",
+        "label": "false",
+        "source": "existe",
+        "target": "cad_intro"
+      },
+      {
+        "id": "e_7",
+        "source": "confirma_dados",
+        "target": "dados_corretos"
+      },
+      {
+        "id": "e_8",
+        "source": "dados_corretos",
+        "target": "cond_dados"
+      },
+      {
+        "id": "e_10",
+        "label": "false",
+        "source": "cond_dados",
+        "target": "upd_telefone"
+      },
+      {
+        "id": "e_11",
+        "source": "upd_telefone",
+        "target": "api_atualizar"
+      },
+      {
+        "id": "e_12",
+        "source": "api_atualizar",
+        "target": "msg_upd"
+      },
+      {
+        "id": "e_14",
+        "source": "cad_intro",
+        "target": "cad_nome"
+      },
+      {
+        "id": "e_15",
+        "source": "cad_nome",
+        "target": "cad_nasc"
+      },
+      {
+        "id": "e_16",
+        "source": "cad_nasc",
+        "target": "cad_telefone"
+      },
+      {
+        "id": "e_17",
+        "source": "cad_telefone",
+        "target": "api_cadastrar"
+      },
+      {
+        "id": "e_18",
+        "source": "api_cadastrar",
+        "target": "msg_cadastro"
+      },
+      {
+        "id": "e_27",
+        "source": "contar_historia",
+        "target": "classificar"
+      },
+      {
+        "id": "e_37",
+        "source": "direcionar_nad",
+        "target": "fim"
+      },
+      {
+        "id": "e_38",
+        "source": "agendamento_api",
+        "target": "msg_agendamento"
+      },
+      {
+        "id": "e_39",
+        "source": "msg_agendamento",
+        "target": "fim"
+      },
+      {
+        "id": "xy-edge__mensagem_mqh106a0-lgpd",
+        "source": "mensagem_mqh106a0",
+        "target": "lgpd"
+      },
+      {
+        "id": "xy-edge__end_recusa-encerrar_mqh13xj4",
+        "source": "end_recusa",
+        "target": "encerrar_mqh13xj4"
+      },
+      {
+        "id": "by_msg_cadastro_68886",
+        "source": "msg_cadastro",
+        "target": "contar_historia"
+      },
+      {
+        "id": "sx_classificar_sf_alimentacao_78961",
+        "label": "alimentação",
+        "source": "classificar",
+        "target": "sf_alimentacao"
+      },
+      {
+        "id": "sx_classificar_sf_divorcio_78961",
+        "label": "divórcio",
+        "source": "classificar",
+        "target": "sf_divorcio"
+      },
+      {
+        "id": "sx_sf_alimentacao_direcionar_nad_78961",
+        "source": "sf_alimentacao",
+        "target": "direcionar_nad"
+      },
+      {
+        "id": "sx_sf_divorcio_direcionar_nad_78961",
+        "source": "sf_divorcio",
+        "target": "direcionar_nad"
+      },
+      {
+        "id": "o_classificar_sf_outros_84254",
+        "label": "outros",
+        "source": "classificar",
+        "target": "sf_outros"
+      },
+      {
+        "id": "o_sf_outros_agendamento_api_84254",
+        "source": "sf_outros",
+        "target": "agendamento_api"
+      },
+      {
+        "id": "a_classificar_sf_acompanhar_16871",
+        "label": "acompanhar",
+        "source": "classificar",
+        "target": "sf_acompanhar"
+      },
+      {
+        "id": "a_sf_acompanhar_contar_historia_16871",
+        "label": "voltar",
+        "source": "sf_acompanhar",
+        "target": "contar_historia"
+      },
+      {
+        "id": "a_sf_acompanhar_fim_16871",
+        "label": "fim",
+        "source": "sf_acompanhar",
+        "target": "fim"
+      },
+      {
+        "id": "fc_classificar_sf_fora_91810",
+        "label": "fora_competencia",
+        "source": "classificar",
+        "target": "sf_fora"
+      },
+      {
+        "id": "fc_sf_fora_contar_historia_91810",
+        "label": "voltar",
+        "source": "sf_fora",
+        "target": "contar_historia"
+      },
+      {
+        "id": "fc_sf_fora_fim_91810",
+        "label": "fim",
+        "source": "sf_fora",
+        "target": "fim"
+      },
+      {
+        "id": "fi_existe_api_ficha_915",
+        "label": "true",
+        "source": "existe",
+        "target": "api_ficha"
+      },
+      {
+        "id": "fi_api_ficha_confirma_dados_915",
+        "source": "api_ficha",
+        "target": "confirma_dados"
+      },
+      {
+        "id": "cs_cond_dados_api_casos_23910",
+        "label": "true",
+        "source": "cond_dados",
+        "target": "api_casos"
+      },
+      {
+        "id": "cs_msg_upd_api_casos_23910",
+        "source": "msg_upd",
+        "target": "api_casos"
+      },
+      {
+        "id": "cs_api_casos_cond_tem_casos_23910",
+        "source": "api_casos",
+        "target": "cond_tem_casos"
+      },
+      {
+        "id": "cs_cond_tem_casos_pergunta_tem_casos_23910",
+        "label": "true",
+        "source": "cond_tem_casos",
+        "target": "pergunta_tem_casos"
+      },
+      {
+        "id": "cs_cond_tem_casos_contar_historia_23910",
+        "label": "false",
+        "source": "cond_tem_casos",
+        "target": "contar_historia"
+      },
+      {
+        "id": "cs_pergunta_tem_casos_cond_falar_caso_23910",
+        "source": "pergunta_tem_casos",
+        "target": "cond_falar_caso"
+      },
+      {
+        "id": "cs_cond_falar_caso_msg_lista_casos_23910",
+        "label": "true",
+        "source": "cond_falar_caso",
+        "target": "msg_lista_casos"
+      },
+      {
+        "id": "cs_cond_falar_caso_contar_historia_23910",
+        "label": "false",
+        "source": "cond_falar_caso",
+        "target": "contar_historia"
+      },
+      {
+        "id": "cs_msg_lista_casos_pergunta_sel_caso_23910",
+        "source": "msg_lista_casos",
+        "target": "pergunta_sel_caso"
+      },
+      {
+        "id": "cs_pergunta_sel_caso_msg_provisoria_23910",
+        "source": "pergunta_sel_caso",
+        "target": "msg_provisoria"
+      },
+      {
+        "id": "cs_msg_provisoria_fim_23910",
+        "source": "msg_provisoria",
+        "target": "fim"
+      }
+    ]
+  },
+  {
+    "id": "cmqi5uu7r0000lt3t9dhegvcb",
+    "name": "Tema: Alimentação",
+    "active": false,
+    "nodes": [
+      {
+        "id": "alim_tem_filhos",
+        "data": {
+          "chave": "alim_tem_filhos",
+          "texto": "Você tem filhos com a outra parte?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 60
+        }
+      },
+      {
+        "id": "alim_filhos_info",
+        "data": {
+          "chave": "alim_filhos_info",
+          "texto": "Quantos filhos e quais as idades deles?",
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 180
+        }
+      },
+      {
+        "id": "alim_nome_outra",
+        "data": {
+          "chave": "alim_nome_outra",
+          "texto": "Qual o nome completo do pai ou da mãe das crianças?",
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 300
+        }
+      },
+      {
+        "id": "alim_outra_trabalha",
+        "data": {
+          "chave": "alim_outra_trabalha",
+          "texto": "A outra parte trabalha? Se souber, onde?",
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 420
+        }
+      },
+      {
+        "id": "alim_ja_recebe",
+        "data": {
+          "chave": "alim_ja_recebe",
+          "texto": "Você já recebe algum valor de pensão atualmente?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 540
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e_alim_tem_filhos",
+        "source": "alim_tem_filhos",
+        "target": "alim_filhos_info"
+      },
+      {
+        "id": "e_alim_filhos_info",
+        "source": "alim_filhos_info",
+        "target": "alim_nome_outra"
+      },
+      {
+        "id": "e_alim_nome_outra",
+        "source": "alim_nome_outra",
+        "target": "alim_outra_trabalha"
+      },
+      {
+        "id": "e_alim_outra_trabalha",
+        "source": "alim_outra_trabalha",
+        "target": "alim_ja_recebe"
+      }
+    ]
+  },
+  {
+    "id": "cmqi5uu850001lt3t8823bqdc",
+    "name": "Tema: Divórcio",
+    "active": false,
+    "nodes": [
+      {
+        "id": "div_tipo_uniao",
+        "data": {
+          "chave": "div_tipo_uniao",
+          "texto": "Seu vínculo é casamento no civil ou união estável?",
+          "opcoes": [
+            "Casamento civil",
+            "União estável"
+          ],
+          "tipoPergunta": "opcoes"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 60
+        }
+      },
+      {
+        "id": "div_filhos_menores",
+        "data": {
+          "chave": "div_filhos_menores",
+          "texto": "Vocês têm filhos menores de idade?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 180
+        }
+      },
+      {
+        "id": "div_tem_bens",
+        "data": {
+          "chave": "div_tem_bens",
+          "texto": "Há bens a partilhar (imóvel, veículo, contas)?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 300
+        }
+      },
+      {
+        "id": "div_consensual",
+        "data": {
+          "chave": "div_consensual",
+          "texto": "O divórcio é consensual (ambos concordam)?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 420
+        }
+      },
+      {
+        "id": "div_nome_conjuge",
+        "data": {
+          "chave": "div_nome_conjuge",
+          "texto": "Qual o nome completo do(a) cônjuge?",
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 540
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e_div_tipo_uniao",
+        "source": "div_tipo_uniao",
+        "target": "div_filhos_menores"
+      },
+      {
+        "id": "e_div_filhos_menores",
+        "source": "div_filhos_menores",
+        "target": "div_tem_bens"
+      },
+      {
+        "id": "e_div_tem_bens",
+        "source": "div_tem_bens",
+        "target": "div_consensual"
+      },
+      {
+        "id": "e_div_consensual",
+        "source": "div_consensual",
+        "target": "div_nome_conjuge"
+      }
+    ]
+  },
+  {
+    "id": "cmqi63iy90002lt3tbidplhgd",
+    "name": "Tema: Outros",
+    "active": false,
+    "nodes": [
+      {
+        "id": "outros_descricao",
+        "data": {
+          "chave": "outros_descricao",
+          "texto": "Descreva com mais detalhes o que você precisa resolver.",
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 60
+        }
+      },
+      {
+        "id": "outros_urgencia",
+        "data": {
+          "chave": "outros_urgencia",
+          "texto": "É uma situação urgente (prazo curto, audiência, risco imediato)?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 180
+        }
+      },
+      {
+        "id": "outros_ja_procurou",
+        "data": {
+          "chave": "outros_ja_procurou",
+          "texto": "Você já procurou a Defensoria sobre esse assunto antes?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 300
+        }
+      },
+      {
+        "id": "outros_tem_documentos",
+        "data": {
+          "chave": "outros_tem_documentos",
+          "texto": "Você tem documentos relacionados ao caso?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 420
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e0",
+        "source": "outros_descricao",
+        "target": "outros_urgencia"
+      },
+      {
+        "id": "e1",
+        "source": "outros_urgencia",
+        "target": "outros_ja_procurou"
+      },
+      {
+        "id": "e2",
+        "source": "outros_ja_procurou",
+        "target": "outros_tem_documentos"
+      }
+    ]
+  },
+  {
+    "id": "cmqi6csra0000ltqlohwncifk",
+    "name": "Tema: Acompanhar Processo",
+    "active": false,
+    "nodes": [
+      {
+        "id": "api_processos",
+        "data": {
+          "url": "/mock/processos",
+          "chave": "processos",
+          "metodo": "POST",
+          "titulo": "Consultar processos"
+        },
+        "type": "api",
+        "position": {
+          "x": 60,
+          "y": 40
+        }
+      },
+      {
+        "id": "tem_processo",
+        "data": {
+          "campo": "processos.tem_processo",
+          "titulo": "Tem processo?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 300,
+          "y": 40
+        }
+      },
+      {
+        "id": "selecionar_processo",
+        "data": {
+          "chave": "processo_sel",
+          "texto": "Digite o número do processo que deseja acompanhar:",
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 540,
+          "y": 40
+        }
+      },
+      {
+        "id": "ver_detalhes",
+        "data": {
+          "texto": "📂 Processo {{processo_sel}} — em andamento. Equipe notificada."
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 780,
+          "y": 40
+        }
+      },
+      {
+        "id": "ver_outro",
+        "data": {
+          "chave": "outro_assunto",
+          "texto": "Deseja tratar de outro assunto?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 1020,
+          "y": 40
+        }
+      },
+      {
+        "id": "cond_outro",
+        "data": {
+          "campo": "outro_assunto",
+          "titulo": "Outro assunto?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 1260,
+          "y": 40
+        }
+      },
+      {
+        "id": "saida_voltar",
+        "data": {
+          "saida": "voltar",
+          "texto": ""
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 1500,
+          "y": -20
+        }
+      },
+      {
+        "id": "saida_fim",
+        "data": {
+          "saida": "fim",
+          "texto": ""
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 1500,
+          "y": 120
+        }
+      },
+      {
+        "id": "erro_processo",
+        "data": {
+          "texto": "Não encontramos processos vinculados ao seu CPF."
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 300,
+          "y": 220
+        }
+      },
+      {
+        "id": "tentar_processo",
+        "data": {
+          "chave": "retry_proc",
+          "texto": "Deseja tentar a consulta novamente?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 540,
+          "y": 220
+        }
+      },
+      {
+        "id": "cond_retry",
+        "data": {
+          "campo": "retry_proc",
+          "titulo": "Tentar de novo?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 780,
+          "y": 220
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "api_processos",
+        "target": "tem_processo"
+      },
+      {
+        "id": "e2",
+        "label": "true",
+        "source": "tem_processo",
+        "target": "selecionar_processo"
+      },
+      {
+        "id": "e3",
+        "label": "false",
+        "source": "tem_processo",
+        "target": "erro_processo"
+      },
+      {
+        "id": "e4",
+        "source": "selecionar_processo",
+        "target": "ver_detalhes"
+      },
+      {
+        "id": "e5",
+        "source": "ver_detalhes",
+        "target": "ver_outro"
+      },
+      {
+        "id": "e6",
+        "source": "ver_outro",
+        "target": "cond_outro"
+      },
+      {
+        "id": "e7",
+        "label": "true",
+        "source": "cond_outro",
+        "target": "saida_voltar"
+      },
+      {
+        "id": "e8",
+        "label": "false",
+        "source": "cond_outro",
+        "target": "saida_fim"
+      },
+      {
+        "id": "e9",
+        "source": "erro_processo",
+        "target": "tentar_processo"
+      },
+      {
+        "id": "e10",
+        "source": "tentar_processo",
+        "target": "cond_retry"
+      },
+      {
+        "id": "e11",
+        "label": "true",
+        "source": "cond_retry",
+        "target": "api_processos"
+      },
+      {
+        "id": "e12",
+        "label": "false",
+        "source": "cond_retry",
+        "target": "ver_outro"
+      }
+    ]
+  },
+  {
+    "id": "cmqi6mz880001ltqlk8bklskq",
+    "name": "Tema: Fora de Competência",
+    "active": false,
+    "nodes": [
+      {
+        "id": "fc_pergunta",
+        "data": {
+          "chave": "voltar_fc",
+          "texto": "Esse assunto está fora da competência da Defensoria Pública.\n\nDeseja tratar de outro assunto?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 60,
+          "y": 40
+        }
+      },
+      {
+        "id": "fc_cond",
+        "data": {
+          "campo": "voltar_fc",
+          "titulo": "Voltar?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 300,
+          "y": 40
+        }
+      },
+      {
+        "id": "fc_saida_voltar",
+        "data": {
+          "saida": "voltar",
+          "texto": ""
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 540,
+          "y": -20
+        }
+      },
+      {
+        "id": "fc_saida_fim",
+        "data": {
+          "saida": "fim",
+          "texto": ""
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 540,
+          "y": 120
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "fc_pergunta",
+        "target": "fc_cond"
+      },
+      {
+        "id": "e2",
+        "label": "true",
+        "source": "fc_cond",
+        "target": "fc_saida_voltar"
+      },
+      {
+        "id": "e3",
+        "label": "false",
+        "source": "fc_cond",
+        "target": "fc_saida_fim"
+      }
+    ]
+  }
+]

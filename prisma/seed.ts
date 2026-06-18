@@ -1,11 +1,16 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
-// Cria o usuário admin inicial e um assistido de exemplo.
+// Cria admin, assistidos de exemplo, casos e os FLUXOS (do flows.seed.json),
+// deixando o "Fluxo DPERJ Completo" ativo. Banco novo nasce pronto.
 // Rodar: pnpm seed   (senha via SEED_ADMIN_PASSWORD, default "admin123" — trocar em produção)
 
 const prisma = new PrismaClient();
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const email = process.env.SEED_ADMIN_EMAIL ?? "admin@mariachat.local";
 const senha = process.env.SEED_ADMIN_PASSWORD ?? "admin123";
@@ -87,5 +92,16 @@ if ((await prisma.caso.count({ where: { assistidoId: carlos.id } })) === 0) {
   });
 }
 
-console.log(`Seed ok — admin ${email}; assistidos: 00000000000 (2 casos), 11144477735 (Maria, s/ casos), 52998224725 (Carlos, 1 caso)`);
+// Fluxos (exportados em flows.seed.json) — upsert por id preserva refs de subfluxo
+interface FlowSeed { id: string; name: string; active: boolean; nodes: object[]; edges: object[] }
+const flows = JSON.parse(readFileSync(join(__dirname, "flows.seed.json"), "utf-8")) as FlowSeed[];
+for (const f of flows) {
+  await prisma.flow.upsert({
+    where: { id: f.id },
+    update: { name: f.name, active: f.active, nodes: f.nodes, edges: f.edges },
+    create: { id: f.id, name: f.name, active: f.active, nodes: f.nodes, edges: f.edges },
+  });
+}
+
+console.log(`Seed ok — admin ${email}; ${flows.length} fluxos; assistidos: 00000000000 (2 casos), 11144477735 (Maria, s/ casos), 52998224725 (Carlos, 1 caso)`);
 await prisma.$disconnect();
