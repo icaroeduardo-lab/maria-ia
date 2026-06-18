@@ -9,12 +9,16 @@ RUN pnpm install --frozen-lockfile
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN pnpm build
+RUN pnpm build   # prisma generate + tsc
 
 FROM base AS runner
 ENV NODE_ENV=production
-COPY --from=deps /app/node_modules ./node_modules
+# node_modules vêm do build (inclui o Prisma Client gerado)
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public
+COPY --from=build /app/prisma ./prisma
+COPY package.json ./
 EXPOSE 3000
-CMD ["node", "dist/server.js"]
+# aplica migrações e sobe o servidor
+CMD ["pnpm", "start"]

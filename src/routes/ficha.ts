@@ -25,8 +25,8 @@ const fmtData = (d: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d); r
 function extrairDados(body: Record<string, unknown>): Record<string, string> {
   let dados: Record<string, unknown> = body;
   const rc = body.resultado_cpf;
-  if (typeof rc === "string") { try { dados = (JSON.parse(rc) as { dados?: object }).dados ?? body; } catch { /* usa body */ } }
-  else if (rc && typeof rc === "object") dados = (rc as { dados?: object }).dados ?? body;
+  if (typeof rc === "string") { try { dados = (JSON.parse(rc) as { dados?: Record<string, unknown> }).dados ?? body; } catch { /* usa body */ } }
+  else if (rc && typeof rc === "object") dados = (rc as { dados?: Record<string, unknown> }).dados ?? body;
   const g = (k: string) => (typeof dados[k] === "string" ? (dados[k] as string) : typeof body[k] === "string" ? (body[k] as string) : "");
   // CPF e telefone mascarados na imagem (PII em imagem pública/efêmera).
   // A pessoa confirma pela identidade (nome/nascimento/mãe) + final mascarado.
