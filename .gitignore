@@ -145,3 +145,4 @@ dist
 # LangGraph API
 .langgraph_api
 data/
+.env.production
