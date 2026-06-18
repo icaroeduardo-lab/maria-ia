@@ -52,9 +52,13 @@ Pode usar o Postgres do Supabase em vez do banco do host:
 
 ## 3. Variáveis de ambiente (no host)
 
+> **Postgres gerenciado (RDS/Supabase/etc.) exige SSL** — termine a URL com
+> `?sslmode=require`. O checkpointer converte para `no-verify` internamente
+> (SSL sem validar a CA, padrão para RDS sem bundle de certificado).
+
 ```
-# Banco (o host gerenciado fornece)
-DATABASE_URL=postgresql://...
+# Banco (o host gerenciado fornece) — com ?sslmode=require em RDS/Supabase
+DATABASE_URL=postgresql://...?sslmode=require
 
 # Própria URL pública (resolve nós de API com caminho relativo /api/...)
 SELF_URL=https://<seu-host>
