@@ -1,4 +1,8 @@
 import "dotenv/config";
+import dns from "node:dns";
+// prefere IPv4 ao resolver DNS: em redes com IPv6 quebrado, o fetch (undici)
+// tenta IPv6 primeiro e estoura ETIMEDOUT (ex: envio à Graph API do WhatsApp).
+dns.setDefaultResultOrder("ipv4first");
 import Fastify from "fastify";
 import fastifyStatic from "@fastify/static";
 import fastifyCors from "@fastify/cors";
