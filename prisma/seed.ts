@@ -48,5 +48,44 @@ if ((await prisma.caso.count({ where: { assistidoId: joao.id } })) === 0) {
   });
 }
 
-console.log(`Seed ok — admin ${email}, assistido CPF 00000000000 (com casos)`);
+// Maria — cadastrada, SEM casos em aberto (testar o caminho "outro assunto")
+await prisma.assistido.upsert({
+  where: { cpf: "11144477735" },
+  update: {},
+  create: {
+    cpf: "11144477735",
+    nome: "Maria Oliveira Costa",
+    dataNascimento: "1990-07-15",
+    nomeMae: "Joana Oliveira Costa",
+    situacao: "regular",
+    municipio: "Niterói",
+    uf: "RJ",
+    telefone: "21988887766",
+    email: "maria.costa@example.com",
+  },
+});
+
+// Carlos — cadastrado, COM 1 caso em aberto
+const carlos = await prisma.assistido.upsert({
+  where: { cpf: "52998224725" },
+  update: {},
+  create: {
+    cpf: "52998224725",
+    nome: "Carlos Pereira Lima",
+    dataNascimento: "1978-11-02",
+    nomeMae: "Antônia Pereira Lima",
+    situacao: "regular",
+    municipio: "Duque de Caxias",
+    uf: "RJ",
+    telefone: "21977776655",
+    email: "carlos.lima@example.com",
+  },
+});
+if ((await prisma.caso.count({ where: { assistidoId: carlos.id } })) === 0) {
+  await prisma.caso.create({
+    data: { assistidoId: carlos.id, identificador: "0805555-11.2025.8.19.0021", tipo: "Aposentadoria (INSS)", status: "aberto" },
+  });
+}
+
+console.log(`Seed ok — admin ${email}; assistidos: 00000000000 (2 casos), 11144477735 (Maria, s/ casos), 52998224725 (Carlos, 1 caso)`);
 await prisma.$disconnect();
