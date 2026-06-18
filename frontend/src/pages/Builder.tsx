@@ -347,13 +347,6 @@ export function Builder() {
 
   const sujar = () => setSalvo(false);
 
-  // auto-save: 1.5s após última alteração
-  useEffect(() => {
-    if (salvo || !flow) return;
-    const t = setTimeout(() => salvar.mutate(), 1500);
-    return () => clearTimeout(t);
-  }, [salvo, nodes, edges]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const adicionar = (tipo: TipoNo) => {
     salvarHistorico();
     const id = `${tipo}_${Date.now().toString(36)}`;
@@ -393,10 +386,11 @@ export function Builder() {
           className="w-full bg-emerald-700 text-white rounded-lg py-2 hover:bg-emerald-800 disabled:opacity-50"
           disabled={salvo || salvar.isPending}
           onClick={() => salvar.mutate()}
-          title="Salvar agora (auto-save em 1.5s)"
+          title="Salvar alterações"
         >
-          {salvar.isPending ? "Salvando…" : salvo ? "Salvo ✓" : "Salvar agora"}
+          {salvar.isPending ? "Salvando…" : salvo ? "Salvo ✓" : "Salvar"}
         </button>
+        {!salvo && <p className="text-xs text-amber-600">Alterações não salvas</p>}
         {salvar.isError && (
           <p className="text-xs text-red-600 bg-red-50 rounded px-2 py-1">
             Erro ao salvar: {String((salvar.error as Error)?.message ?? salvar.error)}.
