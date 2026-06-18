@@ -22,7 +22,7 @@ await prisma.user.upsert({
 });
 
 // Assistido de exemplo (CPF 000.000.000-00) — usado nos testes de fluxo
-await prisma.assistido.upsert({
+const joao = await prisma.assistido.upsert({
   where: { cpf: "00000000000" },
   update: {},
   create: {
@@ -38,5 +38,15 @@ await prisma.assistido.upsert({
   },
 });
 
-console.log(`Seed ok — admin ${email}, assistido CPF 00000000000`);
+// Casos em aberto de exemplo (só cria se ainda não houver)
+if ((await prisma.caso.count({ where: { assistidoId: joao.id } })) === 0) {
+  await prisma.caso.createMany({
+    data: [
+      { assistidoId: joao.id, identificador: "0801234-56.2025.8.19.0001", tipo: "Pensão alimentícia", status: "aberto" },
+      { assistidoId: joao.id, identificador: "0809876-54.2025.8.19.0001", tipo: "Divórcio", status: "aberto" },
+    ],
+  });
+}
+
+console.log(`Seed ok — admin ${email}, assistido CPF 00000000000 (com casos)`);
 await prisma.$disconnect();

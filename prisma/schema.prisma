@@ -85,4 +85,19 @@ model Assistido {
   numero         String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  casos          Caso[]
+}
+
+// Caso jurídico do assistido (processo/atendimento). Usado para identificar
+// casos em aberto na entrada do fluxo.
+model Caso {
+  id            String    @id @default(cuid())
+  identificador String // número/código visível ao assistido (ex: "0801234-56.2025")
+  tipo          String // "Pensão alimentícia", "Divórcio", ...
+  status        String    @default("aberto") // "aberto" | "encerrado"
+  assistidoId   String
+  assistido     Assistido @relation(fields: [assistidoId], references: [id], onDelete: Cascade)
+  criadoEm      DateTime  @default(now())
+
+  @@index([assistidoId, status])
 }

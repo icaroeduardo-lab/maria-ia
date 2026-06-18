@@ -73,6 +73,20 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     return { sucesso: true, protocolo, dados: dadosPublicos(a as unknown as Record<string, unknown>) };
   });
 
+  // POST /api/casos/consultar — { cpf } → { tem_casos, casos:[...], lista }
+  // casos em aberto do assistido (usado pelo fluxo após confirmar os dados)
+  app.post("/api/casos/consultar", async (req) => {
+    const cpf = so_digitos((req.body as { cpf?: string })?.cpf);
+    const assistido = cpf.length === 11 ? await db.assistido.findUnique({ where: { cpf } }) : null;
+    const casos = assistido
+      ? await db.caso.findMany({ where: { assistidoId: assistido.id, status: "aberto" }, orderBy: { criadoEm: "desc" } })
+      : [];
+    const enxutos = casos.map((c) => ({ identificador: c.identificador, tipo: c.tipo }));
+    const lista = enxutos.map((c, i) => `${i + 1}. ${c.tipo} (${c.identificador})`).join("\n");
+    console.log(`[casos] consultar: CPF ${cpf} → ${casos.length} caso(s) aberto(s)`);
+    return { tem_casos: casos.length > 0, casos: enxutos, lista };
+  });
+
   // POST /api/assistidos/atualizar — { cpf, ...campos } → { sucesso, dados }
   app.post("/api/assistidos/atualizar", async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
