@@ -895,11 +895,6 @@
         "label": "false",
         "source": "cond_quer_cadastrar",
         "target": "end_sem_cadastro"
-      },
-      {
-        "id": "e_endcad_encerrar",
-        "source": "end_sem_cadastro",
-        "target": "encerrar_mqh13xj4"
       }
     ]
   },
