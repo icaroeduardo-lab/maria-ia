@@ -10,6 +10,17 @@ const COMANDO_REINICIAR = "#sair";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// primeiro nome do assistido (do cadastro via CPF ou do campo nome), se houver
+function primeiroNome(dados?: Record<string, unknown>): string | null {
+  if (!dados) return null;
+  const rc = dados.resultado_cpf;
+  const parsed = typeof rc === "string" ? (() => { try { return JSON.parse(rc); } catch { return null; } })() : rc;
+  const nome =
+    (parsed as { dados?: { nome?: string } } | null)?.dados?.nome ??
+    (typeof dados.nome === "string" ? dados.nome : null);
+  return nome ? String(nome).trim().split(/\s+/)[0] : null;
+}
+
 // Invoca o grafo com 1 retry para erros transitórios (Bedrock throttling, rede).
 async function invokeComRetry(
   graph: typeof graphEstatico,
@@ -84,6 +95,13 @@ export async function processarMensagem(
 
   const isResuming = prevLen > 0;
 
+  // "bem-vindo de volta": se o assistido retoma uma conversa em andamento depois
+  // de um intervalo (default 60min), saúda antes de repetir a pergunta pendente.
+  const ultimaAtividade = prevState.createdAt ? new Date(prevState.createdAt).getTime() : 0;
+  const gapMs = Date.now() - ultimaAtividade;
+  const RETOMADA_MS = Number(process.env.RETOMADA_MIN ?? 60) * 60 * 1000;
+  const retomandoAposPausa = isResuming && ultimaAtividade > 0 && gapMs > RETOMADA_MS;
+
   if (isResuming && message) {
     await graph.updateState(config, { messages: [new HumanMessage(message)] });
   }
@@ -108,6 +126,13 @@ export async function processarMensagem(
   const newMessages = (result.messages as BaseMessage[])
     .slice(prevLen)
     .filter((m) => m.getType() !== "human");
+
+  // antepõe a saudação de retomada (com o nome, se conhecido)
+  if (retomandoAposPausa) {
+    const nome = primeiroNome(result.dadosColetados as Record<string, unknown>);
+    const ola = nome ? `Que bom te ver de novo, ${nome}! 😊` : "Que bom te ver de novo! 😊";
+    newMessages.unshift(new AIMessage(`${ola} Vamos continuar de onde paramos.`));
+  }
 
   await rastrearConversa(sessionId, canal, flowId, graph, config).catch((err) =>
     console.error("[tracking] falha ao registrar conversa:", err)
