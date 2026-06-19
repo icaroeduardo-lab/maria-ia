@@ -162,7 +162,7 @@
       {
         "id": "cad_intro",
         "data": {
-          "texto": "Não encontramos seu cadastro. Vamos criar agora. 📝"
+          "texto": "Ótimo! Vamos fazer seu cadastro rapidinho. 📝"
         },
         "type": "mensagem",
         "position": {
@@ -580,6 +580,43 @@
           "x": 3840,
           "y": 40
         }
+      },
+      {
+        "id": "cad_pergunta",
+        "type": "pergunta",
+        "data": {
+          "chave": "quer_cadastrar",
+          "texto": "Não encontramos seu cadastro.\nGostaria de realizar o seu cadastro nesse momento? 📝",
+          "tipoPergunta": "sim_nao",
+          "semReescrita": true
+        },
+        "position": {
+          "x": 1020,
+          "y": 520
+        }
+      },
+      {
+        "id": "cond_quer_cadastrar",
+        "type": "condicao",
+        "data": {
+          "campo": "quer_cadastrar",
+          "titulo": "Quer cadastrar?"
+        },
+        "position": {
+          "x": 1260,
+          "y": 360
+        }
+      },
+      {
+        "id": "end_sem_cadastro",
+        "type": "mensagem",
+        "data": {
+          "texto": "Tudo bem! Quando quiser fazer seu cadastro, é só me chamar de novo. 👋"
+        },
+        "position": {
+          "x": 1500,
+          "y": 520
+        }
       }
     ],
     "edges": [
@@ -614,7 +651,7 @@
         "id": "e_6",
         "label": "false",
         "source": "existe",
-        "target": "cad_intro"
+        "target": "cad_pergunta"
       },
       {
         "id": "e_7",
@@ -841,6 +878,28 @@
         "id": "cs_msg_provisoria_fim_23910",
         "source": "msg_provisoria",
         "target": "fim"
+      },
+      {
+        "id": "e_cadp_cond",
+        "source": "cad_pergunta",
+        "target": "cond_quer_cadastrar"
+      },
+      {
+        "id": "e_cond_simcad",
+        "label": "true",
+        "source": "cond_quer_cadastrar",
+        "target": "cad_intro"
+      },
+      {
+        "id": "e_cond_naocad",
+        "label": "false",
+        "source": "cond_quer_cadastrar",
+        "target": "end_sem_cadastro"
+      },
+      {
+        "id": "e_endcad_encerrar",
+        "source": "end_sem_cadastro",
+        "target": "encerrar_mqh13xj4"
       }
     ]
   },
