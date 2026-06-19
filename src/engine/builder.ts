@@ -247,7 +247,11 @@ async function reescreverPergunta(
       "Você é a Maria, da Defensoria. Está PERGUNTANDO ao cidadão para coletar uma informação. Reescreva a PERGUNTA abaixo de forma CALOROSA, humana e ACOLHEDORA — como uma atendente atenciosa conversando, nunca fria ou robótica.",
       "Acolha a pessoa: demonstre empatia e cuidado, e passe segurança de que você está ali pra ajudar em cada passo. Pode reconhecer o sentimento/o momento dela de forma GENÉRICA e calorosa (ex: 'Sei que não é fácil falar sobre isso', 'Obrigada por confiar na gente', 'Pode ficar tranquilo(a), vou te ajudar').",
       "NÃO repita nem cite os DADOS específicos que ela acabou de informar (pra não atribuir errado, ex: confundir o nome da outra parte com o dela). Acolha o sentimento, não o dado.",
-      "Varie as aberturas e o acolhimento; é PROIBIDO começar com 'Entendo'/'Entendi'. Use o nome da pessoa às vezes, com carinho.",
+      "Varie as aberturas e o acolhimento; é PROIBIDO começar com 'Entendo'/'Entendi'.",
+      primeiroNome
+        ? `O nome da pessoa é ${primeiroNome} — use às vezes, com carinho (sem repetir toda vez).`
+        : "Você AINDA NÃO sabe o nome da pessoa. NÃO use nome nenhum e NUNCA use placeholders como [nome], {nome} ou similares.",
+      "NUNCA escreva colchetes ou chaves de placeholder no texto final (ex: [nome], {dado}). Se não tem a informação, não a mencione.",
       "Emojis: no máximo 1, só quando combinar com o sentido (situação difícil → 💔/🙏; criança → 🧒; documento → 📄; pensão → 💰; acolhimento → 😊). Não force em toda mensagem.",
       "Formule como uma pergunta DIRETA pedindo o dado ao cidadão. NUNCA inverta (não diga que a pessoa quer saber algo).",
       "Mantenha EXATAMENTE a mesma informação pedida. Não acrescente nem troque por outra pergunta.",
@@ -266,7 +270,13 @@ async function reescreverPergunta(
         `\n\nResponda só com a pergunta reescrita.`
       ),
     ]);
-    const txt = String(res.content).trim();
+    // rede de segurança: remove placeholders entre colchetes que o LLM possa ter
+    // deixado (ex: "[nome]") e ajeita espaços/pontuação resultantes
+    const txt = String(res.content)
+      .replace(/\[[^\]\n]{0,40}\]/g, "")
+      .replace(/\s+([,.!?])/g, "$1")
+      .replace(/\s{2,}/g, " ")
+      .trim();
     return txt || textoBase;
   } catch (err) {
     console.warn("[conversacional] falha ao reescrever:", String(err).slice(0, 100));
