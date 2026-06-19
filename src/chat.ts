@@ -1,9 +1,12 @@
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
-import { graph as graphEstatico } from "./graph.js";
+import { graph as graphEstatico, checkpointer } from "./graph.js";
 import { graphDoFlow, subfluxosReferenciados } from "./engine/builder.js";
 import { prisma } from "./db.js";
 import { montarMetadados, gerarResumoTexto } from "./resumo.js";
+
+// Comando do usuário para reiniciar a conversa do zero (qualquer canal).
+const COMANDO_REINICIAR = "#sair";
 
 // Grafo a usar: flow ativo (compilado dinamicamente, com cache) ou o grafo
 // estático padrão. Troca de flow ativo afeta conversas novas.
@@ -31,6 +34,18 @@ export async function processarMensagem(
 ) {
   const { graph, flowId } = await obterGraph();
   const config = { configurable: { thread_id: sessionId } };
+
+  // comando #sair: reinicia a conversa — apaga o checkpoint do thread.
+  // A próxima mensagem começa do zero (saudação). Funciona em web e WhatsApp.
+  if (message && message.trim().toLowerCase() === COMANDO_REINICIAR) {
+    await checkpointer.deleteThread(sessionId).catch((err) =>
+      console.error("[chat] falha ao reiniciar thread:", err)
+    );
+    const aviso = new AIMessage(
+      "Conversa reiniciada. 🔄 Quando quiser, é só mandar uma mensagem que começamos de novo."
+    );
+    return { result: null, newMessages: [aviso] };
+  }
 
   const prevState = await graph.getState(config);
   const prevLen = (prevState.values?.messages as unknown[])?.length ?? 0;
