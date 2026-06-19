@@ -48,7 +48,18 @@ export async function processarMensagem(
   }
 
   const prevState = await graph.getState(config);
-  const prevLen = (prevState.values?.messages as unknown[])?.length ?? 0;
+  let prevLen = (prevState.values?.messages as unknown[])?.length ?? 0;
+
+  // conversa anterior já encerrou (chegou ao __end__ → sem próximo nó): apaga o
+  // checkpoint e recomeça do zero. Sem isso, uma nova mensagem tentaria resumir
+  // um grafo terminado (invoke(null) não produz nada) — só #sair destravava.
+  if (prevLen > 0 && (prevState.next?.length ?? 0) === 0) {
+    await checkpointer.deleteThread(sessionId).catch((err) =>
+      console.error("[chat] falha ao reiniciar thread encerrado:", err)
+    );
+    prevLen = 0;
+  }
+
   const isResuming = prevLen > 0;
 
   if (isResuming && message) {
