@@ -85,8 +85,9 @@
       {
         "id": "confirma_dados",
         "data": {
-          "texto": "Confira seus dados na ficha acima 👆",
-          "imagem": "{{ficha.url}}"
+          "texto": "Confira seus dados na ficha abaixo 👇",
+          "imagem": "{{ficha.url}}",
+          "textoAntes": true
         },
         "type": "mensagem",
         "position": {

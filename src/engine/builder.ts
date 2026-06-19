@@ -26,6 +26,7 @@ export interface FlowNode {
     titulo?: string;           // identificação no canvas (api | condicao | classificar | subfluxo)
     texto?: string;            // mensagem | pergunta
     imagem?: string;           // mensagem (url)
+    textoAntes?: boolean;      // mensagem: emite texto antes da imagem (padrão: imagem primeiro)
     chave?: string;            // pergunta | api | atribuir | classificar (campo onde grava a categoria)
     tipoPergunta?: TipoPergunta;
     opcoes?: string[];         // pergunta(opcoes) | classificar (categorias possíveis)
@@ -290,9 +291,14 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
   switch (node.type) {
     case "mensagem":
       return async (state: GraphState) => {
-        const blocos: object[] = [];
-        if (node.data.imagem) blocos.push({ type: "image_url", image_url: { url: interpolar(String(node.data.imagem), state.dadosColetados) } });
-        if (node.data.texto) blocos.push({ type: "text", text: interpolar(String(node.data.texto), state.dadosColetados) });
+        const img = node.data.imagem
+          ? { type: "image_url", image_url: { url: interpolar(String(node.data.imagem), state.dadosColetados) } }
+          : null;
+        const txt = node.data.texto
+          ? { type: "text", text: interpolar(String(node.data.texto), state.dadosColetados) }
+          : null;
+        // padrão: imagem antes do texto. textoAntes=true inverte (texto → imagem)
+        const blocos = (node.data.textoAntes ? [txt, img] : [img, txt]).filter(Boolean);
         return { messages: [new AIMessage({ content: blocos as never })] };
       };
 
