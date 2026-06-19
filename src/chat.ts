@@ -8,6 +8,28 @@ import { montarMetadados, gerarResumoTexto } from "./resumo.js";
 // Comando do usuário para reiniciar a conversa do zero (qualquer canal).
 const COMANDO_REINICIAR = "#sair";
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Invoca o grafo com 1 retry para erros transitórios (Bedrock throttling, rede).
+async function invokeComRetry(
+  graph: typeof graphEstatico,
+  input: Parameters<typeof graphEstatico.invoke>[0],
+  config: Parameters<typeof graphEstatico.invoke>[1],
+  tentativas = 2
+) {
+  let ultimoErro: unknown;
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      return await graph.invoke(input, config);
+    } catch (err) {
+      ultimoErro = err;
+      console.error(`[chat] invoke falhou (tentativa ${i + 1}/${tentativas}):`, err);
+      if (i < tentativas - 1) await sleep(800);
+    }
+  }
+  throw ultimoErro;
+}
+
 // Grafo a usar: flow ativo (compilado dinamicamente, com cache) ou o grafo
 // estático padrão. Troca de flow ativo afeta conversas novas.
 async function obterGraph(): Promise<{ graph: typeof graphEstatico; flowId: string | null }> {
@@ -66,7 +88,22 @@ export async function processarMensagem(
     await graph.updateState(config, { messages: [new HumanMessage(message)] });
   }
 
-  const result = await graph.invoke(isResuming ? null : { canal }, config);
+  // invoke com 1 retry para blips transitórios (ex: Bedrock throttling). Se falhar
+  // de vez, devolve um fallback amigável — o assistido nunca fica no escuro e o
+  // estado fica intacto (LangGraph não commita super-step que lançou erro → pode
+  // reenviar a mesma mensagem).
+  let result;
+  try {
+    // retry só no resume (invoke(null) idempotente); fresh não re-invoca (input
+    // não-nulo em thread existente reiniciaria o grafo — padrão crítico)
+    result = await invokeComRetry(graph, isResuming ? null : { canal }, config, isResuming ? 2 : 1);
+  } catch (err) {
+    console.error("[chat] erro ao processar mensagem:", err);
+    const fallback = new AIMessage(
+      "Tive um probleminha técnico agora 😔. Pode me mandar a mensagem de novo? Já volto a te ajudar."
+    );
+    return { result: null, newMessages: [fallback] };
+  }
 
   const newMessages = (result.messages as BaseMessage[])
     .slice(prevLen)
