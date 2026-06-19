@@ -190,6 +190,19 @@ export async function whatsappRoutes(app: FastifyInstance) {
   app.post("/webhook/whatsapp", async (req, reply) => {
     reply.code(200).send(); // Meta exige 200 rápido; processamento segue async
 
+    // statuses de entrega da Meta: loga só falhas (erro + motivo) — sem spam de sent/delivered/read
+    try {
+      type Status = { status?: string; recipient_id?: string; errors?: { code?: number; title?: string }[] };
+      const body = req.body as { entry?: { changes?: { value?: { statuses?: Status[] } }[] }[] };
+      for (const entry of body.entry ?? [])
+        for (const change of entry.changes ?? [])
+          for (const st of change.value?.statuses ?? [])
+            if (st.status === "failed") {
+              const e = st.errors?.[0];
+              console.error(`[whatsapp] entrega falhou para ${st.recipient_id}: ${e?.code} ${e?.title}`);
+            }
+    } catch { /* ignora */ }
+
     (async () => {
       for (const msg of extrairMensagens(req.body)) {
         if (jaProcessado(msg.id)) continue;
