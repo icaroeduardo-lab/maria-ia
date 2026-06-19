@@ -1,8 +1,11 @@
 import type { FastifyInstance } from "fastify";
-import type { BaseMessage, MessageContent } from "@langchain/core/messages";
+import type { BaseMessage } from "@langchain/core/messages";
 import { AIMessage } from "@langchain/core/messages";
 import { processarMensagem } from "../chat.js";
 import { transcreverAudioWA } from "../transcribe.js";
+import { toWhatsAppPayloads, formatar } from "./payloads.js";
+
+export { toWhatsAppPayloads } from "./payloads.js";
 
 // Canal WhatsApp Business Cloud API (Meta).
 // GET  /webhook/whatsapp → verificação do webhook (challenge)
@@ -66,75 +69,7 @@ function textoDaMensagem(msg: Record<string, unknown>): string | null {
   }
 }
 
-// ── Envio: content blocks internos → payloads Meta ──────────────────────────
-
-type Bloco = {
-  type: string;
-  text?: string;
-  image_url?: { url: string };
-  options?: string[];
-};
-
-// WhatsApp usa *negrito* com um asterisco; markdown interno usa **
-const formatar = (t: string) => t.replace(/\*\*/g, "*");
-const truncar = (t: string, n: number) => (t.length <= n ? t : t.slice(0, n - 1) + "…");
-
-export function toWhatsAppPayloads(to: string, content: MessageContent): object[] {
-  const base = { messaging_product: "whatsapp", to };
-  const payloads: object[] = [];
-  let textoPendente = "";
-
-  const flushTexto = () => {
-    if (!textoPendente) return;
-    payloads.push({ ...base, type: "text", text: { body: formatar(textoPendente) } });
-    textoPendente = "";
-  };
-
-  const blocos: Bloco[] = typeof content === "string" ? [{ type: "text", text: content }] : (content as Bloco[]);
-
-  for (const b of blocos) {
-    if (b.type === "text" && b.text) {
-      textoPendente += (textoPendente ? "\n\n" : "") + b.text;
-    } else if (b.type === "image_url" && b.image_url?.url) {
-      flushTexto();
-      payloads.push({ ...base, type: "image", image: { link: b.image_url.url } });
-    } else if (b.type === "boolean") {
-      // botão Sim/Não — corpo é o texto acumulado (interactive exige body)
-      payloads.push({
-        ...base,
-        type: "interactive",
-        interactive: {
-          type: "button",
-          body: { text: formatar(textoPendente || "Confirma?") },
-          action: {
-            buttons: [
-              { type: "reply", reply: { id: "true", title: "Sim" } },
-              { type: "reply", reply: { id: "false", title: "Não" } },
-            ],
-          },
-        },
-      });
-      textoPendente = "";
-    } else if (b.type === "options" && b.options?.length) {
-      payloads.push({
-        ...base,
-        type: "interactive",
-        interactive: {
-          type: "list",
-          body: { text: formatar(textoPendente || "Escolha uma opção:") },
-          action: {
-            button: "Escolher",
-            // id carrega o texto completo da opção (title é limitado a 24 chars)
-            sections: [{ title: "Opções", rows: b.options.slice(0, 10).map((o) => ({ id: o, title: truncar(o, 24) })) }],
-          },
-        },
-      });
-      textoPendente = "";
-    }
-  }
-  flushTexto();
-  return payloads;
-}
+// ── Envio: content blocks internos → payloads Meta (em ./payloads.js) ────────
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // imagem por link é baixada async pela Meta → entrega depois do texto e quebra a

@@ -23,6 +23,7 @@ frontend
 docs
 cloudformation
 nginx
+test
 .claude
 *.log
 README.md
