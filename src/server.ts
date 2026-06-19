@@ -14,6 +14,7 @@ import { whatsappRoutes } from "./channels/whatsapp.js";
 import { authRoutes } from "./routes/auth.js";
 import { adminRoutes } from "./routes/admin.js";
 import { processarFila } from "./dperj.js";
+import { limparConversasInativas } from "./limpeza.js";
 import { mockRoutes } from "./routes/mock.js";
 import { assistidosFlowRoutes } from "./routes/assistidos.js";
 import { fichaRoutes } from "./routes/ficha.js";
@@ -47,6 +48,10 @@ await app.register(fichaRoutes);
 
 // retry de envios à DPERJ que falharam (fila local em data/fila-envios.db)
 setInterval(() => processarFila().catch(console.error), 5 * 60 * 1000).unref();
+
+// expira o estado de conversas inativas (1x ao subir + a cada 24h)
+limparConversasInativas().catch(console.error);
+setInterval(() => limparConversasInativas().catch(console.error), 24 * 60 * 60 * 1000).unref();
 
 const PORT = Number(process.env.PORT ?? 3000);
 await app.listen({ port: PORT, host: "0.0.0.0" });
