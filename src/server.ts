@@ -15,6 +15,7 @@ import { authRoutes } from "./routes/auth.js";
 import { adminRoutes } from "./routes/admin.js";
 import { processarFila } from "./dperj.js";
 import { limparConversasInativas } from "./limpeza.js";
+import { verificarDb, verificarTokenWhatsApp, avisarSeTokenMorto } from "./health.js";
 import { mockRoutes } from "./routes/mock.js";
 import { assistidosFlowRoutes } from "./routes/assistidos.js";
 import { fichaRoutes } from "./routes/ficha.js";
@@ -39,6 +40,17 @@ app.post("/api/chat", async (req) => {
   };
 });
 
+// healthcheck: DB + validade do token WhatsApp (503 se algo crítico degradado)
+app.get("/health", async (_req, reply) => {
+  const [db, token] = await Promise.all([verificarDb(), verificarTokenWhatsApp()]);
+  const ok = db && token !== false; // token null (não configurado) não derruba
+  return reply.code(ok ? 200 : 503).send({
+    ok,
+    db: db ? "ok" : "erro",
+    whatsappToken: token === null ? "nao_configurado" : token ? "ok" : "invalido",
+  });
+});
+
 await app.register(whatsappRoutes);
 await app.register(authRoutes);
 await app.register(adminRoutes, { prefix: "/admin" });
@@ -52,6 +64,10 @@ setInterval(() => processarFila().catch(console.error), 5 * 60 * 1000).unref();
 // expira o estado de conversas inativas (1x ao subir + a cada 24h)
 limparConversasInativas().catch(console.error);
 setInterval(() => limparConversasInativas().catch(console.error), 24 * 60 * 60 * 1000).unref();
+
+// avisa nos logs se o token do WhatsApp estiver morto (boot + a cada 6h)
+avisarSeTokenMorto().catch(console.error);
+setInterval(() => avisarSeTokenMorto().catch(console.error), 6 * 60 * 60 * 1000).unref();
 
 const PORT = Number(process.env.PORT ?? 3000);
 await app.listen({ port: PORT, host: "0.0.0.0" });
