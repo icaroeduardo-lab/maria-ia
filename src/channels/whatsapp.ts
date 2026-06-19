@@ -136,28 +136,36 @@ export function toWhatsAppPayloads(to: string, content: MessageContent): object[
   return payloads;
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// imagem por link é baixada async pela Meta → entrega depois do texto e quebra a
+// ordem. Espera após enviar imagem pra ela chegar antes da próxima mensagem.
+const DELAY_POS_IMAGEM_MS = 1200;
+
 export async function enviarWhatsApp(to: string, messages: BaseMessage[]): Promise<void> {
   const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
   const accessToken = process.env.WA_ACCESS_TOKEN;
-  for (const msg of messages) {
-    for (const payload of toWhatsAppPayloads(to, msg.content)) {
-      if (!accessToken) {
-        console.log("[whatsapp] dev (sem WA_ACCESS_TOKEN) — payload:", JSON.stringify(payload));
-        continue;
-      }
-      const url = `${GRAPH_URL()}/${API_VERSION()}/${phoneNumberId}/messages`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(15_000),
-      });
-      if (!res.ok) {
-        console.error(`[whatsapp] envio falhou HTTP ${res.status}:`, await res.text());
-      }
+  const payloads = messages.flatMap((msg) => toWhatsAppPayloads(to, msg.content));
+  for (let i = 0; i < payloads.length; i++) {
+    const payload = payloads[i] as { type?: string };
+    if (!accessToken) {
+      console.log("[whatsapp] dev (sem WA_ACCESS_TOKEN) — payload:", JSON.stringify(payload));
+      continue;
+    }
+    const url = `${GRAPH_URL()}/${API_VERSION()}/${phoneNumberId}/messages`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      console.error(`[whatsapp] envio falhou HTTP ${res.status}:`, await res.text());
+    } else if (payload.type === "image" && i < payloads.length - 1) {
+      // só espera se ainda há mensagem depois (evita atraso no fim)
+      await sleep(DELAY_POS_IMAGEM_MS);
     }
   }
 }
