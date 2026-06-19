@@ -1,0 +1,28 @@
+# Segredos — NUNCA na imagem
+.env
+.env.*
+
+# Deps e build (reinstalados/gerados no build)
+node_modules
+frontend/node_modules
+dist
+frontend/dist
+
+# Estado local efêmero
+data
+*.db
+*.sqlite
+
+# Git e metadados
+.git
+.gitignore
+.github
+
+# Não usados no build do backend
+frontend
+docs
+cloudformation
+nginx
+.claude
+*.log
+README.md
