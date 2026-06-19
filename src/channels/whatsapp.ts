@@ -72,20 +72,62 @@ function textoDaMensagem(msg: Record<string, unknown>): string | null {
 // ── Envio: content blocks internos → payloads Meta (em ./payloads.js) ────────
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-// imagem por link é baixada async pela Meta → entrega depois do texto e quebra a
-// ordem. Espera após enviar imagem pra ela chegar antes da próxima mensagem.
+// fallback: imagem por link é baixada async pela Meta → entrega depois do texto
+// e quebra a ordem. Quando não dá pra usar media-id, espera após a imagem.
 const DELAY_POS_IMAGEM_MS = 1200;
+
+// cache de media-id por URL (imagens fixas — saudação etc — sobem 1x só)
+const mediaIdCache = new Map<string, string>();
+
+// Sobe a imagem pra Media API e devolve o media-id (entrega determinística, sem
+// download async como no link). Só jpeg/png; outros formatos → null (usa link).
+async function uploadMedia(linkUrl: string, phoneNumberId: string, token: string): Promise<string | null> {
+  const cached = mediaIdCache.get(linkUrl);
+  if (cached) return cached;
+  try {
+    const img = await fetch(linkUrl, { signal: AbortSignal.timeout(15_000) });
+    if (!img.ok) return null;
+    const tipo = img.headers.get("content-type") ?? "image/jpeg";
+    if (!/^image\/(jpeg|png)$/.test(tipo)) return null; // webp/etc não dá upload de imagem
+    const blob = await img.blob();
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("type", tipo);
+    form.append("file", blob, "imagem");
+    const res = await fetch(`${GRAPH_URL()}/${API_VERSION()}/${phoneNumberId}/media`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return null;
+    const id = ((await res.json()) as { id?: string }).id ?? null;
+    if (id) mediaIdCache.set(linkUrl, id);
+    return id;
+  } catch {
+    return null;
+  }
+}
 
 export async function enviarWhatsApp(to: string, messages: BaseMessage[]): Promise<void> {
   const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
   const accessToken = process.env.WA_ACCESS_TOKEN;
   const payloads = messages.flatMap((msg) => toWhatsAppPayloads(to, msg.content));
   for (let i = 0; i < payloads.length; i++) {
-    const payload = payloads[i] as { type?: string };
+    const payload = payloads[i] as { type?: string; image?: { link?: string; id?: string } };
     if (!accessToken) {
       console.log("[whatsapp] dev (sem WA_ACCESS_TOKEN) — payload:", JSON.stringify(payload));
       continue;
     }
+
+    // imagem: tenta media-id (ordem determinística); se falhar, mantém o link
+    let usouLink = false;
+    if (payload.type === "image" && payload.image?.link && phoneNumberId) {
+      const mediaId = await uploadMedia(payload.image.link, phoneNumberId, accessToken);
+      if (mediaId) payload.image = { id: mediaId };
+      else usouLink = true;
+    }
+
     const url = `${GRAPH_URL()}/${API_VERSION()}/${phoneNumberId}/messages`;
     const res = await fetch(url, {
       method: "POST",
@@ -98,8 +140,8 @@ export async function enviarWhatsApp(to: string, messages: BaseMessage[]): Promi
     });
     if (!res.ok) {
       console.error(`[whatsapp] envio falhou HTTP ${res.status}:`, await res.text());
-    } else if (payload.type === "image" && i < payloads.length - 1) {
-      // só espera se ainda há mensagem depois (evita atraso no fim)
+    } else if (payload.type === "image" && usouLink && i < payloads.length - 1) {
+      // só espera quando caiu no fallback de link (media-id já entrega em ordem)
       await sleep(DELAY_POS_IMAGEM_MS);
     }
   }
