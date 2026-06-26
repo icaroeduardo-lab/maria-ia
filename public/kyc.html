@@ -13,7 +13,8 @@
   .card { width: 100%; max-width: 420px; background: #14201b; border-radius: 20px;
           padding: 22px; box-shadow: 0 12px 40px rgba(0,0,0,.4); text-align: center; }
   h1 { font-size: 19px; margin: 4px 0 2px; color: #fff; }
-  .sub { font-size: 13px; color: #9fb8ab; margin-bottom: 16px; }
+  .sub { font-size: 13px; color: #9fb8ab; margin-bottom: 10px; }
+  .intro { font-size: 13px; color: #c2d6cc; margin: 0 4px 16px; line-height: 1.5; }
   .palco { position: relative; width: 260px; height: 260px; margin: 0 auto 16px;
            border-radius: 50%; overflow: hidden; background: #0a0f0d;
            border: 3px solid var(--verde2); }
@@ -36,8 +37,10 @@
 </head>
 <body>
   <div class="card">
-    <h1>Confirmação de identidade</h1>
-    <div class="sub">Defensoria Pública do Estado do Rio de Janeiro</div>
+    <h1>Confirme que é você</h1>
+    <div class="sub">Defensoria Pública do Rio de Janeiro</div>
+    <div class="intro" id="intro">É rapidinho e seguro: tiramos uma selfie só para
+    garantir que é você mesmo. 💚</div>
 
     <div class="palco">
       <video id="video" autoplay playsinline muted></video>
@@ -47,10 +50,10 @@
 
     <button id="btn">Permitir câmera</button>
     <div class="status" id="status"></div>
-    <div class="dica" id="dica">Centralize seu rosto no círculo, em local iluminado.</div>
+    <div class="dica" id="dica">Fique num lugar com luz e deixe seu rosto dentro do círculo.</div>
 
-    <div class="lgpd">🔒 Sua imagem é usada apenas para confirmar sua identidade neste
-    atendimento e não é armazenada. (Demonstração)</div>
+    <div class="lgpd">🔒 Sua foto é usada só para confirmar sua identidade neste
+    atendimento e <b>não fica guardada</b>.</div>
   </div>
 
 <script>
@@ -73,10 +76,10 @@
       });
       video.srcObject = stream;
       etapa = "pronto";
-      btn.textContent = "Confirmar identidade";
-      setStatus("Câmera pronta. Posicione seu rosto.", "");
+      btn.textContent = "Tirar selfie";
+      setStatus("Câmera pronta! Quando estiver bem na foto, toque em Tirar selfie.", "");
     } catch (e) {
-      setStatus("Não foi possível acessar a câmera. Verifique a permissão do navegador.", "erro");
+      setStatus("Não consegui abrir a câmera. Toque em Permitir quando o navegador pedir, e tente de novo.", "erro");
     }
   }
 
@@ -85,7 +88,8 @@
     btn.disabled = true;
     anel.className = "anel scan";
     dica.style.display = "none";
-    setStatus("Analisando seu rosto…", "");
+    document.getElementById("intro").style.display = "none";
+    setStatus("Só um instante, estou te reconhecendo…", "");
 
     // captura o frame atual (fica no dispositivo; enviamos só a confirmação)
     const ctx = canvas.getContext("2d");
@@ -105,19 +109,19 @@
         if (stream) stream.getTracks().forEach(t => t.stop());
         video.style.display = "none";
         canvas.parentElement.innerHTML = '<div class="check">✅</div>';
-        setStatus("Identidade confirmada!", "ok");
-        btn.textContent = "Pronto — volte ao WhatsApp";
+        setStatus("Tudo certo! Você foi reconhecido(a).", "ok");
+        btn.textContent = "Voltar ao WhatsApp";
         btn.disabled = false;
         btn.onclick = () => { location.href = "https://wa.me/"; };
         dica.style.display = "block";
-        dica.textContent = "Pode voltar à conversa e responder PRONTO.";
+        dica.textContent = "Agora é só voltar à conversa e responder PRONTO. 💚";
       } else {
-        setStatus("Não conseguimos confirmar. Tente novamente.", "erro");
+        setStatus("Não consegui confirmar dessa vez. Toque para tentar de novo.", "erro");
         btn.disabled = false;
       }
     } catch (e) {
       anel.className = "anel";
-      setStatus("Falha de conexão. Tente novamente.", "erro");
+      setStatus("Sem conexão agora. Toque para tentar de novo.", "erro");
       btn.disabled = false;
     }
   }

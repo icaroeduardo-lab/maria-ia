@@ -263,7 +263,7 @@
       {
         "id": "erro_kyc",
         "data": {
-          "texto": "⚠️ Não conseguimos confirmar sua identidade."
+          "texto": "Não consegui confirmar sua identidade dessa vez. 🙏\nSem problema, isso acontece — vamos tentar mais uma vez."
         },
         "type": "mensagem",
         "position": {
@@ -275,7 +275,7 @@
         "id": "tentar_kyc",
         "data": {
           "chave": "retry_kyc",
-          "texto": "Deseja tentar novamente?",
+          "texto": "Quer tentar a selfie de novo?",
           "tipoPergunta": "sim_nao"
         },
         "type": "pergunta",
