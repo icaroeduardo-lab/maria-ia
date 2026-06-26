@@ -601,7 +601,7 @@
       {
         "id": "kyc_msg",
         "data": {
-          "texto": "Falta só confirmar que é você mesmo, por segurança. 🤳\n\nAbra este link e faça uma selfie rápida:\n{{kyc.url}}\n\nQuando terminar, volte aqui e responda *PRONTO*."
+          "texto": "Falta só confirmar que é você mesmo, por segurança. 🤳\n\nAbra este link e faça uma selfie rápida:\n{{kyc.url}}\n\nAssim que você confirmar por lá, eu sigo automaticamente aqui — pode deixar comigo. 💚"
         },
         "type": "mensagem",
         "position": {
