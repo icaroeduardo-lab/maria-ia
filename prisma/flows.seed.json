@@ -126,7 +126,8 @@
         "data": {
           "chave": "telefone",
           "texto": "Informe o *telefone* correto (com DDD):",
-          "tipoPergunta": "telefone"
+          "tipoPergunta": "telefone",
+          "semReescrita": true
         },
         "type": "pergunta",
         "position": {
@@ -175,7 +176,8 @@
         "data": {
           "chave": "nome",
           "texto": "Qual o seu *nome completo*?",
-          "tipoPergunta": "texto"
+          "tipoPergunta": "texto",
+          "semReescrita": true
         },
         "type": "pergunta",
         "position": {
@@ -188,7 +190,8 @@
         "data": {
           "chave": "dataNascimento",
           "texto": "Sua *data de nascimento* (AAAA-MM-DD)?",
-          "tipoPergunta": "texto"
+          "tipoPergunta": "texto",
+          "semReescrita": true
         },
         "type": "pergunta",
         "position": {
@@ -201,7 +204,8 @@
         "data": {
           "chave": "telefone",
           "texto": "Seu *telefone* com DDD?",
-          "tipoPergunta": "telefone"
+          "tipoPergunta": "telefone",
+          "semReescrita": true
         },
         "type": "pergunta",
         "position": {
@@ -277,7 +281,7 @@
           "chave": "relato",
           "texto": "Estamos aqui para lhe ajudar. 😊\nConte mais sobre seu caso.",
           "imagem": "https://maria-ia.s3.us-east-1.amazonaws.com/imagens/839dd28f-662d-4b33-aea4-37f9646179c3.jpg",
-          "semReescrita": true,
+          "semReescrita": false,
           "tipoPergunta": "texto"
         },
         "type": "pergunta",
