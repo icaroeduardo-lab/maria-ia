@@ -23,6 +23,7 @@ import { mockRoutes } from "./routes/mock.js";
 import { assistidosFlowRoutes } from "./routes/assistidos.js";
 import { fichaRoutes } from "./routes/ficha.js";
 import { kycRoutes } from "./routes/kyc.js";
+import { processosRoutes } from "./routes/processos.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = Fastify();
@@ -62,6 +63,7 @@ await app.register(mockRoutes);
 await app.register(assistidosFlowRoutes);
 await app.register(fichaRoutes);
 await app.register(kycRoutes);
+await app.register(processosRoutes);
 
 // retry de envios à DPERJ que falharam (fila local em data/fila-envios.db)
 setInterval(() => processarFila().catch(console.error), 5 * 60 * 1000).unref();

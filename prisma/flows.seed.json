@@ -985,7 +985,7 @@
       {
         "id": "api_processos",
         "data": {
-          "url": "/mock/processos",
+          "url": "/api/processos/consultar",
           "chave": "processos",
           "metodo": "POST",
           "titulo": "Consultar processos"
@@ -1012,8 +1012,9 @@
         "id": "selecionar_processo",
         "data": {
           "chave": "processo_sel",
-          "texto": "Digite o número do processo que deseja acompanhar:",
-          "tipoPergunta": "texto"
+          "texto": "Encontrei estes processos no seu CPF:\n\n{{processos.lista}}\n\nQual deles você quer acompanhar? Pode me dizer o *número do processo* ou só o item da lista (ex: 1). 📋",
+          "tipoPergunta": "texto",
+          "semReescrita": true
         },
         "type": "pergunta",
         "position": {
@@ -1024,7 +1025,7 @@
       {
         "id": "ver_detalhes",
         "data": {
-          "texto": "📂 Processo {{processo_sel}} — em andamento. Equipe notificada."
+          "texto": "📂 *Sobre o seu processo:*\n\n{{resumo_processo.resumo}}"
         },
         "type": "mensagem",
         "position": {
@@ -1116,6 +1117,21 @@
           "x": 780,
           "y": 220
         }
+      },
+      {
+        "id": "api_resumo",
+        "type": "api",
+        "position": {
+          "x": 660,
+          "y": 180
+        },
+        "data": {
+          "tipo": "api",
+          "titulo": "Resumo do processo (IA)",
+          "url": "/api/processos/resumo",
+          "metodo": "POST",
+          "chave": "resumo_processo"
+        }
       }
     ],
     "edges": [
@@ -1135,11 +1151,6 @@
         "label": "false",
         "source": "tem_processo",
         "target": "erro_processo"
-      },
-      {
-        "id": "e4",
-        "source": "selecionar_processo",
-        "target": "ver_detalhes"
       },
       {
         "id": "e5",
@@ -1184,6 +1195,16 @@
         "label": "false",
         "source": "cond_retry",
         "target": "ver_outro"
+      },
+      {
+        "id": "e_sel_resumo",
+        "source": "selecionar_processo",
+        "target": "api_resumo"
+      },
+      {
+        "id": "e_resumo_det",
+        "source": "api_resumo",
+        "target": "ver_detalhes"
       }
     ]
   },
