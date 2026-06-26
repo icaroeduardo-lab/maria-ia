@@ -16,6 +16,9 @@ import { adminRoutes } from "./routes/admin.js";
 import { processarFila } from "./dperj.js";
 import { limparConversasInativas } from "./limpeza.js";
 import { verificarDb, verificarTokenWhatsApp, avisarSeTokenMorto } from "./health.js";
+import { prisma } from "./db.js";
+import { validarFlow } from "./engine/validar.js";
+import type { FlowNode, FlowEdge } from "./engine/builder.js";
 import { mockRoutes } from "./routes/mock.js";
 import { assistidosFlowRoutes } from "./routes/assistidos.js";
 import { fichaRoutes } from "./routes/ficha.js";
@@ -68,6 +71,17 @@ setInterval(() => limparConversasInativas().catch(console.error), 24 * 60 * 60 *
 // avisa nos logs se o token do WhatsApp estiver morto (boot + a cada 6h)
 avisarSeTokenMorto().catch(console.error);
 setInterval(() => avisarSeTokenMorto().catch(console.error), 6 * 60 * 60 * 1000).unref();
+
+// valida o fluxo ativo no boot e loga problemas (não bloqueia o subir)
+(async () => {
+  if (!prisma) return;
+  const ativo = await prisma.flow.findFirst({ where: { active: true } });
+  if (!ativo) return;
+  const r = validarFlow(ativo.nodes as unknown as FlowNode[], ativo.edges as unknown as FlowEdge[]);
+  if (r.erros.length) console.error(`[flow] ⚠️ fluxo ativo "${ativo.name}" com ERROS:`, r.erros);
+  if (r.avisos.length) console.warn(`[flow] avisos no fluxo ativo "${ativo.name}":`, r.avisos);
+  if (r.ok) console.log(`[flow] fluxo ativo "${ativo.name}" válido ✓`);
+})().catch(console.error);
 
 const PORT = Number(process.env.PORT ?? 3000);
 await app.listen({ port: PORT, host: "0.0.0.0" });

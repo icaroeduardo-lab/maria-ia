@@ -11,6 +11,7 @@
     "start": "prisma migrate deploy && node dist/server.js",
     "studio": "npx @langchain/langgraph-cli dev",
     "seed": "tsx prisma/seed.ts",
+    "flows:export": "tsx scripts/export-flows.ts",
     "test": "node --import tsx --test test/*.test.ts"
   },
   "keywords": [],

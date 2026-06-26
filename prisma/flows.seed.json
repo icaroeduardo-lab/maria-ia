@@ -583,13 +583,13 @@
       },
       {
         "id": "cad_pergunta",
-        "type": "pergunta",
         "data": {
           "chave": "quer_cadastrar",
           "texto": "Não encontramos seu cadastro.\nGostaria de realizar o seu cadastro nesse momento? 📝",
-          "tipoPergunta": "sim_nao",
-          "semReescrita": true
+          "semReescrita": true,
+          "tipoPergunta": "sim_nao"
         },
+        "type": "pergunta",
         "position": {
           "x": 1020,
           "y": 520
@@ -597,11 +597,11 @@
       },
       {
         "id": "cond_quer_cadastrar",
-        "type": "condicao",
         "data": {
           "campo": "quer_cadastrar",
           "titulo": "Quer cadastrar?"
         },
+        "type": "condicao",
         "position": {
           "x": 1260,
           "y": 360
@@ -609,10 +609,10 @@
       },
       {
         "id": "end_sem_cadastro",
-        "type": "mensagem",
         "data": {
           "texto": "Tudo bem! Quando quiser fazer seu cadastro, é só me chamar de novo. 👋"
         },
+        "type": "mensagem",
         "position": {
           "x": 1500,
           "y": 520
@@ -899,274 +899,6 @@
     ]
   },
   {
-    "id": "cmqi5uu7r0000lt3t9dhegvcb",
-    "name": "Tema: Alimentação",
-    "active": false,
-    "nodes": [
-      {
-        "id": "alim_tem_filhos",
-        "data": {
-          "chave": "alim_tem_filhos",
-          "texto": "Você tem filhos com a outra parte?",
-          "tipoPergunta": "sim_nao"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 60
-        }
-      },
-      {
-        "id": "alim_filhos_info",
-        "data": {
-          "chave": "alim_filhos_info",
-          "texto": "Quantos filhos e quais as idades deles?",
-          "tipoPergunta": "texto"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 180
-        }
-      },
-      {
-        "id": "alim_nome_outra",
-        "data": {
-          "chave": "alim_nome_outra",
-          "texto": "Qual o nome completo do pai ou da mãe das crianças?",
-          "tipoPergunta": "texto"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 300
-        }
-      },
-      {
-        "id": "alim_outra_trabalha",
-        "data": {
-          "chave": "alim_outra_trabalha",
-          "texto": "A outra parte trabalha? Se souber, onde?",
-          "tipoPergunta": "texto"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 420
-        }
-      },
-      {
-        "id": "alim_ja_recebe",
-        "data": {
-          "chave": "alim_ja_recebe",
-          "texto": "Você já recebe algum valor de pensão atualmente?",
-          "tipoPergunta": "sim_nao"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 540
-        }
-      }
-    ],
-    "edges": [
-      {
-        "id": "e_alim_tem_filhos",
-        "source": "alim_tem_filhos",
-        "target": "alim_filhos_info"
-      },
-      {
-        "id": "e_alim_filhos_info",
-        "source": "alim_filhos_info",
-        "target": "alim_nome_outra"
-      },
-      {
-        "id": "e_alim_nome_outra",
-        "source": "alim_nome_outra",
-        "target": "alim_outra_trabalha"
-      },
-      {
-        "id": "e_alim_outra_trabalha",
-        "source": "alim_outra_trabalha",
-        "target": "alim_ja_recebe"
-      }
-    ]
-  },
-  {
-    "id": "cmqi5uu850001lt3t8823bqdc",
-    "name": "Tema: Divórcio",
-    "active": false,
-    "nodes": [
-      {
-        "id": "div_tipo_uniao",
-        "data": {
-          "chave": "div_tipo_uniao",
-          "texto": "Seu vínculo é casamento no civil ou união estável?",
-          "opcoes": [
-            "Casamento civil",
-            "União estável"
-          ],
-          "tipoPergunta": "opcoes"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 60
-        }
-      },
-      {
-        "id": "div_filhos_menores",
-        "data": {
-          "chave": "div_filhos_menores",
-          "texto": "Vocês têm filhos menores de idade?",
-          "tipoPergunta": "sim_nao"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 180
-        }
-      },
-      {
-        "id": "div_tem_bens",
-        "data": {
-          "chave": "div_tem_bens",
-          "texto": "Há bens a partilhar (imóvel, veículo, contas)?",
-          "tipoPergunta": "sim_nao"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 300
-        }
-      },
-      {
-        "id": "div_consensual",
-        "data": {
-          "chave": "div_consensual",
-          "texto": "O divórcio é consensual (ambos concordam)?",
-          "tipoPergunta": "sim_nao"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 420
-        }
-      },
-      {
-        "id": "div_nome_conjuge",
-        "data": {
-          "chave": "div_nome_conjuge",
-          "texto": "Qual o nome completo do(a) cônjuge?",
-          "tipoPergunta": "texto"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 540
-        }
-      }
-    ],
-    "edges": [
-      {
-        "id": "e_div_tipo_uniao",
-        "source": "div_tipo_uniao",
-        "target": "div_filhos_menores"
-      },
-      {
-        "id": "e_div_filhos_menores",
-        "source": "div_filhos_menores",
-        "target": "div_tem_bens"
-      },
-      {
-        "id": "e_div_tem_bens",
-        "source": "div_tem_bens",
-        "target": "div_consensual"
-      },
-      {
-        "id": "e_div_consensual",
-        "source": "div_consensual",
-        "target": "div_nome_conjuge"
-      }
-    ]
-  },
-  {
-    "id": "cmqi63iy90002lt3tbidplhgd",
-    "name": "Tema: Outros",
-    "active": false,
-    "nodes": [
-      {
-        "id": "outros_descricao",
-        "data": {
-          "chave": "outros_descricao",
-          "texto": "Descreva com mais detalhes o que você precisa resolver.",
-          "tipoPergunta": "texto"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 60
-        }
-      },
-      {
-        "id": "outros_urgencia",
-        "data": {
-          "chave": "outros_urgencia",
-          "texto": "É uma situação urgente (prazo curto, audiência, risco imediato)?",
-          "tipoPergunta": "sim_nao"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 180
-        }
-      },
-      {
-        "id": "outros_ja_procurou",
-        "data": {
-          "chave": "outros_ja_procurou",
-          "texto": "Você já procurou a Defensoria sobre esse assunto antes?",
-          "tipoPergunta": "sim_nao"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 300
-        }
-      },
-      {
-        "id": "outros_tem_documentos",
-        "data": {
-          "chave": "outros_tem_documentos",
-          "texto": "Você tem documentos relacionados ao caso?",
-          "tipoPergunta": "sim_nao"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 80,
-          "y": 420
-        }
-      }
-    ],
-    "edges": [
-      {
-        "id": "e0",
-        "source": "outros_descricao",
-        "target": "outros_urgencia"
-      },
-      {
-        "id": "e1",
-        "source": "outros_urgencia",
-        "target": "outros_ja_procurou"
-      },
-      {
-        "id": "e2",
-        "source": "outros_ja_procurou",
-        "target": "outros_tem_documentos"
-      }
-    ]
-  },
-  {
     "id": "cmqi6csra0000ltqlohwncifk",
     "name": "Tema: Acompanhar Processo",
     "active": false,
@@ -1377,6 +1109,198 @@
     ]
   },
   {
+    "id": "cmqi5uu7r0000lt3t9dhegvcb",
+    "name": "Tema: Alimentação",
+    "active": false,
+    "nodes": [
+      {
+        "id": "alim_tem_filhos",
+        "data": {
+          "chave": "alim_tem_filhos",
+          "texto": "Você tem filhos com a outra parte?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 60
+        }
+      },
+      {
+        "id": "alim_filhos_info",
+        "data": {
+          "chave": "alim_filhos_info",
+          "texto": "Quantos filhos e quais as idades deles?",
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 180
+        }
+      },
+      {
+        "id": "alim_nome_outra",
+        "data": {
+          "chave": "alim_nome_outra",
+          "texto": "Qual o nome completo do pai ou da mãe das crianças?",
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 300
+        }
+      },
+      {
+        "id": "alim_outra_trabalha",
+        "data": {
+          "chave": "alim_outra_trabalha",
+          "texto": "A outra parte trabalha? Se souber, onde?",
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 420
+        }
+      },
+      {
+        "id": "alim_ja_recebe",
+        "data": {
+          "chave": "alim_ja_recebe",
+          "texto": "Você já recebe algum valor de pensão atualmente?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 540
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e_alim_tem_filhos",
+        "source": "alim_tem_filhos",
+        "target": "alim_filhos_info"
+      },
+      {
+        "id": "e_alim_filhos_info",
+        "source": "alim_filhos_info",
+        "target": "alim_nome_outra"
+      },
+      {
+        "id": "e_alim_nome_outra",
+        "source": "alim_nome_outra",
+        "target": "alim_outra_trabalha"
+      },
+      {
+        "id": "e_alim_outra_trabalha",
+        "source": "alim_outra_trabalha",
+        "target": "alim_ja_recebe"
+      }
+    ]
+  },
+  {
+    "id": "cmqi5uu850001lt3t8823bqdc",
+    "name": "Tema: Divórcio",
+    "active": false,
+    "nodes": [
+      {
+        "id": "div_tipo_uniao",
+        "data": {
+          "chave": "div_tipo_uniao",
+          "texto": "Seu vínculo é casamento no civil ou união estável?",
+          "opcoes": [
+            "Casamento civil",
+            "União estável"
+          ],
+          "tipoPergunta": "opcoes"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 60
+        }
+      },
+      {
+        "id": "div_filhos_menores",
+        "data": {
+          "chave": "div_filhos_menores",
+          "texto": "Vocês têm filhos menores de idade?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 180
+        }
+      },
+      {
+        "id": "div_tem_bens",
+        "data": {
+          "chave": "div_tem_bens",
+          "texto": "Há bens a partilhar (imóvel, veículo, contas)?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 300
+        }
+      },
+      {
+        "id": "div_consensual",
+        "data": {
+          "chave": "div_consensual",
+          "texto": "O divórcio é consensual (ambos concordam)?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 420
+        }
+      },
+      {
+        "id": "div_nome_conjuge",
+        "data": {
+          "chave": "div_nome_conjuge",
+          "texto": "Qual o nome completo do(a) cônjuge?",
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 540
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e_div_tipo_uniao",
+        "source": "div_tipo_uniao",
+        "target": "div_filhos_menores"
+      },
+      {
+        "id": "e_div_filhos_menores",
+        "source": "div_filhos_menores",
+        "target": "div_tem_bens"
+      },
+      {
+        "id": "e_div_tem_bens",
+        "source": "div_tem_bens",
+        "target": "div_consensual"
+      },
+      {
+        "id": "e_div_consensual",
+        "source": "div_consensual",
+        "target": "div_nome_conjuge"
+      }
+    ]
+  },
+  {
     "id": "cmqi6mz880001ltqlk8bklskq",
     "name": "Tema: Fora de Competência",
     "active": false,
@@ -1448,6 +1372,82 @@
         "label": "false",
         "source": "fc_cond",
         "target": "fc_saida_fim"
+      }
+    ]
+  },
+  {
+    "id": "cmqi63iy90002lt3tbidplhgd",
+    "name": "Tema: Outros",
+    "active": false,
+    "nodes": [
+      {
+        "id": "outros_descricao",
+        "data": {
+          "chave": "outros_descricao",
+          "texto": "Descreva com mais detalhes o que você precisa resolver.",
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 60
+        }
+      },
+      {
+        "id": "outros_urgencia",
+        "data": {
+          "chave": "outros_urgencia",
+          "texto": "É uma situação urgente (prazo curto, audiência, risco imediato)?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 180
+        }
+      },
+      {
+        "id": "outros_ja_procurou",
+        "data": {
+          "chave": "outros_ja_procurou",
+          "texto": "Você já procurou a Defensoria sobre esse assunto antes?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 300
+        }
+      },
+      {
+        "id": "outros_tem_documentos",
+        "data": {
+          "chave": "outros_tem_documentos",
+          "texto": "Você tem documentos relacionados ao caso?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 80,
+          "y": 420
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e0",
+        "source": "outros_descricao",
+        "target": "outros_urgencia"
+      },
+      {
+        "id": "e1",
+        "source": "outros_urgencia",
+        "target": "outros_ja_procurou"
+      },
+      {
+        "id": "e2",
+        "source": "outros_ja_procurou",
+        "target": "outros_tem_documentos"
       }
     ]
   }
