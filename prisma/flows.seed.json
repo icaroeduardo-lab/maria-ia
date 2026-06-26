@@ -263,36 +263,11 @@
       {
         "id": "erro_kyc",
         "data": {
-          "texto": "Não consegui confirmar sua identidade dessa vez. 🙏\nSem problema, isso acontece — vamos tentar mais uma vez."
+          "texto": "Ainda não recebi sua selfie. 🤳\nÉ só abrir o link e confirmar — quando terminar, eu continuo automaticamente."
         },
         "type": "mensagem",
         "position": {
           "x": 2220,
-          "y": 760
-        }
-      },
-      {
-        "id": "tentar_kyc",
-        "data": {
-          "chave": "retry_kyc",
-          "texto": "Quer tentar a selfie de novo?",
-          "tipoPergunta": "sim_nao"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 2460,
-          "y": 760
-        }
-      },
-      {
-        "id": "cond_retry_kyc",
-        "data": {
-          "campo": "retry_kyc",
-          "titulo": "Tentar KYC?"
-        },
-        "type": "condicao",
-        "position": {
-          "x": 2700,
           "y": 760
         }
       },
@@ -638,7 +613,7 @@
         "id": "kyc_pergunta",
         "data": {
           "chave": "kyc_pronto",
-          "texto": "Assim que terminar a selfie, é só responder *PRONTO* aqui. 🤳",
+          "texto": "Estou te aguardando fazer a selfie no link acima. 🤳\nAssim que você confirmar por lá, eu sigo sozinho aqui — não precisa responder nada.",
           "semReescrita": true,
           "tipoPergunta": "texto"
         },
@@ -971,31 +946,14 @@
         "target": "erro_kyc"
       },
       {
-        "id": "ek_erro_tentar",
-        "source": "erro_kyc",
-        "target": "tentar_kyc"
-      },
-      {
-        "id": "ek_tentar_cond",
-        "source": "tentar_kyc",
-        "target": "cond_retry_kyc"
-      },
-      {
-        "id": "ek_retry_reset",
-        "label": "true",
-        "source": "cond_retry_kyc",
-        "target": "kyc_reset"
-      },
-      {
         "id": "ek_reset_ini",
         "source": "kyc_reset",
         "target": "kyc_iniciar"
       },
       {
-        "id": "ek_retry_fim",
-        "label": "false",
-        "source": "cond_retry_kyc",
-        "target": "fim"
+        "id": "ek_erro_reset",
+        "source": "erro_kyc",
+        "target": "kyc_reset"
       }
     ]
   },

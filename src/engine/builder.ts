@@ -376,16 +376,19 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
     }
 
     case "api":
-      return async (state: GraphState) => {
+      return async (state: GraphState, config?: { configurable?: { thread_id?: string } }) => {
         if (!node.data.url) return {};
         try {
           // url relativa ("/api/...") resolve contra SELF_URL → portável (não fixa localhost)
           const interpolada = interpolar(String(node.data.url), state.dadosColetados);
           const url = interpolada.startsWith("/") ? `${baseUrlInterna()}${interpolada}` : interpolada;
+          // inclui sessão/canal no corpo p/ endpoints que precisam retomar o fluxo
+          // de forma assíncrona (ex: KYC confirma e empurra a próxima msg sozinho)
+          const corpoEnvio = { ...state.dadosColetados, _sessao: config?.configurable?.thread_id, _canal: state.canal };
           const res = await fetch(url, {
             method: node.data.metodo ?? "POST",
             headers: { "Content-Type": "application/json" },
-            body: node.data.metodo === "GET" ? undefined : JSON.stringify(state.dadosColetados),
+            body: node.data.metodo === "GET" ? undefined : JSON.stringify(corpoEnvio),
             signal: AbortSignal.timeout(10_000),
           });
           const corpo = await res.text();

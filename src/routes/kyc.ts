@@ -1,51 +1,66 @@
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "crypto";
+import { AIMessage } from "@langchain/core/messages";
+import { processarMensagem } from "../chat.js";
+import { enviarWhatsApp } from "../channels/whatsapp.js";
 
 // KYC de demonstração: a página /kyc.html abre a câmera do celular, "reconhece"
-// o rosto e marca a identidade como confirmada para o CPF da conversa.
+// o rosto e marca a identidade como confirmada. Ao confirmar, o backend RETOMA
+// a conversa do WhatsApp automaticamente (a pessoa não precisa digitar nada).
 //
-// Amarração com o fluxo do WhatsApp:
-//   1. nó api → POST /api/kyc/iniciar (envia dadosColetados c/ cpf) → { url }
-//   2. nó mensagem manda a {{kyc.url}}; a pessoa abre, faz a selfie
-//   3. a página → POST /api/kyc/captura { token } → marca confirmado (fake)
-//   4. nó api → POST /api/kyc/status (cpf) → { confirmado } → cond_kyc decide
-//
-// Estado em memória (suficiente para demo; some no redeploy — o KYC dura minutos).
+// Fluxo:
+//   1. nó api → POST /api/kyc/iniciar (dadosColetados + _sessao + _canal) → { url }
+//   2. nó mensagem manda {{kyc.url}}; o fluxo PAUSA esperando a selfie
+//   3. página → POST /api/kyc/captura { token } → marca confirmado + retoma o WhatsApp
+//   4. a próxima mensagem do fluxo é empurrada sozinha pro WhatsApp
 
 type Estado = "pendente" | "confirmado";
 const statusPorCpf = new Map<string, Estado>();
-const tokenParaCpf = new Map<string, { cpf: string; criadoEm: number }>();
-const TTL_MS = 30 * 60 * 1000; // tokens valem 30min
+const tokens = new Map<string, { cpf: string; sessao?: string; canal?: string; criadoEm: number }>();
+const TTL_MS = 30 * 60 * 1000;
 
 const soDigitos = (v: unknown) => String(v ?? "").replace(/\D/g, "");
 const baseUrl = () => process.env.SELF_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
 
 function limparExpirados() {
   const agora = Date.now();
-  for (const [t, v] of tokenParaCpf) if (agora - v.criadoEm > TTL_MS) tokenParaCpf.delete(t);
+  for (const [t, v] of tokens) if (agora - v.criadoEm > TTL_MS) tokens.delete(t);
+}
+
+// retoma a conversa do WhatsApp após a identidade ser confirmada: injeta um
+// "pronto" sintético, o fluxo avança e a próxima mensagem é enviada.
+async function retomarWhatsApp(sessao: string) {
+  try {
+    const { newMessages } = await processarMensagem(sessao, "✅ identidade confirmada", "whatsapp");
+    const numero = sessao.replace(/^wa:/, "");
+    if (newMessages.length) await enviarWhatsApp(numero, newMessages);
+  } catch (err) {
+    console.error("[kyc] falha ao retomar WhatsApp:", err);
+  }
 }
 
 export async function kycRoutes(app: FastifyInstance) {
-  // inicia o KYC: gera token amarrado ao CPF e devolve o link da página
   app.post("/api/kyc/iniciar", async (req, reply) => {
-    const cpf = soDigitos((req.body as { cpf?: string })?.cpf);
+    const b = (req.body ?? {}) as { cpf?: string; _sessao?: string; _canal?: string };
+    const cpf = soDigitos(b.cpf);
     if (cpf.length !== 11) return reply.code(400).send({ erro: "cpf inválido" });
     limparExpirados();
     const token = randomUUID();
-    tokenParaCpf.set(token, { cpf, criadoEm: Date.now() });
+    tokens.set(token, { cpf, sessao: b._sessao, canal: b._canal, criadoEm: Date.now() });
     statusPorCpf.set(cpf, "pendente");
     return { url: `${baseUrl()}/kyc.html?t=${token}`, token };
   });
 
-  // chamado pela página após a captura — marca a identidade como confirmada
   app.post("/api/kyc/captura", async (req, reply) => {
     const token = (req.body as { token?: string })?.token ?? "";
-    const reg = tokenParaCpf.get(token);
+    const reg = tokens.get(token);
     if (!reg || Date.now() - reg.criadoEm > TTL_MS) {
       return reply.code(400).send({ ok: false, erro: "token inválido ou expirado" });
     }
     statusPorCpf.set(reg.cpf, "confirmado");
     console.log(`[kyc] identidade confirmada (cpf •••${reg.cpf.slice(-2)})`);
+    // retoma o WhatsApp sozinho (async — não bloqueia a resposta à página)
+    if (reg.canal === "whatsapp" && reg.sessao) retomarWhatsApp(reg.sessao);
     return { ok: true, confirmado: true };
   });
 
