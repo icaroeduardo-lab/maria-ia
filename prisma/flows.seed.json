@@ -466,10 +466,10 @@
       {
         "id": "api_casos",
         "data": {
-          "url": "/api/casos/consultar",
-          "chave": "casos",
+          "url": "/api/processos/consultar",
+          "chave": "processos",
           "metodo": "POST",
-          "titulo": "Consultar casos abertos"
+          "titulo": "Consultar processos (PDPJ)"
         },
         "type": "api",
         "position": {
@@ -480,7 +480,7 @@
       {
         "id": "cond_tem_casos",
         "data": {
-          "campo": "casos.tem_casos",
+          "campo": "processos.tem_processo",
           "titulo": "Tem casos abertos?"
         },
         "type": "condicao",
@@ -493,7 +493,7 @@
         "id": "pergunta_tem_casos",
         "data": {
           "chave": "falar_caso",
-          "texto": "⚠️Identificamos que você tem caso(s) em aberto na Defensoria. \n\nVocê quer falar sobre algum deles?",
+          "texto": "📂 Vi que você tem processo(s) na Defensoria.\n\nVocê quer saber como está algum deles?",
           "semReescrita": true,
           "tipoPergunta": "sim_nao"
         },
@@ -518,7 +518,7 @@
       {
         "id": "msg_lista_casos",
         "data": {
-          "texto": "Estes são os seus casos em aberto:\n\n{{casos.lista}}"
+          "texto": "Estes são os seus processos:\n\n{{processos.lista}}"
         },
         "type": "mensagem",
         "position": {
@@ -529,8 +529,8 @@
       {
         "id": "pergunta_sel_caso",
         "data": {
-          "chave": "caso_escolhido",
-          "texto": "Qual deles você gostaria de tratar? Pode me dizer o número ou o tipo do caso.",
+          "chave": "processo_sel",
+          "texto": "Qual deles você quer acompanhar? Pode me dizer o *número do processo* ou só o item da lista (ex: 1). 📋",
           "semReescrita": true,
           "tipoPergunta": "texto"
         },
@@ -543,7 +543,7 @@
       {
         "id": "msg_provisoria",
         "data": {
-          "texto": "Perfeito! 💚 Em breve você poderá tratar desse caso por aqui. Por enquanto, nossa equipe vai dar andamento. Obrigada!"
+          "texto": "📂 *Sobre o seu processo:*\n\n{{resumo_processo.resumo}}\n\nSe precisar de mais alguma coisa, é só me chamar. 💚"
         },
         "type": "mensagem",
         "position": {
@@ -648,6 +648,21 @@
         "position": {
           "x": 2460,
           "y": 40
+        }
+      },
+      {
+        "id": "api_resumo_caso",
+        "type": "api",
+        "position": {
+          "x": 3840,
+          "y": 140
+        },
+        "data": {
+          "tipo": "api",
+          "titulo": "Resumo do processo (IA)",
+          "url": "/api/processos/resumo",
+          "metodo": "POST",
+          "chave": "resumo_processo"
         }
       }
     ],
@@ -902,11 +917,6 @@
         "target": "pergunta_sel_caso"
       },
       {
-        "id": "cs_pergunta_sel_caso_msg_provisoria_23910",
-        "source": "pergunta_sel_caso",
-        "target": "msg_provisoria"
-      },
-      {
         "id": "cs_msg_provisoria_fim_23910",
         "source": "msg_provisoria",
         "target": "fim"
@@ -974,6 +984,16 @@
         "id": "ek_ok_casos",
         "source": "kyc_ok",
         "target": "api_casos"
+      },
+      {
+        "id": "e_selcaso_resumo",
+        "source": "pergunta_sel_caso",
+        "target": "api_resumo_caso"
+      },
+      {
+        "id": "e_resumo_prov",
+        "source": "api_resumo_caso",
+        "target": "msg_provisoria"
       }
     ]
   },
