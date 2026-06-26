@@ -634,6 +634,17 @@
           "x": 2940,
           "y": 760
         }
+      },
+      {
+        "id": "kyc_ok",
+        "data": {
+          "texto": "✅ Identidade confirmada! Obrigada. 💚\nVamos continuar seu atendimento."
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 2460,
+          "y": 40
+        }
       }
     ],
     "edges": [
@@ -937,7 +948,7 @@
         "id": "ek_cond_ok",
         "label": "true",
         "source": "cond_kyc",
-        "target": "api_casos"
+        "target": "kyc_ok"
       },
       {
         "id": "ek_cond_erro",
@@ -954,6 +965,11 @@
         "id": "ek_erro_reset",
         "source": "erro_kyc",
         "target": "kyc_reset"
+      },
+      {
+        "id": "ek_ok_casos",
+        "source": "kyc_ok",
+        "target": "api_casos"
       }
     ]
   },
