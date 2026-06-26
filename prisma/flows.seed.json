@@ -237,7 +237,7 @@
       {
         "id": "kyc",
         "data": {
-          "url": "/mock/kyc",
+          "url": "/api/kyc/status",
           "chave": "resultado_kyc",
           "metodo": "POST",
           "titulo": "Reconhecimento (KYC)"
@@ -608,6 +608,57 @@
           "x": 1500,
           "y": 520
         }
+      },
+      {
+        "id": "kyc_iniciar",
+        "data": {
+          "url": "/api/kyc/iniciar",
+          "chave": "kyc",
+          "metodo": "POST",
+          "titulo": "Iniciar KYC"
+        },
+        "type": "api",
+        "position": {
+          "x": 1500,
+          "y": 760
+        }
+      },
+      {
+        "id": "kyc_msg",
+        "data": {
+          "texto": "Falta só confirmar que é você mesmo, por segurança. 🤳\n\nAbra este link e faça uma selfie rápida:\n{{kyc.url}}\n\nQuando terminar, volte aqui e responda *PRONTO*."
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 1740,
+          "y": 760
+        }
+      },
+      {
+        "id": "kyc_pergunta",
+        "data": {
+          "chave": "kyc_pronto",
+          "texto": "Assim que terminar a selfie, é só responder *PRONTO* aqui. 🤳",
+          "semReescrita": true,
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 1980,
+          "y": 880
+        }
+      },
+      {
+        "id": "kyc_reset",
+        "data": {
+          "chave": "kyc_pronto",
+          "valor": ""
+        },
+        "type": "atribuir",
+        "position": {
+          "x": 2940,
+          "y": 760
+        }
       }
     ],
     "edges": [
@@ -728,7 +779,7 @@
       {
         "id": "by_msg_cadastro_68886",
         "source": "msg_cadastro",
-        "target": "contar_historia"
+        "target": "kyc_iniciar"
       },
       {
         "id": "sx_classificar_sf_alimentacao_78961",
@@ -814,12 +865,12 @@
         "id": "cs_cond_dados_api_casos_23910",
         "label": "true",
         "source": "cond_dados",
-        "target": "api_casos"
+        "target": "kyc_iniciar"
       },
       {
         "id": "cs_msg_upd_api_casos_23910",
         "source": "msg_upd",
-        "target": "api_casos"
+        "target": "kyc_iniciar"
       },
       {
         "id": "cs_api_casos_cond_tem_casos_23910",
@@ -886,6 +937,65 @@
         "label": "false",
         "source": "cond_quer_cadastrar",
         "target": "end_sem_cadastro"
+      },
+      {
+        "id": "ek_ini_msg",
+        "source": "kyc_iniciar",
+        "target": "kyc_msg"
+      },
+      {
+        "id": "ek_msg_perg",
+        "source": "kyc_msg",
+        "target": "kyc_pergunta"
+      },
+      {
+        "id": "ek_perg_kyc",
+        "source": "kyc_pergunta",
+        "target": "kyc"
+      },
+      {
+        "id": "ek_kyc_cond",
+        "source": "kyc",
+        "target": "cond_kyc"
+      },
+      {
+        "id": "ek_cond_ok",
+        "label": "true",
+        "source": "cond_kyc",
+        "target": "api_casos"
+      },
+      {
+        "id": "ek_cond_erro",
+        "label": "false",
+        "source": "cond_kyc",
+        "target": "erro_kyc"
+      },
+      {
+        "id": "ek_erro_tentar",
+        "source": "erro_kyc",
+        "target": "tentar_kyc"
+      },
+      {
+        "id": "ek_tentar_cond",
+        "source": "tentar_kyc",
+        "target": "cond_retry_kyc"
+      },
+      {
+        "id": "ek_retry_reset",
+        "label": "true",
+        "source": "cond_retry_kyc",
+        "target": "kyc_reset"
+      },
+      {
+        "id": "ek_reset_ini",
+        "source": "kyc_reset",
+        "target": "kyc_iniciar"
+      },
+      {
+        "id": "ek_retry_fim",
+        "label": "false",
+        "source": "cond_retry_kyc",
+        "target": "fim"
       }
     ]
   },
