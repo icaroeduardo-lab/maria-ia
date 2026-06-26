@@ -411,15 +411,6 @@
         }
       },
       {
-        "id": "subgrafo_mqi5e1xk",
-        "data": {},
-        "type": "subgrafo",
-        "position": {
-          "x": 262.2371540096827,
-          "y": 171.7851095051395
-        }
-      },
-      {
         "id": "sf_alimentacao",
         "data": {
           "titulo": "Alimentação",
