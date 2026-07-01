@@ -6,18 +6,20 @@ IaC do backend Maria Chat v2 (ECS Fargate + SQS + EventBridge). Ver
 ## Estado atual (Fases 0–1)
 - `network.tf` — VPC, sub-redes pública/privada (2 AZs), IGW, NAT, rotas.
 - `ecr.tf` — repositórios de imagem (api, worker) + lifecycle.
-- `secrets.tf` — Secrets Manager: `db` (DATABASE_URL do RDS existente) e `app` (tokens). Valores reais fora do TF.
+- `secrets.tf` — Secrets Manager: `db` (credenciais geradas) e `app` (tokens + DATABASE_URL). Valores reais fora do TF.
+- `rds.tf` — RDS PostgreSQL nesta VPC (privado, criptografado) + subnet group + SG.
+- `rds_proxy.tf` — RDS Proxy + IAM (lê secret) + SG + target + output `database_url`.
 
-## RDS — reutilizado (não criado pelo TF)
-O RDS PostgreSQL **existente** é reaproveitado. As tasks conectam direto via a
-`DATABASE_URL` no segredo `db` (preenchida fora do TF). O Terraform **não**
-cria/gerencia a instância.
+## RDS — nesta VPC, com Proxy
+O RDS é **dedicado a esta aplicação**, então vive na VPC nova (privado), com
+**RDS Proxy** na frente (pooling p/ muitas tasks — RNF-08). A `DATABASE_URL`
+(output `database_url`) aponta para o **proxy**.
 
-> **RDS Proxy pendente:** o proxy exige o banco na MESMA VPC. O RDS atual está
-> fora desta VPC (público). Para habilitar pooling depois: trazer o RDS para
-> esta VPC (migração dump/restore) ou fazer VPC peering, e então adicionar
-> `rds_proxy.tf`. Enquanto isso, conexão direta (atenção ao limite de conexões
-> sob muitas tasks — RNF-08).
+> **Migração de dados:** a instância provisória de teste não é importada; migrar
+> via `pg_dump`/`pg_restore` da antiga para a nova, ou simplesmente re-seed
+> (`pnpm seed`), já que é base de teste. Depois, popular o segredo `app` com a
+> `DATABASE_URL` do proxy:
+> `terraform output -raw database_url` → `aws secretsmanager put-secret-value`.
 
 ## Próximos módulos (a criar, por fase)
 | Fase | Arquivo | Recursos |
