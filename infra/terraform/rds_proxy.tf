@@ -8,11 +8,11 @@ resource "aws_security_group" "rds_proxy" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "PostgreSQL das tasks (VPC)"
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr] # refinar para o SG app na Fase 2
+    description     = "PostgreSQL das tasks Fargate"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.tasks.id]
   }
 
   egress {

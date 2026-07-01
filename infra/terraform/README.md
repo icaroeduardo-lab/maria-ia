@@ -21,14 +21,17 @@ O RDS é **dedicado a esta aplicação**, então vive na VPC nova (privado), com
 > `DATABASE_URL` do proxy:
 > `terraform output -raw database_url` → `aws secretsmanager put-secret-value`.
 
+## Fase 2 (feita)
+- `sqs.tf` — fila FIFO (MessageGroupId = sessionId) + DLQ + redrive.
+- `alb.tf` — ALB público, target group (health `/health`), listener HTTP (+ HTTPS se `acm_certificate_arn`).
+- `iam.tf` — execution role (ECR/logs/secrets) + task role (Bedrock/Transcribe/S3/SQS/Secrets).
+- `ecs.tf` — cluster, SG das tasks, task defs api/worker, serviços, autoscaling (CPU + profundidade da fila no worker).
+
 ## Próximos módulos (a criar, por fase)
 | Fase | Arquivo | Recursos |
 |---|---|---|
-| 2 | `alb.tf` | Application Load Balancer + target groups |
-| 2 | `ecs.tf` | cluster ECS, task defs e serviços api/worker (autoscaling) |
-| 2 | `sqs.tf` | fila FIFO (MessageGroupId = sessionId) + DLQ |
 | 3 | `eventbridge.tf` | schedules (retry DPERJ, limpeza, health) |
-| 4 | `observability.tf` | log groups, alarmes CloudWatch |
+| 4 | `observability.tf` | alarmes CloudWatch + dashboards + VPC endpoints |
 
 ## Uso
 

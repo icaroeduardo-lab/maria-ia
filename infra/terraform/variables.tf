@@ -70,3 +70,84 @@ variable "db_allocated_storage" {
   default     = 20
   description = "Armazenamento inicial (GB)."
 }
+
+# ── Compute (ECS Fargate) ─────────────────────────────────────────────────────
+variable "container_port" {
+  type        = number
+  default     = 3000
+  description = "Porta do container da api (Fastify)."
+}
+
+variable "api_image_tag" {
+  type        = string
+  default     = "latest"
+  description = "Tag da imagem do serviço api no ECR."
+}
+
+variable "worker_image_tag" {
+  type        = string
+  default     = "latest"
+  description = "Tag da imagem do serviço worker no ECR."
+}
+
+variable "api_cpu" {
+  type        = number
+  default     = 512
+  description = "CPU da task api (unidades)."
+}
+
+variable "api_memory" {
+  type        = number
+  default     = 1024
+  description = "Memória da task api (MiB)."
+}
+
+variable "worker_cpu" {
+  type        = number
+  default     = 512
+  description = "CPU da task worker (unidades)."
+}
+
+variable "worker_memory" {
+  type        = number
+  default     = 1024
+  description = "Memória da task worker (MiB)."
+}
+
+variable "api_min" {
+  type    = number
+  default = 2
+}
+
+variable "api_max" {
+  type    = number
+  default = 10
+}
+
+variable "worker_min" {
+  type    = number
+  default = 2
+}
+
+variable "worker_max" {
+  type    = number
+  default = 20
+}
+
+variable "worker_msgs_per_task" {
+  type        = number
+  default     = 100
+  description = "Mensagens visíveis na fila por task antes de escalar o worker."
+}
+
+variable "acm_certificate_arn" {
+  type        = string
+  default     = ""
+  description = "ARN do certificado ACM para HTTPS no ALB. Vazio = só HTTP:80."
+}
+
+variable "s3_bucket" {
+  type        = string
+  default     = "maria-ia"
+  description = "Bucket S3 de fichas/áudios (efêmeros)."
+}
