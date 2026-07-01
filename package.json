@@ -9,6 +9,10 @@
     "server": "tsx src/server.ts",
     "build": "prisma generate && tsc",
     "start": "prisma migrate deploy && node dist/server.js",
+    "start:api": "prisma migrate deploy && node dist/server.js",
+    "start:worker": "node dist/worker.js",
+    "worker": "tsx src/worker.ts",
+    "jobs": "node dist/jobs.js",
     "studio": "npx @langchain/langgraph-cli dev",
     "seed": "tsx prisma/seed.ts",
     "flows:export": "tsx scripts/export-flows.ts",
@@ -34,6 +38,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",
+    "@aws-sdk/client-sqs": "^3.1078.0",
     "@aws-sdk/client-transcribe": "^3.1070.0",
     "@fastify/cors": "^11.2.0",
     "@fastify/jwt": "^10.1.0",

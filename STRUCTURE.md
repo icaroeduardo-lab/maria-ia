@@ -29,6 +29,20 @@ O código atual em `src/` migra assim:
 - `src/server.ts`, `src/routes/*`, `src/channels/whatsapp.ts` (webhook) → **services/api**
 - `src/chat.ts` + consumidor novo → **services/worker**
 
+## Split implementado (Fase 5)
+
+Decisão pragmática: o split **funcional** foi feito por **entrypoints** que
+reusam o `src/` (menos risco que mover tudo para `packages/`). O layout de
+monorepo acima fica como **refactor opcional** futuro.
+
+- `src/server.ts` — **api**: webhook (enfileira no SQS) + /admin + /api/chat + /health.
+- `src/worker.ts` — **worker**: consome a fila e processa (`processarMensagemWhatsApp`).
+- `src/jobs.ts` — **jobs**: entrypoint dos 3 jobs (`node dist/jobs.js <job>`).
+- `src/queue.ts` — produtor/consumidor SQS FIFO (grupo por conversa, dedupe por msg id).
+- Webhook: com `SQS_QUEUE_URL` a api **enfileira**; sem fila (dev) processa inline.
+- `Dockerfile.api` / `Dockerfile.worker` — imagens dos dois serviços.
+- Chat web (`/api/chat`) é síncrono → continua na api (não passa pela fila).
+
 ## Plano de implementação (fases)
 
 **Fase 0 — Infra base (aqui):** rede (VPC/subnets/NAT). Passo 1.

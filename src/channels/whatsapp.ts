@@ -3,6 +3,7 @@ import type { BaseMessage } from "@langchain/core/messages";
 import { AIMessage } from "@langchain/core/messages";
 import { processarMensagem } from "../chat.js";
 import { transcreverAudioWA } from "../transcribe.js";
+import { filaConfigurada, enfileirar } from "../queue.js";
 import { toWhatsAppPayloads, formatar } from "./payloads.js";
 
 export { toWhatsAppPayloads } from "./payloads.js";
@@ -18,7 +19,7 @@ const API_VERSION = () => process.env.WA_API_VERSION ?? "v23.0";
 
 // ── Recebimento: formato Meta → interno ─────────────────────────────────────
 
-interface MensagemRecebida {
+export interface MensagemRecebida {
   id: string;
   from: string;   // wa_id, ex: "5521999990000"
   texto?: string;
@@ -163,6 +164,25 @@ function jaProcessado(id: string): boolean {
   return false;
 }
 
+// Processa UMA mensagem do WhatsApp: transcreve (se áudio), roda o grafo e
+// responde via Graph API. Usado pelo worker (consumindo a fila) e, em dev sem
+// fila, direto no webhook.
+export async function processarMensagemWhatsApp(msg: MensagemRecebida): Promise<void> {
+  let texto = msg.texto;
+  if (msg.audioId) {
+    texto = await transcreverAudioWA(msg.audioId, process.env.WA_ACCESS_TOKEN);
+    if (!texto) {
+      await enviarWhatsApp(msg.from, [
+        new AIMessage("Desculpe, não consegui entender o áudio. Pode escrever ou enviar novamente? 🎤"),
+      ]);
+      return;
+    }
+  }
+  if (texto == null) return;
+  const { newMessages } = await processarMensagem(`wa:${msg.from}`, texto, "whatsapp");
+  await enviarWhatsApp(msg.from, newMessages);
+}
+
 export async function whatsappRoutes(app: FastifyInstance) {
   app.get("/webhook/whatsapp", async (req, reply) => {
     const q = req.query as Record<string, string>;
@@ -191,20 +211,13 @@ export async function whatsappRoutes(app: FastifyInstance) {
     (async () => {
       for (const msg of extrairMensagens(req.body)) {
         if (jaProcessado(msg.id)) continue;
-        let texto = msg.texto;
-        // mensagem de voz → transcreve (AWS Transcribe) e usa como texto
-        if (msg.audioId) {
-          texto = await transcreverAudioWA(msg.audioId, process.env.WA_ACCESS_TOKEN);
-          if (!texto) {
-            await enviarWhatsApp(msg.from, [
-              new AIMessage("Desculpe, não consegui entender o áudio. Pode escrever ou enviar novamente? 🎤"),
-            ]);
-            continue;
-          }
+        // com fila (produção): a api só enfileira; o worker processa.
+        // sem fila (dev): processa inline aqui mesmo.
+        if (filaConfigurada()) {
+          await enfileirar(msg);
+        } else {
+          await processarMensagemWhatsApp(msg);
         }
-        if (texto == null) continue;
-        const { newMessages } = await processarMensagem(`wa:${msg.from}`, texto, "whatsapp");
-        await enviarWhatsApp(msg.from, newMessages);
       }
     })().catch((err) => console.error("[whatsapp] erro no processamento:", err));
   });

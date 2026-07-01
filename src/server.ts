@@ -24,6 +24,7 @@ import { assistidosFlowRoutes } from "./routes/assistidos.js";
 import { fichaRoutes } from "./routes/ficha.js";
 import { kycRoutes } from "./routes/kyc.js";
 import { processosRoutes } from "./routes/processos.js";
+import { filaConfigurada } from "./queue.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = Fastify();
@@ -65,16 +66,18 @@ await app.register(fichaRoutes);
 await app.register(kycRoutes);
 await app.register(processosRoutes);
 
-// retry de envios à DPERJ que falharam (fila local em data/fila-envios.db)
-setInterval(() => processarFila().catch(console.error), 5 * 60 * 1000).unref();
+// Jobs de fundo (retry DPERJ, limpeza, health do token): na arquitetura v2 são
+// disparados pelo EventBridge (ver src/jobs.ts). Em modo dev/monolito (sem fila)
+// rodam aqui via setInterval, como antes.
+if (!filaConfigurada()) {
+  setInterval(() => processarFila().catch(console.error), 5 * 60 * 1000).unref();
 
-// expira o estado de conversas inativas (1x ao subir + a cada 24h)
-limparConversasInativas().catch(console.error);
-setInterval(() => limparConversasInativas().catch(console.error), 24 * 60 * 60 * 1000).unref();
+  limparConversasInativas().catch(console.error);
+  setInterval(() => limparConversasInativas().catch(console.error), 24 * 60 * 60 * 1000).unref();
 
-// avisa nos logs se o token do WhatsApp estiver morto (boot + a cada 6h)
-avisarSeTokenMorto().catch(console.error);
-setInterval(() => avisarSeTokenMorto().catch(console.error), 6 * 60 * 60 * 1000).unref();
+  avisarSeTokenMorto().catch(console.error);
+  setInterval(() => avisarSeTokenMorto().catch(console.error), 6 * 60 * 60 * 1000).unref();
+}
 
 // valida o fluxo ativo no boot e loga problemas (não bloqueia o subir)
 (async () => {
