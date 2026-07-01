@@ -27,10 +27,14 @@ O RDS é **dedicado a esta aplicação**, então vive na VPC nova (privado), com
 - `iam.tf` — execution role (ECR/logs/secrets) + task role (Bedrock/Transcribe/S3/SQS/Secrets).
 - `ecs.tf` — cluster, SG das tasks, task defs api/worker, serviços, autoscaling (CPU + profundidade da fila no worker).
 
+## Fase 3 (feita)
+- `eventbridge.tf` — 3 jobs agendados (retry DPERJ 5min, limpeza diária, health 6h)
+  como tasks Fargate pontuais (RunTask) reusando a imagem do worker com o comando
+  sobrescrito (`node dist/jobs.js <job>`). IAM p/ o EventBridge rodar ECS.
+
 ## Próximos módulos (a criar, por fase)
 | Fase | Arquivo | Recursos |
 |---|---|---|
-| 3 | `eventbridge.tf` | schedules (retry DPERJ, limpeza, health) |
 | 4 | `observability.tf` | alarmes CloudWatch + dashboards + VPC endpoints |
 
 ## Uso
