@@ -39,3 +39,34 @@ variable "private_subnet_cidrs" {
   default     = ["10.20.10.0/24", "10.20.11.0/24"]
   description = "CIDRs das sub-redes privadas (Fargate, RDS Proxy)."
 }
+
+# ── Banco (RDS) ───────────────────────────────────────────────────────────────
+variable "db_name" {
+  type        = string
+  default     = "mariachat"
+  description = "Nome do banco."
+}
+
+variable "db_username" {
+  type        = string
+  default     = "maria"
+  description = "Usuário master do RDS."
+}
+
+variable "db_instance_class" {
+  type        = string
+  default     = "db.t3.small"
+  description = "Classe da instância RDS."
+}
+
+variable "db_engine_version" {
+  type        = string
+  default     = "16"
+  description = "Versão do PostgreSQL."
+}
+
+variable "db_allocated_storage" {
+  type        = number
+  default     = 20
+  description = "Armazenamento inicial (GB)."
+}
