@@ -151,3 +151,9 @@ variable "s3_bucket" {
   default     = "maria-ia"
   description = "Bucket S3 de fichas/áudios (efêmeros)."
 }
+
+variable "alarm_email" {
+  type        = string
+  default     = ""
+  description = "E-mail para receber alarmes (SNS). Vazio = sem inscrição."
+}

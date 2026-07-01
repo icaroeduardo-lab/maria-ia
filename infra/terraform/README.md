@@ -32,10 +32,15 @@ O RDS é **dedicado a esta aplicação**, então vive na VPC nova (privado), com
   como tasks Fargate pontuais (RunTask) reusando a imagem do worker com o comando
   sobrescrito (`node dist/jobs.js <job>`). IAM p/ o EventBridge rodar ECS.
 
-## Próximos módulos (a criar, por fase)
-| Fase | Arquivo | Recursos |
-|---|---|---|
-| 4 | `observability.tf` | alarmes CloudWatch + dashboards + VPC endpoints |
+## Fase 4 (feita)
+- `observability.tf` — SNS (e-mail opcional), alarmes (DLQ não-vazia, fila atrasada,
+  ALB 5xx, api unhealthy) e dashboard CloudWatch (fila, CPU, ALB).
+- `vpc_endpoints.tf` — S3 gateway (grátis) + interface endpoints (ECR, logs,
+  secrets, sqs, bedrock, transcribe) → tira o tráfego AWS do NAT.
+
+## Fase 5 — código (fora do Terraform)
+Extrair `packages/core`/`db`, montar `services/api` e `services/worker`, criar
+`dist/jobs.js` (entrypoint dos jobs), Dockerfiles e o split webhook→SQS→worker.
 
 ## Uso
 
