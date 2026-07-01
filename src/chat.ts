@@ -1,9 +1,45 @@
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
-import { graph as graphEstatico } from "./graph.js";
+import { graph as graphEstatico, checkpointer } from "./graph.js";
 import { graphDoFlow, subfluxosReferenciados } from "./engine/builder.js";
 import { prisma } from "./db.js";
 import { montarMetadados, gerarResumoTexto } from "./resumo.js";
+
+// Comando do usuário para reiniciar a conversa do zero (qualquer canal).
+const COMANDO_REINICIAR = "#sair";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// primeiro nome do assistido (do cadastro via CPF ou do campo nome), se houver
+function primeiroNome(dados?: Record<string, unknown>): string | null {
+  if (!dados) return null;
+  const rc = dados.resultado_cpf;
+  const parsed = typeof rc === "string" ? (() => { try { return JSON.parse(rc); } catch { return null; } })() : rc;
+  const nome =
+    (parsed as { dados?: { nome?: string } } | null)?.dados?.nome ??
+    (typeof dados.nome === "string" ? dados.nome : null);
+  return nome ? String(nome).trim().split(/\s+/)[0] : null;
+}
+
+// Invoca o grafo com 1 retry para erros transitórios (Bedrock throttling, rede).
+async function invokeComRetry(
+  graph: typeof graphEstatico,
+  input: Parameters<typeof graphEstatico.invoke>[0],
+  config: Parameters<typeof graphEstatico.invoke>[1],
+  tentativas = 2
+) {
+  let ultimoErro: unknown;
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      return await graph.invoke(input, config);
+    } catch (err) {
+      ultimoErro = err;
+      console.error(`[chat] invoke falhou (tentativa ${i + 1}/${tentativas}):`, err);
+      if (i < tentativas - 1) await sleep(800);
+    }
+  }
+  throw ultimoErro;
+}
 
 // Grafo a usar: flow ativo (compilado dinamicamente, com cache) ou o grafo
 // estático padrão. Troca de flow ativo afeta conversas novas.
@@ -32,19 +68,71 @@ export async function processarMensagem(
   const { graph, flowId } = await obterGraph();
   const config = { configurable: { thread_id: sessionId } };
 
+  // comando #sair: reinicia a conversa — apaga o checkpoint do thread.
+  // A próxima mensagem começa do zero (saudação). Funciona em web e WhatsApp.
+  if (message && message.trim().toLowerCase() === COMANDO_REINICIAR) {
+    await checkpointer.deleteThread(sessionId).catch((err) =>
+      console.error("[chat] falha ao reiniciar thread:", err)
+    );
+    const aviso = new AIMessage(
+      "Conversa reiniciada. 🔄 Quando quiser, é só mandar uma mensagem que começamos de novo."
+    );
+    return { result: null, newMessages: [aviso] };
+  }
+
   const prevState = await graph.getState(config);
-  const prevLen = (prevState.values?.messages as unknown[])?.length ?? 0;
+  let prevLen = (prevState.values?.messages as unknown[])?.length ?? 0;
+
+  // conversa anterior já encerrou (chegou ao __end__ → sem próximo nó): apaga o
+  // checkpoint e recomeça do zero. Sem isso, uma nova mensagem tentaria resumir
+  // um grafo terminado (invoke(null) não produz nada) — só #sair destravava.
+  if (prevLen > 0 && (prevState.next?.length ?? 0) === 0) {
+    await checkpointer.deleteThread(sessionId).catch((err) =>
+      console.error("[chat] falha ao reiniciar thread encerrado:", err)
+    );
+    prevLen = 0;
+  }
+
   const isResuming = prevLen > 0;
+
+  // "bem-vindo de volta": se o assistido retoma uma conversa em andamento depois
+  // de um intervalo (default 60min), saúda antes de repetir a pergunta pendente.
+  const ultimaAtividade = prevState.createdAt ? new Date(prevState.createdAt).getTime() : 0;
+  const gapMs = Date.now() - ultimaAtividade;
+  const RETOMADA_MS = Number(process.env.RETOMADA_MIN ?? 60) * 60 * 1000;
+  const retomandoAposPausa = isResuming && ultimaAtividade > 0 && gapMs > RETOMADA_MS;
 
   if (isResuming && message) {
     await graph.updateState(config, { messages: [new HumanMessage(message)] });
   }
 
-  const result = await graph.invoke(isResuming ? null : { canal }, config);
+  // invoke com 1 retry para blips transitórios (ex: Bedrock throttling). Se falhar
+  // de vez, devolve um fallback amigável — o assistido nunca fica no escuro e o
+  // estado fica intacto (LangGraph não commita super-step que lançou erro → pode
+  // reenviar a mesma mensagem).
+  let result;
+  try {
+    // retry só no resume (invoke(null) idempotente); fresh não re-invoca (input
+    // não-nulo em thread existente reiniciaria o grafo — padrão crítico)
+    result = await invokeComRetry(graph, isResuming ? null : { canal }, config, isResuming ? 2 : 1);
+  } catch (err) {
+    console.error("[chat] erro ao processar mensagem:", err);
+    const fallback = new AIMessage(
+      "Tive um probleminha técnico agora 😔. Pode me mandar a mensagem de novo? Já volto a te ajudar."
+    );
+    return { result: null, newMessages: [fallback] };
+  }
 
   const newMessages = (result.messages as BaseMessage[])
     .slice(prevLen)
     .filter((m) => m.getType() !== "human");
+
+  // antepõe a saudação de retomada (com o nome, se conhecido)
+  if (retomandoAposPausa) {
+    const nome = primeiroNome(result.dadosColetados as Record<string, unknown>);
+    const ola = nome ? `Que bom te ver de novo, ${nome}! 😊` : "Que bom te ver de novo! 😊";
+    newMessages.unshift(new AIMessage(`${ola} Vamos continuar de onde paramos.`));
+  }
 
   await rastrearConversa(sessionId, canal, flowId, graph, config).catch((err) =>
     console.error("[tracking] falha ao registrar conversa:", err)

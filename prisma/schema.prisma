@@ -17,6 +17,17 @@ model Flow {
   updatedAt DateTime @updatedAt
 }
 
+// Fila de retry de envios à DPERJ que falharam (antes em SQLite local efêmero).
+model DperjFila {
+  id         String   @id @default(cuid())
+  payload    Json
+  tentativas Int      @default(0)
+  ultimoErro String?
+  criadoEm   DateTime @default(now())
+
+  @@index([criadoEm])
+}
+
 model Conversation {
   id             String    @id @default(cuid())
   sessionId      String    @unique

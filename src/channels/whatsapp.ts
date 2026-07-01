@@ -1,8 +1,11 @@
 import type { FastifyInstance } from "fastify";
-import type { BaseMessage, MessageContent } from "@langchain/core/messages";
+import type { BaseMessage } from "@langchain/core/messages";
 import { AIMessage } from "@langchain/core/messages";
 import { processarMensagem } from "../chat.js";
 import { transcreverAudioWA } from "../transcribe.js";
+import { toWhatsAppPayloads, formatar } from "./payloads.js";
+
+export { toWhatsAppPayloads } from "./payloads.js";
 
 // Canal WhatsApp Business Cloud API (Meta).
 // GET  /webhook/whatsapp → verificação do webhook (challenge)
@@ -66,98 +69,80 @@ function textoDaMensagem(msg: Record<string, unknown>): string | null {
   }
 }
 
-// ── Envio: content blocks internos → payloads Meta ──────────────────────────
+// ── Envio: content blocks internos → payloads Meta (em ./payloads.js) ────────
 
-type Bloco = {
-  type: string;
-  text?: string;
-  image_url?: { url: string };
-  options?: string[];
-};
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// fallback: imagem por link é baixada async pela Meta → entrega depois do texto
+// e quebra a ordem. Quando não dá pra usar media-id, espera após a imagem.
+const DELAY_POS_IMAGEM_MS = 1200;
 
-// WhatsApp usa *negrito* com um asterisco; markdown interno usa **
-const formatar = (t: string) => t.replace(/\*\*/g, "*");
-const truncar = (t: string, n: number) => (t.length <= n ? t : t.slice(0, n - 1) + "…");
+// cache de media-id por URL (imagens fixas — saudação etc — sobem 1x só)
+const mediaIdCache = new Map<string, string>();
 
-export function toWhatsAppPayloads(to: string, content: MessageContent): object[] {
-  const base = { messaging_product: "whatsapp", to };
-  const payloads: object[] = [];
-  let textoPendente = "";
-
-  const flushTexto = () => {
-    if (!textoPendente) return;
-    payloads.push({ ...base, type: "text", text: { body: formatar(textoPendente) } });
-    textoPendente = "";
-  };
-
-  const blocos: Bloco[] = typeof content === "string" ? [{ type: "text", text: content }] : (content as Bloco[]);
-
-  for (const b of blocos) {
-    if (b.type === "text" && b.text) {
-      textoPendente += (textoPendente ? "\n\n" : "") + b.text;
-    } else if (b.type === "image_url" && b.image_url?.url) {
-      flushTexto();
-      payloads.push({ ...base, type: "image", image: { link: b.image_url.url } });
-    } else if (b.type === "boolean") {
-      // botão Sim/Não — corpo é o texto acumulado (interactive exige body)
-      payloads.push({
-        ...base,
-        type: "interactive",
-        interactive: {
-          type: "button",
-          body: { text: formatar(textoPendente || "Confirma?") },
-          action: {
-            buttons: [
-              { type: "reply", reply: { id: "true", title: "Sim" } },
-              { type: "reply", reply: { id: "false", title: "Não" } },
-            ],
-          },
-        },
-      });
-      textoPendente = "";
-    } else if (b.type === "options" && b.options?.length) {
-      payloads.push({
-        ...base,
-        type: "interactive",
-        interactive: {
-          type: "list",
-          body: { text: formatar(textoPendente || "Escolha uma opção:") },
-          action: {
-            button: "Escolher",
-            // id carrega o texto completo da opção (title é limitado a 24 chars)
-            sections: [{ title: "Opções", rows: b.options.slice(0, 10).map((o) => ({ id: o, title: truncar(o, 24) })) }],
-          },
-        },
-      });
-      textoPendente = "";
-    }
+// Sobe a imagem pra Media API e devolve o media-id (entrega determinística, sem
+// download async como no link). Só jpeg/png; outros formatos → null (usa link).
+async function uploadMedia(linkUrl: string, phoneNumberId: string, token: string): Promise<string | null> {
+  const cached = mediaIdCache.get(linkUrl);
+  if (cached) return cached;
+  try {
+    const img = await fetch(linkUrl, { signal: AbortSignal.timeout(15_000) });
+    if (!img.ok) return null;
+    const tipo = img.headers.get("content-type") ?? "image/jpeg";
+    if (!/^image\/(jpeg|png)$/.test(tipo)) return null; // webp/etc não dá upload de imagem
+    const blob = await img.blob();
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("type", tipo);
+    form.append("file", blob, "imagem");
+    const res = await fetch(`${GRAPH_URL()}/${API_VERSION()}/${phoneNumberId}/media`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) return null;
+    const id = ((await res.json()) as { id?: string }).id ?? null;
+    if (id) mediaIdCache.set(linkUrl, id);
+    return id;
+  } catch {
+    return null;
   }
-  flushTexto();
-  return payloads;
 }
 
 export async function enviarWhatsApp(to: string, messages: BaseMessage[]): Promise<void> {
   const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
   const accessToken = process.env.WA_ACCESS_TOKEN;
-  for (const msg of messages) {
-    for (const payload of toWhatsAppPayloads(to, msg.content)) {
-      if (!accessToken) {
-        console.log("[whatsapp] dev (sem WA_ACCESS_TOKEN) — payload:", JSON.stringify(payload));
-        continue;
-      }
-      const url = `${GRAPH_URL()}/${API_VERSION()}/${phoneNumberId}/messages`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(15_000),
-      });
-      if (!res.ok) {
-        console.error(`[whatsapp] envio falhou HTTP ${res.status}:`, await res.text());
-      }
+  const payloads = messages.flatMap((msg) => toWhatsAppPayloads(to, msg.content));
+  for (let i = 0; i < payloads.length; i++) {
+    const payload = payloads[i] as { type?: string; image?: { link?: string; id?: string } };
+    if (!accessToken) {
+      console.log("[whatsapp] dev (sem WA_ACCESS_TOKEN) — payload:", JSON.stringify(payload));
+      continue;
+    }
+
+    // imagem: tenta media-id (ordem determinística); se falhar, mantém o link
+    let usouLink = false;
+    if (payload.type === "image" && payload.image?.link && phoneNumberId) {
+      const mediaId = await uploadMedia(payload.image.link, phoneNumberId, accessToken);
+      if (mediaId) payload.image = { id: mediaId };
+      else usouLink = true;
+    }
+
+    const url = `${GRAPH_URL()}/${API_VERSION()}/${phoneNumberId}/messages`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      console.error(`[whatsapp] envio falhou HTTP ${res.status}:`, await res.text());
+    } else if (payload.type === "image" && usouLink && i < payloads.length - 1) {
+      // só espera quando caiu no fallback de link (media-id já entrega em ordem)
+      await sleep(DELAY_POS_IMAGEM_MS);
     }
   }
 }
@@ -189,6 +174,19 @@ export async function whatsappRoutes(app: FastifyInstance) {
 
   app.post("/webhook/whatsapp", async (req, reply) => {
     reply.code(200).send(); // Meta exige 200 rápido; processamento segue async
+
+    // statuses de entrega da Meta: loga só falhas (erro + motivo) — sem spam de sent/delivered/read
+    try {
+      type Status = { status?: string; recipient_id?: string; errors?: { code?: number; title?: string }[] };
+      const body = req.body as { entry?: { changes?: { value?: { statuses?: Status[] } }[] }[] };
+      for (const entry of body.entry ?? [])
+        for (const change of entry.changes ?? [])
+          for (const st of change.value?.statuses ?? [])
+            if (st.status === "failed") {
+              const e = st.errors?.[0];
+              console.error(`[whatsapp] entrega falhou para ${st.recipient_id}: ${e?.code} ${e?.title}`);
+            }
+    } catch { /* ignora */ }
 
     (async () => {
       for (const msg of extrairMensagens(req.body)) {

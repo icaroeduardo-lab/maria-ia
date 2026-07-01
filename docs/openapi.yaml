@@ -1,0 +1,418 @@
+openapi: 3.0.3
+info:
+  title: Maria Chat API
+  version: "1.0.0"
+  description: >
+    API do backend do Maria Chat (atendimento jurídico da DPERJ).
+    Grupos: webhook do WhatsApp, chat público, autenticação, painel admin
+    (prefixo /admin, JWT), rotas internas do fluxo (/api/*, chamadas pelo engine)
+    e mocks de teste (/mock/*). Rotas do painel exigem Bearer JWT; mutações
+    exigem papel admin.
+servers:
+  - url: https://maria-backend-production.up.railway.app
+    description: Produção (Railway)
+  - url: http://localhost:3000
+    description: Local
+
+tags:
+  - name: Webhook
+  - name: Chat
+  - name: Auth
+  - name: Admin — Flows
+  - name: Admin — Conversations
+  - name: Admin — Assistidos
+  - name: Admin — Config/Users/Analytics/Audit
+  - name: Interno (fluxo)
+  - name: Mock
+  - name: Infra
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Erro:
+      type: object
+      properties:
+        erro: { type: string }
+    LoginReq:
+      type: object
+      required: [email, senha]
+      properties:
+        email: { type: string, format: email }
+        senha: { type: string }
+    LoginResp:
+      type: object
+      properties:
+        token: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        nome: { type: string }
+        role: { type: string, enum: [admin, viewer] }
+    ChatReq:
+      type: object
+      required: [sessionId]
+      properties:
+        sessionId: { type: string }
+        message: { type: string }
+    ChatResp:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role: { type: string }
+              content: {}
+        lgpdAceito: { type: boolean }
+    Flow:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        nodes: { type: array, items: { type: object } }
+        edges: { type: array, items: { type: object } }
+        active: { type: boolean }
+    ProcessosConsultaReq:
+      type: object
+      required: [cpf]
+      properties:
+        cpf: { type: string, description: "CPF só dígitos" }
+    ProcessosConsultaResp:
+      type: object
+      properties:
+        tem_processo: { type: boolean }
+        processos:
+          type: array
+          items:
+            type: object
+            properties:
+              numero: { type: string }
+              assunto: { type: string }
+              ativo: { type: boolean }
+        lista: { type: string }
+    ResumoReq:
+      type: object
+      properties:
+        processo_sel: { type: string, description: "número completo ou índice (1,2,...)" }
+        numero: { type: string }
+        processos: { type: string, description: "JSON da consulta anterior (para mapear índice)" }
+    ResumoResp:
+      type: object
+      properties:
+        resumo: { type: string }
+        numero: { type: string }
+    CasosConsultaResp:
+      type: object
+      properties:
+        tem_casos: { type: boolean }
+        casos:
+          type: array
+          items:
+            type: object
+            properties:
+              identificador: { type: string }
+              tipo: { type: string }
+        lista: { type: string }
+    CpfReq:
+      type: object
+      required: [cpf]
+      properties:
+        cpf: { type: string }
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ── Webhook ────────────────────────────────────────────────
+  /webhook/whatsapp:
+    get:
+      tags: [Webhook]
+      summary: Verificação do webhook (challenge da Meta)
+      security: []
+      parameters:
+        - { in: query, name: "hub.mode", schema: { type: string } }
+        - { in: query, name: "hub.verify_token", schema: { type: string } }
+        - { in: query, name: "hub.challenge", schema: { type: string } }
+      responses:
+        "200": { description: Retorna o challenge }
+        "403": { description: Token inválido }
+    post:
+      tags: [Webhook]
+      summary: Recebe mensagens do WhatsApp (responde 200 imediato, processa async)
+      security: []
+      responses:
+        "200": { description: Aceito }
+
+  # ── Chat público ───────────────────────────────────────────
+  /api/chat:
+    post:
+      tags: [Chat]
+      summary: Envia mensagem (canal web)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChatReq' }
+      responses:
+        "200":
+          description: Respostas da Maria
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatResp' }
+
+  # ── Auth ───────────────────────────────────────────────────
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login (JWT 8h)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginReq' }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResp' }
+        "401": { description: Credenciais inválidas }
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Dados do usuário autenticado
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+
+  # ── Admin: Flows ───────────────────────────────────────────
+  /admin/flows:
+    get:
+      tags: [Admin — Flows]
+      summary: Lista fluxos
+      responses: { "200": { description: OK } }
+    post:
+      tags: [Admin — Flows]
+      summary: Cria fluxo (admin)
+      responses: { "200": { description: Criado } }
+  /admin/flows/{id}:
+    parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+    get:
+      tags: [Admin — Flows]
+      summary: Detalha fluxo
+      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/Flow' } } } }, "404": { description: Não encontrado } }
+    put:
+      tags: [Admin — Flows]
+      summary: Atualiza fluxo (admin)
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [Admin — Flows]
+      summary: Remove fluxo (admin)
+      responses: { "200": { description: OK } }
+  /admin/flows/{id}/validar:
+    get:
+      tags: [Admin — Flows]
+      summary: Valida fluxo (estrutura + compilação)
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { "200": { description: "{ ok, erros[] }" } }
+  /admin/flows/{id}/activate:
+    post:
+      tags: [Admin — Flows]
+      summary: Ativa fluxo (desativa os demais) (admin)
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK } }
+  /admin/flows/{id}/deactivate:
+    post:
+      tags: [Admin — Flows]
+      summary: Desativa fluxo (admin)
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK } }
+
+  # ── Admin: Conversations ───────────────────────────────────
+  /admin/conversations:
+    get:
+      tags: [Admin — Conversations]
+      summary: Lista conversas (filtros status/categoria/channel, paginado)
+      parameters:
+        - { in: query, name: status, schema: { type: string } }
+        - { in: query, name: categoria, schema: { type: string } }
+        - { in: query, name: channel, schema: { type: string } }
+        - { in: query, name: page, schema: { type: integer } }
+      responses: { "200": { description: "{ total, page, itens[] }" } }
+  /admin/conversations/{sessionId}:
+    get:
+      tags: [Admin — Conversations]
+      summary: Detalha conversa (assistido mascarado nos metadados)
+      parameters: [{ in: path, name: sessionId, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK }, "404": { description: Não encontrada } }
+  /admin/conversations/{sessionId}/historico:
+    get:
+      tags: [Admin — Conversations]
+      summary: Histórico do chat (lê o checkpoint)
+      parameters: [{ in: path, name: sessionId, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK } }
+  /admin/conversations/{sessionId}/revelar:
+    post:
+      tags: [Admin — Conversations]
+      summary: Revela PII do assistido (admin, auditado)
+      parameters: [{ in: path, name: sessionId, required: true, schema: { type: string } }]
+      responses: { "200": { description: "{ assistido }" } }
+
+  # ── Admin: Assistidos ──────────────────────────────────────
+  /admin/assistidos:
+    get:
+      tags: [Admin — Assistidos]
+      summary: Lista assistidos (mascarados)
+      responses: { "200": { description: OK } }
+    post:
+      tags: [Admin — Assistidos]
+      summary: Cria assistido (admin)
+      responses: { "200": { description: OK } }
+  /admin/assistidos/{id}:
+    parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+    get:
+      tags: [Admin — Assistidos]
+      summary: Detalha assistido (admin, dados completos + auditoria)
+      responses: { "200": { description: OK } }
+    put:
+      tags: [Admin — Assistidos]
+      summary: Atualiza assistido (admin)
+      responses: { "200": { description: OK } }
+    delete:
+      tags: [Admin — Assistidos]
+      summary: Remove assistido (admin)
+      responses: { "200": { description: OK } }
+
+  # ── Admin: Config/Users/Analytics/Audit ────────────────────
+  /admin/config:
+    get:
+      tags: [Admin — Config/Users/Analytics/Audit]
+      summary: Lê config global (estilo + conversacional)
+      responses: { "200": { description: OK } }
+    put:
+      tags: [Admin — Config/Users/Analytics/Audit]
+      summary: Atualiza config global (admin)
+      responses: { "200": { description: OK } }
+  /admin/users:
+    get:
+      tags: [Admin — Config/Users/Analytics/Audit]
+      summary: Lista usuários
+      responses: { "200": { description: OK } }
+    post:
+      tags: [Admin — Config/Users/Analytics/Audit]
+      summary: Cria usuário (admin)
+      responses: { "200": { description: OK } }
+  /admin/analytics/summary:
+    get:
+      tags: [Admin — Config/Users/Analytics/Audit]
+      summary: Métricas agregadas
+      responses: { "200": { description: OK } }
+  /admin/audit:
+    get:
+      tags: [Admin — Config/Users/Analytics/Audit]
+      summary: Log de auditoria (admin) — quem revelou PII
+      responses: { "200": { description: OK } }
+  /admin/test-chat:
+    post:
+      tags: [Admin — Config/Users/Analytics/Audit]
+      summary: Chat de teste no painel (retorna resumo + metadados)
+      responses: { "200": { description: OK } }
+
+  # ── Interno (fluxo) — chamado pelo engine ──────────────────
+  /api/assistidos/consultar:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Consulta assistido por CPF
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CpfReq' } } } }
+      responses: { "200": { description: "{ encontrado, assistido }" } }
+  /api/assistidos/cadastrar:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Cadastra assistido
+      security: []
+      responses: { "200": { description: OK } }
+  /api/assistidos/atualizar:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Atualiza assistido
+      security: []
+      responses: { "200": { description: OK } }
+  /api/casos/consultar:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Casos em aberto do assistido (tabela Caso)
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CpfReq' } } } }
+      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/CasosConsultaResp' } } } } }
+  /api/processos/consultar:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Processos do assistido no PDPJ (por CPF)
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ProcessosConsultaReq' } } } }
+      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/ProcessosConsultaResp' } } } } }
+  /api/processos/resumo:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Resumo do status de um processo (IA, linguagem simples)
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ResumoReq' } } } }
+      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/ResumoResp' } } } } }
+  /api/ficha:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Gera imagem da ficha do assistido (S3, efêmera)
+      security: []
+      responses: { "200": { description: "{ url }" } }
+  /api/kyc/iniciar:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Inicia KYC (gera link)
+      security: []
+      responses: { "200": { description: OK } }
+  /api/kyc/captura:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Recebe selfie e verifica identidade
+      security: []
+      responses: { "200": { description: "{ confirmado, score }" } }
+  /api/kyc/status:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Status do KYC
+      security: []
+      responses: { "200": { description: OK } }
+
+  # ── Mock (teste) ───────────────────────────────────────────
+  /mock/verificar-cpf:
+    post: { tags: [Mock], security: [], summary: Mock consulta CPF, responses: { "200": { description: OK } } }
+  /mock/cadastrar-usuario:
+    post: { tags: [Mock], security: [], summary: Mock cadastro, responses: { "200": { description: OK } } }
+  /mock/kyc:
+    post: { tags: [Mock], security: [], summary: Mock reconhecimento facial, responses: { "200": { description: OK } } }
+  /mock/agendamento:
+    post: { tags: [Mock], security: [], summary: Mock agendamento, responses: { "200": { description: OK } } }
+  /mock/processos:
+    post: { tags: [Mock], security: [], summary: Mock processos por CPF (legado), responses: { "200": { description: OK } } }
+
+  # ── Infra ──────────────────────────────────────────────────
+  /health:
+    get:
+      tags: [Infra]
+      summary: Healthcheck (db + token WhatsApp)
+      security: []
+      responses:
+        "200": { description: "{ ok, db, whatsappToken }" }
+        "503": { description: Degradado }

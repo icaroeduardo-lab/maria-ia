@@ -82,14 +82,14 @@ async function gerarFicha(body: Record<string, unknown>): Promise<Buffer> {
     .map(([k, v], i) => {
       const y = y0 + i * passo;
       return (
-        `<text x="${x0}" y="${y}" font-family="Arial, sans-serif" font-size="${fLabel}" fill="#3f7a5a">${escapar(k)}</text>` +
-        `<text x="${x0}" y="${y + fValor + 4}" font-family="Arial, sans-serif" font-size="${fValor}" font-weight="bold" fill="#14532d">${escapar(v)}</text>`
+        `<text x="${x0}" y="${y}" font-family="DejaVu Sans, Arial, sans-serif" font-size="${fLabel}" fill="#3f7a5a">${escapar(k)}</text>` +
+        `<text x="${x0}" y="${y + fValor + 4}" font-family="DejaVu Sans, Arial, sans-serif" font-size="${fValor}" font-weight="bold" fill="#14532d">${escapar(v)}</text>`
       );
     })
     .join("");
 
   const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-    <text x="${x0}" y="${tituloY}" font-family="Arial, sans-serif" font-size="${Math.round(H * 0.03)}" font-weight="bold" fill="#14532d">DADOS DO ASSISTIDO</text>
+    <text x="${x0}" y="${tituloY}" font-family="DejaVu Sans, Arial, sans-serif" font-size="${Math.round(H * 0.03)}" font-weight="bold" fill="#14532d">DADOS DO ASSISTIDO</text>
     ${textos}
   </svg>`;
 

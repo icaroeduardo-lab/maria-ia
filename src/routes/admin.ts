@@ -4,7 +4,8 @@ import type { BaseMessage } from "@langchain/core/messages";
 import { HumanMessage } from "@langchain/core/messages";
 import { prisma } from "../db.js";
 import { autenticar, exigirAdmin } from "./auth.js";
-import { graphDoFlow, graphEstatico, subfluxosReferenciados } from "../engine/builder.js";
+import { graphDoFlow, graphEstatico, subfluxosReferenciados, type FlowNode, type FlowEdge } from "../engine/builder.js";
+import { validarFlow } from "../engine/validar.js";
 import { ESTILO_DEFAULT, invalidarEstilo } from "../config.js";
 import { montarMetadados, gerarResumoTexto, type Metadados } from "../resumo.js";
 import { mascararAssistido } from "../mask.js";
@@ -39,6 +40,39 @@ export async function adminRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const flow = await db.flow.findUnique({ where: { id } });
     return flow ?? reply.code(404).send({ erro: "fluxo não encontrado" });
+  });
+
+  // valida um fluxo (estrutural + tentativa de compilar) antes/depois de salvar
+  app.get("/flows/:id/validar", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const flow = await db.flow.findUnique({ where: { id } });
+    if (!flow) return reply.code(404).send({ erro: "fluxo não encontrado" });
+
+    const nodes = (flow.nodes ?? []) as unknown as FlowNode[];
+    const edges = (flow.edges ?? []) as unknown as FlowEdge[];
+    const r = validarFlow(nodes, edges);
+
+    // subfluxos referenciados precisam existir
+    const refs = subfluxosReferenciados(nodes);
+    if (refs.length) {
+      const existentes = new Set(
+        (await db.flow.findMany({ where: { id: { in: refs } }, select: { id: true } })).map((f) => f.id)
+      );
+      for (const ref of refs) {
+        if (!existentes.has(ref)) { r.erros.push(`subfluxo referenciado não existe: ${ref}`); r.ok = false; }
+      }
+    }
+
+    // tentativa real de compilar (pega erros que a checagem estrutural não vê)
+    try {
+      const subflows = refs.length ? await db.flow.findMany({ where: { id: { in: refs } } }) : [];
+      graphDoFlow(flow, subflows);
+    } catch (err) {
+      r.erros.push(`falha ao compilar: ${String(err).slice(0, 200)}`);
+      r.ok = false;
+    }
+
+    return r;
   });
 
   app.post("/flows", { preHandler: [exigirAdmin] }, async (req, reply) => {
