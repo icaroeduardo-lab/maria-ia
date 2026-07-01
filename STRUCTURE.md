@@ -43,5 +43,6 @@ O código atual em `src/` migra assim:
 ## Decisões (resumo)
 - **Terraform** (não CloudFormation): módulos, `plan`, ecossistema. State remoto S3+lock.
 - **SQS FIFO** com `MessageGroupId = sessionId` → ordem por conversa, sem concorrência.
-- **RDS mantido** (Postgres) atrás de **RDS Proxy** (pooling p/ muitas tasks).
+- **RDS existente reutilizado** (não criado pelo TF); conexão direta via secret.
+  RDS Proxy fica pendente (exige o RDS na mesma VPC — ver `infra/terraform/README.md`).
 - **api** escala por CPU/req; **worker** por profundidade da fila.

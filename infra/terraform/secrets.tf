@@ -1,30 +1,27 @@
 # Fase 1 — Secrets Manager.
-# Dois segredos:
-#  - db  : credenciais do RDS (usadas pelo RDS Proxy e pelas tasks)
-#  - app : tokens da aplicação (PDPJ, WhatsApp, JWT, Stripe...) — valores reais
-#          preenchidos FORA do Terraform (CI ou console); o TF só cria o segredo.
+# Dois segredos (valores reais preenchidos FORA do Terraform — CI ou console;
+# o TF só cria o segredo e uma versão placeholder com ignore_changes):
+#  - db  : DATABASE_URL do RDS EXISTENTE (reutilizado, não criado pelo TF)
+#  - app : tokens da aplicação (PDPJ, WhatsApp, JWT, Stripe...)
 
-# ── Senha do banco (gerada e guardada no secret) ─────────────────────────────
-resource "random_password" "db" {
-  length  = 32
-  special = false # evita chars que quebram URL de conexão
-}
-
+# ── Conexão do banco (RDS existente reutilizado) ─────────────────────────────
 resource "aws_secretsmanager_secret" "db" {
   name        = "${local.name}/db"
-  description = "Credenciais do RDS PostgreSQL do Maria Chat."
+  description = "DATABASE_URL do RDS PostgreSQL existente (reutilizado)."
 }
 
 resource "aws_secretsmanager_secret_version" "db" {
   secret_id = aws_secretsmanager_secret.db.id
   secret_string = jsonencode({
-    username = var.db_username
-    password = random_password.db.result
-    engine   = "postgres"
-    host     = aws_db_instance.main.address
-    port     = 5432
-    dbname   = var.db_name
+    # Preencher com a URL do RDS existente (fora do TF):
+    #   aws secretsmanager put-secret-value --secret-id maria-chat-prod/db \
+    #     --secret-string '{"DATABASE_URL":"postgresql://user:pass@host:5432/mariachat?sslmode=require"}'
+    DATABASE_URL = "PREENCHER"
   })
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
 }
 
 # ── Segredos da aplicação (valores reais setados fora do TF) ──────────────────
@@ -33,9 +30,6 @@ resource "aws_secretsmanager_secret" "app" {
   description = "Tokens/segredos da aplicação (PDPJ, WhatsApp, JWT...)."
 }
 
-# Cria uma versão placeholder só para o segredo existir; o valor real é
-# gerenciado por fora (aws secretsmanager put-secret-value / CI). ignore_changes
-# impede o TF de sobrescrever o valor real depois.
 resource "aws_secretsmanager_secret_version" "app" {
   secret_id = aws_secretsmanager_secret.app.id
   secret_string = jsonencode({
@@ -52,7 +46,7 @@ resource "aws_secretsmanager_secret_version" "app" {
 
 output "secret_db_arn" {
   value       = aws_secretsmanager_secret.db.arn
-  description = "ARN do segredo de credenciais do banco."
+  description = "ARN do segredo com a DATABASE_URL do RDS existente."
 }
 
 output "secret_app_arn" {
