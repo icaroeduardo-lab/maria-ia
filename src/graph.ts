@@ -20,13 +20,15 @@ import { trabalhistaGraph } from "./services/trabalhista/graph.js";
 import { inssGraph } from "./services/inss/graph.js";
 import { outrosGraph } from "./services/outros/graph.js";
 import { roteador } from "./registro-perguntas.js";
+import { env } from "./env.js";
 
 // Postgres quando DATABASE_URL configurada (Fase 5); SQLite como fallback de dev
 async function criarCheckpointer(): Promise<BaseCheckpointSaver> {
-  if (process.env.DATABASE_URL) {
+  const dbUrl = env.databaseUrl();
+  if (dbUrl) {
     // node-pg verifica o cert com sslmode=require; em RDS/gerenciado usamos
     // no-verify (SSL sem validar a CA). schema separado das migrações do Prisma.
-    const url = process.env.DATABASE_URL.replace(/sslmode=require/i, "sslmode=no-verify");
+    const url = dbUrl.replace(/sslmode=require/i, "sslmode=no-verify");
     const saver = PostgresSaver.fromConnString(url, { schema: "langgraph" });
     await saver.setup();
     return saver;

@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
 import { mascararCpf, mascararTelefone } from "../mask.js";
+import { env } from "../env.js";
 
 // Gera uma "ficha" do assistido: escreve os dados (consultados pelo CPF) por cima
 // de uma imagem de prancheta e hospeda o resultado no S3. Usado pelo fluxo via
@@ -13,8 +14,8 @@ import { mascararCpf, mascararTelefone } from "../mask.js";
 // A imagem só precisa existir durante a conversa (WhatsApp baixa a mídia no envio).
 
 const BG_PADRAO = "https://maria-ia.s3.us-east-1.amazonaws.com/e4111b2a-27ad-48b2-be19-2b68bebeab3c.webp";
-const BUCKET = process.env.S3_BUCKET ?? "maria-ia";
-const REGION = process.env.AWS_REGION ?? "us-east-1";
+const BUCKET = env.s3Bucket();
+const REGION = env.awsRegion();
 
 const s3 = new S3Client({ region: REGION });
 const escapar = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

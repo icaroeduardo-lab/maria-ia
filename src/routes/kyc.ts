@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { AIMessage } from "@langchain/core/messages";
 import { processarMensagem } from "../chat.js";
 import { enviarWhatsApp } from "../channels/whatsapp.js";
+import { env } from "../env.js";
 
 // KYC de demonstração: a página /kyc.html abre a câmera do celular, "reconhece"
 // o rosto e marca a identidade como confirmada. Ao confirmar, o backend RETOMA
@@ -20,7 +21,9 @@ const tokens = new Map<string, { cpf: string; sessao?: string; canal?: string; c
 const TTL_MS = 30 * 60 * 1000;
 
 const soDigitos = (v: unknown) => String(v ?? "").replace(/\D/g, "");
-const baseUrl = () => process.env.SELF_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+// Link aberto pelo CELULAR do assistido → precisa ser público (PUBLIC_URL).
+// Cai para SELF_URL/localhost só em dev.
+const baseUrl = () => env.publicUrl();
 
 function limparExpirados() {
   const agora = Date.now();

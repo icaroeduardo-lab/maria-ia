@@ -5,18 +5,18 @@ import {
   GetTranscriptionJobCommand,
 } from "@aws-sdk/client-transcribe";
 import { randomUUID } from "crypto";
+import { env } from "./env.js";
 
 // Transcreve áudio do WhatsApp (mensagem de voz) com AWS Transcribe (pt-BR).
 // Fluxo: baixa a mídia da Meta → S3 → job do Transcribe → texto.
 // Áudios em audios/ expiram por lifecycle do bucket (são PII efêmera).
 
-const REGION = process.env.AWS_REGION ?? "us-east-1";
-const BUCKET = process.env.S3_BUCKET ?? "maria-ia";
-const GRAPH_URL = () => process.env.WA_GRAPH_URL ?? "https://graph.facebook.com";
-const API_VERSION = () => process.env.WA_API_VERSION ?? "v23.0";
+const BUCKET = env.s3Bucket();
+const GRAPH_URL = () => env.waGraphUrl();
+const API_VERSION = () => env.waApiVersion();
 
-const s3 = new S3Client({ region: REGION });
-const transcribe = new TranscribeClient({ region: REGION });
+const s3 = new S3Client({ region: env.awsRegion() });
+const transcribe = new TranscribeClient({ region: env.awsRegion() });
 
 // baixa a mídia pelo id (2 passos da Graph API: metadata com a url → bytes)
 async function baixarMidia(mediaId: string, token: string): Promise<Buffer> {

@@ -2,16 +2,17 @@ import { ChatBedrockConverse } from "@langchain/aws";
 import { AmazonKnowledgeBaseRetriever } from "@langchain/aws";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { GraphState } from "../../state.js";
+import { env } from "../../env.js";
 
 const model = new ChatBedrockConverse({
-  model: process.env.BEDROCK_MODEL_ID ?? "anthropic.claude-3-haiku-20240307-v1:0",
-  region: process.env.AWS_REGION ?? "us-east-1",
+  model: env.bedrockModelId(),
+  region: env.awsRegion(),
 });
 
 const retriever = new AmazonKnowledgeBaseRetriever({
   topK: 3,
-  knowledgeBaseId: process.env.BEDROCK_KB_ID!,
-  region: process.env.AWS_REGION ?? "us-east-1",
+  knowledgeBaseId: env.bedrockKbId()!,
+  region: env.awsRegion(),
 });
 
 const CATEGORIAS = ["trabalhista", "inss_federal", "familia_pensao", "penal", "outros"] as const;

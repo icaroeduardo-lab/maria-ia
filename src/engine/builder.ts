@@ -1,10 +1,13 @@
 import { StateGraph, END, START } from "@langchain/langgraph";
 import { AIMessage } from "@langchain/core/messages";
-import { ChatBedrockConverse } from "@langchain/aws";
-import { AmazonKnowledgeBaseRetriever } from "@langchain/aws";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { z } from "zod";
 import { obterEstilo, obterConfig } from "../config.js";
+import { env } from "../env.js";
+import { resolverCampo, resolverCampoCondicao, interpolar } from "./campos.js";
+import {
+  model, retriever, ultimaFalaUsuario,
+  classificarTexto, extrairDoRelato, reescreverPergunta,
+} from "./ia.js";
 import { GraphAnnotation, type GraphState } from "../state.js";
 import { checkpointer, graph as graphEstatico } from "../graph.js";
 import { mensagemPergunta, proxima, type Pergunta, type TipoPergunta } from "../perguntas.js";
@@ -40,6 +43,8 @@ export interface FlowNode {
     saida?: string;            // sub-flow: nomeia a saída deste nó-folha (casa com label da seta do subfluxo)
     semReescrita?: boolean;    // pergunta: não reescrever com IA (texto fixo — ex: LGPD/links)
     valor?: string;            // atribuir
+    ctaUrl?: string;           // mensagem: botão que abre link (interpolável, ex: {{kyc.url}})
+    ctaTexto?: string;         // mensagem: rótulo do botão cta_url (<=20 chars)
   };
 }
 
@@ -59,29 +64,6 @@ export interface FlowJSON {
   edges: FlowEdge[];
 }
 
-const model = new ChatBedrockConverse({
-  model: process.env.BEDROCK_MODEL_ID ?? "anthropic.claude-3-haiku-20240307-v1:0",
-  region: process.env.AWS_REGION ?? "us-east-1",
-});
-
-const retriever = process.env.BEDROCK_KB_ID
-  ? new AmazonKnowledgeBaseRetriever({
-      topK: 3,
-      knowledgeBaseId: process.env.BEDROCK_KB_ID,
-      region: process.env.AWS_REGION ?? "us-east-1",
-    })
-  : null;
-
-function ultimaFalaUsuario(state: GraphState): string {
-  const m = state.messages.findLast((x) => x.getType() === "human");
-  if (!m) return "";
-  if (typeof m.content === "string") return m.content;
-  return m.content
-    .map((b) => (typeof b === "object" && b !== null && "text" in b ? String(b.text) : ""))
-    .join(" ")
-    .trim();
-}
-
 function perguntaDoNode(node: FlowNode): Pergunta {
   return {
     chave: node.data.chave ?? node.id,
@@ -93,205 +75,10 @@ function perguntaDoNode(node: FlowNode): Pergunta {
   };
 }
 
-// Resolve campo com suporte a notação de ponto e JSON aninhado.
-// Ex: "resultado_cpf.encontrado" → parseia resultado_cpf como JSON e retorna .encontrado
-function resolverCampo(dados: Record<string, unknown>, caminho: string): string {
-  const partes = caminho.split(".");
-  let valor: unknown = dados[partes[0]];
-
-  if (typeof valor === "string" && partes.length > 1) {
-    try { valor = JSON.parse(valor); } catch { return ""; }
-  }
-
-  for (let i = 1; i < partes.length; i++) {
-    if (typeof valor !== "object" || valor === null) return "";
-    valor = (valor as Record<string, unknown>)[partes[i]];
-  }
-
-  if (valor === undefined || valor === null) return "";
-  if (typeof valor === "boolean") return String(valor);
-  if (typeof valor === "object") return JSON.stringify(valor);
-  return String(valor);
-}
-
-// versão para comparação em condições: lowercase + normaliza sim/não → true/false
-function resolverCampoCondicao(dados: Record<string, unknown>, caminho: string): string {
-  const v = resolverCampo(dados, caminho).toLowerCase().trim();
-  if (v === "sim" || v === "s") return "true";
-  if (v === "não" || v === "nao" || v === "n") return "false";
-  return v;
-}
-
-// Classifica um texto livre em uma das categorias dadas. Tenta o LLM (Bedrock);
-// se falhar (sem credenciais/rede), cai num matcher por palavra-chave.
-// categoria padrão quando nada casa: "outros" se existir, senão a última
-function categoriaPadrao(opcoes: string[]): string {
-  return opcoes.find((o) => o.toLowerCase() === "outros") ?? opcoes[opcoes.length - 1];
-}
-
-async function classificarTexto(fala: string, opcoes: string[], prompt?: string, contextoRag?: string): Promise<string> {
-  if (!opcoes.length) return "";
-  if (!fala.trim()) return categoriaPadrao(opcoes); // sem relato → catch-all
-
-  try {
-    const instrucao =
-      (prompt ?? "Você classifica o relato de um cidadão em uma categoria de serviço jurídico.") +
-      (contextoRag ? `\n\n<base_de_conhecimento>\n${contextoRag}\n</base_de_conhecimento>` : "") +
-      `\n\nCategorias possíveis (responda APENAS com uma delas, exatamente como escrita): ${opcoes.join(", ")}.`;
-    const res = await model.invoke([
-      new SystemMessage(instrucao),
-      new HumanMessage(fala),
-    ]);
-    const bruto = String(res.content).toLowerCase().trim();
-    const achou = opcoes.find((o) => bruto.includes(o.toLowerCase()));
-    if (achou) return achou;
-  } catch (err) {
-    console.warn("[classificar] LLM indisponível, usando fallback por palavra-chave:", String(err).slice(0, 120));
-  }
-
-  return classificarPorPalavraChave(fala, opcoes);
-}
-
-// Fallback determinístico: mapeia palavras-chave → categoria.
-const PALAVRAS_CHAVE: Record<string, string[]> = {
-  alimentação: ["pensão", "pensao", "alimento", "sustento", "filho não", "mesada"],
-  divórcio: ["divórcio", "divorcio", "separar", "separação", "casamento", "marido", "esposa", "cônjuge", "conjuge"],
-  inss: ["inss", "aposentadoria", "aposentar", "benefício", "beneficio", "auxílio", "auxilio", "doença", "doenca", "loas", "bpc"],
-  trabalhista: ["trabalho", "trabalhista", "demitido", "demissão", "rescisão", "salário", "carteira", "fgts", "emprego"],
-  acompanhar: ["acompanhar", "andamento", "meu processo", "meu caso", "já tenho", "ja tenho", "protocolo"],
-  fora_competencia: ["criminal", "preso", "prisão", "prisao", "empresa", "consumidor"],
-};
-
-function classificarPorPalavraChave(fala: string, opcoes: string[]): string {
-  const txt = fala.toLowerCase();
-  for (const opt of opcoes) {
-    const chaves = PALAVRAS_CHAVE[opt.toLowerCase()] ?? [opt.toLowerCase()];
-    if (chaves.some((k) => txt.includes(k))) return opt;
-  }
-  return categoriaPadrao(opcoes); // default → "outros" (não a última, que pode ser fora_competencia)
-}
-
-// ── Extração antecipada: a IA preenche o que o usuário já disse no relato ──────
-const PLACEHOLDER = /unknown|n\/a|^null$|undefined|não informado|nao informado|<.+>|^[-?.]+$/i;
-const normSimNao = (v: string) => {
-  const s = v.trim().toLowerCase();
-  if (s === "true" || s.startsWith("s")) return "sim";
-  if (s === "false" || s.startsWith("n")) return "não";
-  return v;
-};
-const casarOpcaoGen = (p: Pergunta, v: string) => {
-  const t = v.trim().toLowerCase();
-  return p.opcoes?.find((o) => o.toLowerCase() === t || o.toLowerCase().includes(t) || t.includes(o.toLowerCase()));
-};
-
-// Dado o relato livre, extrai valores para as perguntas ainda não respondidas.
-// Só preenche o que foi dito EXPLICITAMENTE (guards anti-alucinação).
-async function extrairDoRelato(
-  relato: string,
-  perguntas: Pergunta[],
-  jaColetados: Record<string, unknown>
-): Promise<Record<string, string>> {
-  const pendentes = perguntas.filter((p) => p.texto && !(p.chave in jaColetados));
-  if (!relato.trim() || !pendentes.length) return {};
-
-  const shape: Record<string, z.ZodType> = {};
-  for (const p of pendentes) {
-    const desc = p.tipo === "opcoes" && p.opcoes?.length ? `${p.texto} (opções: ${p.opcoes.join(", ")})` : p.texto;
-    shape[p.chave] = z.string().nullish().describe(desc);
-  }
-
-  try {
-    const system = `Você extrai dados do relato de um cidadão (Defensoria Pública do RJ).
-- Extraia APENAS o que foi dito EXPLICITAMENTE no relato. NUNCA deduza, suponha ou invente.
-- Em dúvida, deixe null. Campos sim/não: só preencha se afirmado claramente, use "sim" ou "não".`;
-    const out = await model.withStructuredOutput(z.object(shape)).invoke([
-      new SystemMessage(system),
-      new HumanMessage(`Relato: "${relato}"\n\nExtraia os dados informados (deixe null o que não foi dito).`),
-    ]);
-
-    const updates: Record<string, string> = {};
-    for (const [k, v] of Object.entries(out)) {
-      if (typeof v !== "string" || !v.trim() || PLACEHOLDER.test(v.trim())) continue;
-      const p = pendentes.find((x) => x.chave === k);
-      if (!p) continue;
-      // descarta quando o LLM ecoa o texto da própria pergunta como "valor"
-      if (v.trim().toLowerCase() === p.texto.trim().toLowerCase()) continue;
-      if (["true", "false"].includes(v.trim().toLowerCase()) && p.tipo !== "sim_nao") continue;
-      if (p.tipo === "sim_nao") { const n = normSimNao(v); if (n === "sim" || n === "não") updates[k] = n; continue; }
-      if (p.tipo === "opcoes") { const o = casarOpcaoGen(p, v); if (o) updates[k] = o; continue; }
-      if (p.validar && !p.validar(v)) continue;
-      updates[k] = v.trim();
-    }
-    if (Object.keys(updates).length) console.log(`[extrair] pré-preenchido: ${Object.keys(updates).join(", ")}`);
-    return updates;
-  } catch (err) {
-    console.warn("[extrair] falha:", String(err).slice(0, 120));
-    return {};
-  }
-}
-
-// Reescreve a pergunta de forma curta, simples e acolhedora (conversacional),
-// preservando exatamente o que está sendo pedido. Falha → texto original.
-async function reescreverPergunta(
-  textoBase: string,
-  p: Pergunta,
-  state: GraphState,
-  estilo: string
-): Promise<string> {
-  try {
-    const fala = ultimaFalaUsuario(state);
-    // nome do assistido (cadastro existente ou novo) p/ tratamento pessoal
-    const nomeCompleto = resolverCampo(state.dadosColetados, "resultado_cpf.dados.nome") || resolverCampo(state.dadosColetados, "nome");
-    const primeiroNome = nomeCompleto.split(" ")[0];
-    const regras = [
-      "Você é a Maria, da Defensoria. Está PERGUNTANDO ao cidadão para coletar uma informação. Reescreva a PERGUNTA abaixo de forma CALOROSA, humana e ACOLHEDORA — como uma atendente atenciosa conversando, nunca fria ou robótica.",
-      "Acolha a pessoa: demonstre empatia e cuidado, e passe segurança de que você está ali pra ajudar em cada passo. Pode reconhecer o sentimento/o momento dela de forma GENÉRICA e calorosa (ex: 'Sei que não é fácil falar sobre isso', 'Obrigada por confiar na gente', 'Pode ficar tranquilo(a), vou te ajudar').",
-      "NÃO repita nem cite os DADOS específicos que ela acabou de informar (pra não atribuir errado, ex: confundir o nome da outra parte com o dela). Acolha o sentimento, não o dado.",
-      "Varie as aberturas e o acolhimento; é PROIBIDO começar com 'Entendo'/'Entendi'.",
-      primeiroNome
-        ? `O nome da pessoa é ${primeiroNome} — use às vezes, com carinho (sem repetir toda vez).`
-        : "Você AINDA NÃO sabe o nome da pessoa. NÃO use nome nenhum e NUNCA use placeholders como [nome], {nome} ou similares.",
-      "NUNCA escreva colchetes ou chaves de placeholder no texto final (ex: [nome], {dado}). Se não tem a informação, não a mencione.",
-      "Emojis: no máximo 1, só quando combinar com o sentido (situação difícil → 💔/🙏; criança → 🧒; documento → 📄; pensão → 💰; acolhimento → 😊). Não force em toda mensagem.",
-      "Formule como uma pergunta DIRETA pedindo o dado ao cidadão. NUNCA inverta (não diga que a pessoa quer saber algo).",
-      "Mantenha EXATAMENTE a mesma informação pedida. Não acrescente nem troque por outra pergunta.",
-      "Até 3 frases curtas. NUNCA comece com saudação ('Olá', 'Oi', 'Bom dia') — a conversa já começou; vá direto ao acolhimento/pergunta.",
-      "Preserve links, números, formatos (ex: CPF, datas) e termos legais exatamente como estão.",
-      p.tipo === "sim_nao" ? "A pergunta deve poder ser respondida com Sim ou Não." : "",
-      p.tipo === "opcoes" ? "NÃO liste as opções no texto (elas aparecem como botões)." : "",
-    ].filter(Boolean).join("\n");
-
-    const res = await model.invoke([
-      new SystemMessage(`${estilo}\n\n${regras}`),
-      new HumanMessage(
-        `Pergunta a fazer: "${textoBase}"` +
-        (primeiroNome ? `\nNome da pessoa: ${primeiroNome} (pode usar o nome com naturalidade, sem repetir toda vez)` : "") +
-        (fala ? `\nÚltima fala da pessoa: "${fala}"` : "") +
-        `\n\nResponda só com a pergunta reescrita.`
-      ),
-    ]);
-    // rede de segurança: remove placeholders entre colchetes que o LLM possa ter
-    // deixado (ex: "[nome]") e ajeita espaços/pontuação resultantes
-    const txt = String(res.content)
-      .replace(/\[[^\]\n]{0,40}\]/g, "")
-      .replace(/\s+([,.!?])/g, "$1")
-      .replace(/\s{2,}/g, " ")
-      .trim();
-    return txt || textoBase;
-  } catch (err) {
-    console.warn("[conversacional] falha ao reescrever:", String(err).slice(0, 100));
-    return textoBase;
-  }
-}
-
-// interpola {{chave}} / {{chave.sub}} com dadosColetados — ex: "CPF: {{cpf}}"
-function interpolar(txt: string, dados: Record<string, unknown>): string {
-  return txt.replace(/\{\{([\w.]+)\}\}/g, (_, k) => resolverCampo(dados, k));
-}
 
 // base do próprio servidor para chamadas internas do fluxo (nós api com url relativa)
 function baseUrlInterna(): string {
-  return process.env.SELF_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+  return env.selfUrl();
 }
 
 // ── Funções de nó ─────────────────────────────────────────────────────────────
@@ -307,8 +94,12 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
         const txt = node.data.texto
           ? { type: "text", text: interpolar(String(node.data.texto), state.dadosColetados) }
           : null;
+        // botão que abre link (ex: KYC). ctaUrl interpolado; rótulo em ctaTexto.
+        const cta = node.data.ctaUrl
+          ? { type: "cta_url", url: interpolar(String(node.data.ctaUrl), state.dadosColetados), text: node.data.ctaTexto ? String(node.data.ctaTexto) : "Abrir" }
+          : null;
         // padrão: imagem antes do texto. textoAntes=true inverte (texto → imagem)
-        const blocos = (node.data.textoAntes ? [txt, img] : [img, txt]).filter(Boolean);
+        const blocos = [...(node.data.textoAntes ? [txt, img] : [img, txt]), cta].filter(Boolean);
         return { messages: [new AIMessage({ content: blocos as never })] };
       };
 

@@ -5,10 +5,11 @@ import { z } from "zod";
 import type { GraphState } from "../../state.js";
 import { proxima, type Pergunta } from "../../perguntas.js";
 import { PERGUNTAS_POR_CHAVE, servicoDe, grupoColetaDe } from "../../registro-perguntas.js";
+import { env } from "../../env.js";
 
 const model = new ChatBedrockConverse({
-  model: process.env.BEDROCK_MODEL_ID ?? "anthropic.claude-3-haiku-20240307-v1:0",
-  region: process.env.AWS_REGION ?? "us-east-1",
+  model: env.bedrockModelId(),
+  region: env.awsRegion(),
   temperature: 0,
 });
 

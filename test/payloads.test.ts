@@ -74,3 +74,23 @@ test("options limita a 10 linhas", () => {
 test("truncar não corta abaixo do limite", () => {
   assert.equal(truncar("abc", 24), "abc");
 });
+
+test("cta_url vira interactive cta_url (botão que abre link)", () => {
+  const p = toWhatsAppPayloads(TO, [
+    { type: "text", text: "Confirme sua identidade" },
+    { type: "cta_url", url: "https://x/kyc.html?t=abc", text: "Fazer selfie" },
+  ] as any) as any[];
+  assert.equal(p.length, 1);
+  assert.equal(p[0].interactive.type, "cta_url");
+  assert.equal(p[0].interactive.body.text, "Confirme sua identidade");
+  assert.equal(p[0].interactive.action.name, "cta_url");
+  assert.equal(p[0].interactive.action.parameters.url, "https://x/kyc.html?t=abc");
+  assert.equal(p[0].interactive.action.parameters.display_text, "Fazer selfie");
+});
+
+test("cta_url trunca o rótulo do botão em 20 chars", () => {
+  const p = toWhatsAppPayloads(TO, [
+    { type: "cta_url", url: "https://x", text: "Um rótulo muito comprido demais" },
+  ] as any) as any[];
+  assert.equal(p[0].interactive.action.parameters.display_text.length, 20);
+});
