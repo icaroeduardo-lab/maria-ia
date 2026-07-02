@@ -2,13 +2,13 @@ import type { FastifyInstance } from "fastify";
 import bcrypt from "bcryptjs";
 import type { BaseMessage } from "@langchain/core/messages";
 import { HumanMessage } from "@langchain/core/messages";
-import { prisma } from "../db.js";
+import { prisma } from "../../core/db.js";
 import { autenticar, exigirAdmin } from "./auth.js";
-import { graphDoFlow, graphEstatico, subfluxosReferenciados, type FlowNode, type FlowEdge } from "../engine/builder.js";
-import { validarFlow } from "../engine/validar.js";
-import { ESTILO_DEFAULT, invalidarEstilo } from "../config.js";
-import { montarMetadados, gerarResumoTexto, type Metadados } from "../resumo.js";
-import { mascararAssistido } from "../mask.js";
+import { graphDoFlow, graphEstatico, subfluxosReferenciados, type FlowNode, type FlowEdge } from "../../core/engine/builder.js";
+import { validarFlow } from "../../core/engine/validar.js";
+import { ESTILO_DEFAULT, invalidarEstilo } from "../../core/config.js";
+import { montarMetadados, gerarResumoTexto, type Metadados } from "../../core/resumo.js";
+import { mascararAssistido } from "../../core/mask.js";
 
 // API do painel admin (registrada com prefix /admin). Tudo exige JWT;
 // mutações exigem role admin. Exige DATABASE_URL (Postgres).

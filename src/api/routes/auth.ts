@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import bcrypt from "bcryptjs";
-import { prisma } from "../db.js";
+import { prisma } from "../../core/db.js";
 
 export interface UsuarioJWT {
   sub: string;

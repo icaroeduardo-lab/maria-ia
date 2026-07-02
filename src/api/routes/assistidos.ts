@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { prisma } from "../db.js";
+import { prisma } from "../../core/db.js";
 
 // Rotas de Assistido (cidadão) usadas PELO FLUXO — sem JWT, como os mocks.
 // O nó `api` do builder faz POST com body = dadosColetados (que contém o cpf).

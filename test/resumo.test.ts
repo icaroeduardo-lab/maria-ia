@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { montarMetadados } from "../src/resumo.js";
+import { montarMetadados } from "../src/core/resumo.js";
 
 test("montarMetadados extrai identidade do resultado_cpf (string JSON)", () => {
   const m = montarMetadados({

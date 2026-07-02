@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { env } from "../src/env.js";
+import { env } from "../src/core/env.js";
 
 test("defaults quando as envs não estão setadas", () => {
   delete process.env.AWS_REGION;
