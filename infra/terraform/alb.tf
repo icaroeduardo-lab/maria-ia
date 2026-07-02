@@ -55,30 +55,16 @@ resource "aws_lb_target_group" "api" {
   }
 }
 
-# HTTP:80 — redireciona p/ HTTPS se houver certificado; senão encaminha à api.
+# HTTP:80 — sempre encaminha à api. Usado pelas chamadas internas do worker
+# (SELF_URL = http://<alb>). A Meta usa o 443 (HTTPS) quando há certificado.
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = 80
   protocol          = "HTTP"
 
-  dynamic "default_action" {
-    for_each = var.acm_certificate_arn == "" ? [1] : []
-    content {
-      type             = "forward"
-      target_group_arn = aws_lb_target_group.api.arn
-    }
-  }
-
-  dynamic "default_action" {
-    for_each = var.acm_certificate_arn == "" ? [] : [1]
-    content {
-      type = "redirect"
-      redirect {
-        port        = "443"
-        protocol    = "HTTPS"
-        status_code = "HTTP_301"
-      }
-    }
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
   }
 }
 

@@ -46,14 +46,22 @@ resource "aws_cloudwatch_log_group" "worker" {
 
 # ── Secrets injetados como env (chaves do segredo app) ────────────────────────
 locals {
+  app_secret_keys = [
+    "DATABASE_URL", "JWT_SECRET",
+    "WA_ACCESS_TOKEN", "WA_PHONE_NUMBER_ID", "WA_WEBHOOK_VERIFY_TOKEN",
+    "PDPJ_API_TOKEN", "PDPJ_API_URL", "DPERJ_API_URL", "DPERJ_API_KEY",
+  ]
   app_secret_env = [
-    for k in ["DATABASE_URL", "JWT_SECRET", "WA_ACCESS_TOKEN", "PDPJ_API_TOKEN", "PDPJ_API_URL"] :
+    for k in local.app_secret_keys :
     { name = k, valueFrom = "${aws_secretsmanager_secret.app.arn}:${k}::" }
   ]
   common_env = [
     { name = "AWS_REGION", value = var.aws_region },
     { name = "S3_BUCKET", value = var.s3_bucket },
     { name = "SQS_QUEUE_URL", value = aws_sqs_queue.msgs.url },
+    { name = "BEDROCK_MODEL_ID", value = var.bedrock_model_id },
+    { name = "BEDROCK_KB_ID", value = var.bedrock_kb_id },
+    { name = "BEDROCK_KB_DS_ID", value = var.bedrock_kb_ds_id },
   ]
 }
 
@@ -72,8 +80,12 @@ resource "aws_ecs_task_definition" "api" {
     image        = "${aws_ecr_repository.this["api"].repository_url}:${var.api_image_tag}"
     essential    = true
     portMappings = [{ containerPort = var.container_port, protocol = "tcp" }]
-    environment  = concat(local.common_env, [{ name = "PORT", value = tostring(var.container_port) }])
-    secrets      = local.app_secret_env
+    environment = concat(local.common_env, [
+      { name = "PORT", value = tostring(var.container_port) },
+      # api serve as rotas /api/* localmente → chamadas internas do grafo em localhost
+      { name = "SELF_URL", value = "http://localhost:${var.container_port}" },
+    ])
+    secrets = local.app_secret_env
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -96,11 +108,14 @@ resource "aws_ecs_task_definition" "worker" {
   task_role_arn            = aws_iam_role.task.arn
 
   container_definitions = jsonencode([{
-    name        = "worker"
-    image       = "${aws_ecr_repository.this["worker"].repository_url}:${var.worker_image_tag}"
-    essential   = true
-    environment = local.common_env
-    secrets     = local.app_secret_env
+    name      = "worker"
+    image     = "${aws_ecr_repository.this["worker"].repository_url}:${var.worker_image_tag}"
+    essential = true
+    # o grafo no worker chama /api/ficha, /api/kyc etc. → resolve no serviço api via ALB
+    environment = concat(local.common_env, [
+      { name = "SELF_URL", value = "http://${aws_lb.main.dns_name}" },
+    ])
+    secrets = local.app_secret_env
     logConfiguration = {
       logDriver = "awslogs"
       options = {

@@ -59,10 +59,18 @@ aws secretsmanager put-secret-value --secret-id maria-chat-prod/app \
     DATABASE_URL: $db,
     JWT_SECRET: "<gerar>",
     WA_ACCESS_TOKEN: "<token WhatsApp>",
+    WA_PHONE_NUMBER_ID: "<phone number id>",
+    WA_WEBHOOK_VERIFY_TOKEN: "<verify token do webhook>",
     PDPJ_API_TOKEN: "<token PDPJ staging>",
-    PDPJ_API_URL: "https://api-processo.stg.data-lake.pdpj.jus.br/processo-api/api/v1"
+    PDPJ_API_URL: "https://api-processo.stg.data-lake.pdpj.jus.br/processo-api/api/v1",
+    DPERJ_API_URL: "",
+    DPERJ_API_KEY: ""
   }')"
 ```
+
+> **Já resolvidos no Terraform** (não precisa configurar): `SELF_URL` (api = localhost,
+> worker = ALB), `BEDROCK_MODEL_ID`/`BEDROCK_KB_ID`/`BEDROCK_KB_DS_ID`, `AWS_REGION`,
+> `S3_BUCKET`, `SQS_QUEUE_URL`, `PORT`.
 
 ## 4. Migrar / semear o banco
 

@@ -163,3 +163,22 @@ variable "github_repo" {
   default     = "icaroeduardo-lab/maria-ia"
   description = "Repositório GitHub (owner/repo) autorizado a assumir a role via OIDC."
 }
+
+# ── Bedrock (LLM + Knowledge Base RAG) ────────────────────────────────────────
+variable "bedrock_model_id" {
+  type        = string
+  default     = "anthropic.claude-3-haiku-20240307-v1:0"
+  description = "Modelo do Bedrock."
+}
+
+variable "bedrock_kb_id" {
+  type        = string
+  default     = "LF04FDVIYP"
+  description = "ID da Knowledge Base do Bedrock (RAG)."
+}
+
+variable "bedrock_kb_ds_id" {
+  type        = string
+  default     = "V6AOSMT9CQ"
+  description = "ID do data source da Knowledge Base."
+}

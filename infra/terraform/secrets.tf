@@ -36,11 +36,15 @@ resource "aws_secretsmanager_secret" "app" {
 resource "aws_secretsmanager_secret_version" "app" {
   secret_id = aws_secretsmanager_secret.app.id
   secret_string = jsonencode({
-    DATABASE_URL    = "PREENCHER" # usar output database_url (via proxy)
-    JWT_SECRET      = "PREENCHER"
-    WA_ACCESS_TOKEN = "PREENCHER"
-    PDPJ_API_TOKEN  = "PREENCHER"
-    PDPJ_API_URL    = "https://api-processo.stg.data-lake.pdpj.jus.br/processo-api/api/v1"
+    DATABASE_URL            = "PREENCHER" # usar output database_url (via proxy)
+    JWT_SECRET              = "PREENCHER"
+    WA_ACCESS_TOKEN         = "PREENCHER"
+    WA_PHONE_NUMBER_ID      = "PREENCHER"
+    WA_WEBHOOK_VERIFY_TOKEN = "PREENCHER"
+    PDPJ_API_TOKEN          = "PREENCHER"
+    PDPJ_API_URL            = "https://api-processo.stg.data-lake.pdpj.jus.br/processo-api/api/v1"
+    DPERJ_API_URL           = "" # vazio = modo mock (protocolo local)
+    DPERJ_API_KEY           = ""
   })
 
   lifecycle {
