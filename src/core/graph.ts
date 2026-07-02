@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { mkdirSync } from "node:fs";
 import { StateGraph } from "@langchain/langgraph";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
@@ -33,6 +34,7 @@ async function criarCheckpointer(): Promise<BaseCheckpointSaver> {
     await saver.setup();
     return saver;
   }
+  mkdirSync("./data", { recursive: true }); // garante o diretório do SQLite (CI/máquina nova)
   return SqliteSaver.fromConnString("./data/checkpoints.db");
 }
 export const checkpointer = await criarCheckpointer();
