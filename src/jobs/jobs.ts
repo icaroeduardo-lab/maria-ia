@@ -6,7 +6,7 @@ import pg from "pg";
 import { processarFila } from "../core/dperj.js";
 import { limparConversasInativas } from "../core/limpeza.js";
 import { avisarSeTokenMorto } from "../core/health.js";
-import { env } from "../core/env.js";
+import { env, validarEnv } from "../core/env.js";
 
 // Limpa os checkpoints das threads de WhatsApp (recomeça as conversas do zero).
 // Útil em demo/teste quando o estado de uma conversa fica travado.
@@ -33,6 +33,7 @@ const jobs: Record<string, () => Promise<unknown>> = {
 };
 
 async function main() {
+  validarEnv();
   const nome = process.argv[2];
   const job = jobs[nome];
   if (!job) {

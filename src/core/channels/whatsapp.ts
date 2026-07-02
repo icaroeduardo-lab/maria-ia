@@ -5,7 +5,7 @@ import { processarMensagem } from "../chat.js";
 import { transcreverAudioWA } from "../transcribe.js";
 import { filaConfigurada, enfileirar } from "../queue.js";
 import { env } from "../env.js";
-import { toWhatsAppPayloads, formatar } from "./payloads.js";
+import { toWhatsAppPayloads, } from "./payloads.js";
 
 export { toWhatsAppPayloads } from "./payloads.js";
 

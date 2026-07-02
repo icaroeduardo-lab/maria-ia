@@ -283,7 +283,7 @@ function expandirSubfluxos(nodes: FlowNode[], edges: FlowEdge[], subflows: Subfl
     N = N.filter((n) => n.id !== node.id);
     E = E.filter((e) => e.source !== node.id && e.target !== node.id);
 
-    if (!sub || !sub.nodes?.length) {
+    if (!sub?.nodes?.length) {
       // sem ref válida → vira pass-through: liga entradas direto às saídas
       for (const ent of entradasNode) for (const sai of saidasNode)
         E.push({ id: `pt_${ent.source}_${sai.target}`, source: ent.source, target: sai.target, label: ent.label });

@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 // Configuração central de ambiente — ponto único de acesso ao process.env.
 // Tipada, com defaults. Getters (funções) para valores que podem ser injetados
 // no boot (tokens/URLs) e que queremos poder sobrescrever em teste.
@@ -43,3 +45,38 @@ export const env = {
   conversaTtlDias: () => num(process.env.CONVERSA_TTL_DIAS, 30),
   retomadaMin: () => num(process.env.RETOMADA_MIN, 60),
 } as const;
+
+// Schema leniente: valida FORMATO do que está setado (não exige nada — o app
+// tem fallbacks de dev). Números malformados falham; URLs inválidas falham.
+const envSchema = z.object({
+  NODE_ENV: z.string().optional(),
+  PORT: z.coerce.number().int().positive().optional(),
+  CONVERSA_TTL_DIAS: z.coerce.number().int().positive().optional(),
+  RETOMADA_MIN: z.coerce.number().int().positive().optional(),
+  DATABASE_URL: z.string().url().optional().or(z.literal("")),
+  SELF_URL: z.string().url().optional().or(z.literal("")),
+  PUBLIC_URL: z.string().url().optional().or(z.literal("")),
+  SQS_QUEUE_URL: z.string().url().optional().or(z.literal("")),
+  PDPJ_API_URL: z.string().url().optional().or(z.literal("")),
+});
+
+// Chamar no boot dos entrypoints (server/worker/jobs). Falha rápido em valor
+// MALFORMADO (ex: PORT não-numérico); apenas AVISA sobre recomendados ausentes
+// em produção — não derruba (o app degrada graciosamente).
+export function validarEnv(): void {
+  const r = envSchema.safeParse(process.env);
+  if (!r.success) {
+    console.error("[env] configuração inválida:", r.error.flatten().fieldErrors);
+    throw new Error("variáveis de ambiente malformadas — ver log acima");
+  }
+  if (process.env.NODE_ENV === "production") {
+    const rec: Array<[string, string | undefined]> = [
+      ["DATABASE_URL", process.env.DATABASE_URL],
+      ["SQS_QUEUE_URL", process.env.SQS_QUEUE_URL],
+      ["WA_ACCESS_TOKEN", process.env.WA_ACCESS_TOKEN],
+    ];
+    const faltando = rec.filter(([, v]) => !v).map(([k]) => k);
+    if (faltando.length) console.warn(`[env] recomendados ausentes em produção: ${faltando.join(", ")}`);
+  }
+  console.log(`[env] region=${env.awsRegion()} db=${env.databaseUrl() ? "ok" : "off"} fila=${env.sqsQueueUrl() ? "ok" : "off"}`);
+}

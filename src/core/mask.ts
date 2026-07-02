@@ -13,7 +13,7 @@ export const mascararTelefone = (v?: string | null): string => {
 };
 
 export const mascararEmail = (v?: string | null): string => {
-  if (!v || !v.includes("@")) return v ?? "";
+  if (!v?.includes("@")) return v ?? "";
   const [u, dom] = v.split("@");
   const tld = dom.includes(".") ? dom.slice(dom.lastIndexOf(".")) : "";
   return `${u.slice(0, 2)}•••@•••${tld}`;

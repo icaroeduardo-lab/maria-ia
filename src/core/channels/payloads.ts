@@ -13,7 +13,7 @@ type Bloco = {
 
 // WhatsApp usa *negrito* com um asterisco; markdown interno usa **
 export const formatar = (t: string) => t.replace(/\*\*/g, "*");
-export const truncar = (t: string, n: number) => (t.length <= n ? t : t.slice(0, n - 1) + "…");
+export const truncar = (t: string, n: number) => (t.length <= n ? t : `${t.slice(0, n - 1)}…`);
 
 export function toWhatsAppPayloads(to: string, content: MessageContent): object[] {
   const base = { messaging_product: "whatsapp", to };

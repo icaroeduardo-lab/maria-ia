@@ -25,7 +25,9 @@ import { fichaRoutes } from "./routes/ficha.js";
 import { kycRoutes } from "./routes/kyc.js";
 import { processosRoutes } from "./routes/processos.js";
 import { filaConfigurada } from "../core/queue.js";
-import { env } from "../core/env.js";
+import { env, validarEnv } from "../core/env.js";
+
+validarEnv();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = Fastify();
