@@ -1,0 +1,65 @@
+name: deploy
+
+# Build das imagens api/worker → push no ECR → force-new-deployment no ECS.
+# Autenticação via OIDC (sem chave AWS): setar a variável de repositório
+# AWS_ROLE_ARN (output `github_actions_role_arn` do Terraform).
+
+on:
+  push:
+    branches: [main, arch/aws-fargate-v2]
+    paths:
+      - "src/**"
+      - "prisma/**"
+      - "Dockerfile.api"
+      - "Dockerfile.worker"
+      - "package.json"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  CLUSTER: maria-chat-prod
+  ECR_NAMESPACE: maria-chat-prod
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credenciais AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build e push (api)
+        env:
+          REG: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMG="$REG/${{ env.ECR_NAMESPACE }}/api"
+          docker build -f Dockerfile.api -t "$IMG:$GITHUB_SHA" -t "$IMG:latest" .
+          docker push "$IMG:$GITHUB_SHA"
+          docker push "$IMG:latest"
+
+      - name: Build e push (worker)
+        env:
+          REG: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMG="$REG/${{ env.ECR_NAMESPACE }}/worker"
+          docker build -f Dockerfile.worker -t "$IMG:$GITHUB_SHA" -t "$IMG:latest" .
+          docker push "$IMG:$GITHUB_SHA"
+          docker push "$IMG:latest"
+
+      - name: Deploy ECS (força novo deployment — puxa :latest)
+        run: |
+          aws ecs update-service --cluster "$CLUSTER" --service api    --force-new-deployment
+          aws ecs update-service --cluster "$CLUSTER" --service worker --force-new-deployment

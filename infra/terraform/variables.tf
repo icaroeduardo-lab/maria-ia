@@ -157,3 +157,9 @@ variable "alarm_email" {
   default     = ""
   description = "E-mail para receber alarmes (SNS). Vazio = sem inscrição."
 }
+
+variable "github_repo" {
+  type        = string
+  default     = "icaroeduardo-lab/maria-ia"
+  description = "Repositório GitHub (owner/repo) autorizado a assumir a role via OIDC."
+}

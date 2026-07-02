@@ -38,6 +38,15 @@ O RDS é **dedicado a esta aplicação**, então vive na VPC nova (privado), com
 - `vpc_endpoints.tf` — S3 gateway (grátis) + interface endpoints (ECR, logs,
   secrets, sqs, bedrock, transcribe) → tira o tráfego AWS do NAT.
 
+## CI/CD (OIDC)
+- `github_oidc.tf` — provider OIDC do GitHub + role assumível pelo repo, com
+  permissão de push no ECR e deploy no ECS (sem chave AWS no GitHub).
+- Após `apply`: `terraform output github_actions_role_arn` → setar como variável
+  de repositório **`AWS_ROLE_ARN`** (GitHub → Settings → Variables → Actions).
+- Workflow: `infra/ci/deploy.yml` (build api/worker → ECR → force deploy).
+  **Ativar:** copiar para `.github/workflows/deploy.yml` (o push do workflow exige
+  token com escopo `workflow` — fazer pela UI do GitHub ou `gh auth refresh -s workflow`).
+
 ## Fase 5 — código (fora do Terraform)
 Extrair `packages/core`/`db`, montar `services/api` e `services/worker`, criar
 `dist/jobs.js` (entrypoint dos jobs), Dockerfiles e o split webhook→SQS→worker.
