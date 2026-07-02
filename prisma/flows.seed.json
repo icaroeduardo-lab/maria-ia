@@ -85,8 +85,9 @@
       {
         "id": "confirma_dados",
         "data": {
-          "texto": "Confira seus dados na ficha acima 👆",
-          "imagem": "{{ficha.url}}"
+          "texto": "Confira seus dados na ficha abaixo 👇",
+          "imagem": "{{ficha.url}}",
+          "textoAntes": true
         },
         "type": "mensagem",
         "position": {
@@ -125,7 +126,8 @@
         "data": {
           "chave": "telefone",
           "texto": "Informe o *telefone* correto (com DDD):",
-          "tipoPergunta": "telefone"
+          "tipoPergunta": "telefone",
+          "semReescrita": true
         },
         "type": "pergunta",
         "position": {
@@ -161,7 +163,7 @@
       {
         "id": "cad_intro",
         "data": {
-          "texto": "Não encontramos seu cadastro. Vamos criar agora. 📝"
+          "texto": "Ótimo! Vamos fazer seu cadastro rapidinho. 📝"
         },
         "type": "mensagem",
         "position": {
@@ -174,7 +176,8 @@
         "data": {
           "chave": "nome",
           "texto": "Qual o seu *nome completo*?",
-          "tipoPergunta": "texto"
+          "tipoPergunta": "texto",
+          "semReescrita": true
         },
         "type": "pergunta",
         "position": {
@@ -187,7 +190,8 @@
         "data": {
           "chave": "dataNascimento",
           "texto": "Sua *data de nascimento* (AAAA-MM-DD)?",
-          "tipoPergunta": "texto"
+          "tipoPergunta": "texto",
+          "semReescrita": true
         },
         "type": "pergunta",
         "position": {
@@ -200,7 +204,8 @@
         "data": {
           "chave": "telefone",
           "texto": "Seu *telefone* com DDD?",
-          "tipoPergunta": "telefone"
+          "tipoPergunta": "telefone",
+          "semReescrita": true
         },
         "type": "pergunta",
         "position": {
@@ -236,7 +241,7 @@
       {
         "id": "kyc",
         "data": {
-          "url": "/mock/kyc",
+          "url": "/api/kyc/status",
           "chave": "resultado_kyc",
           "metodo": "POST",
           "titulo": "Reconhecimento (KYC)"
@@ -262,36 +267,11 @@
       {
         "id": "erro_kyc",
         "data": {
-          "texto": "⚠️ Não conseguimos confirmar sua identidade."
+          "texto": "Ainda não recebi sua selfie. 🤳\nÉ só abrir o link e confirmar — quando terminar, eu continuo automaticamente."
         },
         "type": "mensagem",
         "position": {
           "x": 2220,
-          "y": 760
-        }
-      },
-      {
-        "id": "tentar_kyc",
-        "data": {
-          "chave": "retry_kyc",
-          "texto": "Deseja tentar novamente?",
-          "tipoPergunta": "sim_nao"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 2460,
-          "y": 760
-        }
-      },
-      {
-        "id": "cond_retry_kyc",
-        "data": {
-          "campo": "retry_kyc",
-          "titulo": "Tentar KYC?"
-        },
-        "type": "condicao",
-        "position": {
-          "x": 2700,
           "y": 760
         }
       },
@@ -301,7 +281,7 @@
           "chave": "relato",
           "texto": "Estamos aqui para lhe ajudar. 😊\nConte mais sobre seu caso.",
           "imagem": "https://maria-ia.s3.us-east-1.amazonaws.com/imagens/839dd28f-662d-4b33-aea4-37f9646179c3.jpg",
-          "semReescrita": true,
+          "semReescrita": false,
           "tipoPergunta": "texto"
         },
         "type": "pergunta",
@@ -407,15 +387,6 @@
         "position": {
           "x": 301.3170260140494,
           "y": 550.6292239485304
-        }
-      },
-      {
-        "id": "subgrafo_mqi5e1xk",
-        "data": {},
-        "type": "subgrafo",
-        "position": {
-          "x": 262.2371540096827,
-          "y": 171.7851095051395
         }
       },
       {
@@ -579,6 +550,105 @@
           "x": 3840,
           "y": 40
         }
+      },
+      {
+        "id": "cad_pergunta",
+        "data": {
+          "chave": "quer_cadastrar",
+          "texto": "Não encontramos seu cadastro.\nGostaria de realizar o seu cadastro nesse momento? 📝",
+          "semReescrita": true,
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 1020,
+          "y": 520
+        }
+      },
+      {
+        "id": "cond_quer_cadastrar",
+        "data": {
+          "campo": "quer_cadastrar",
+          "titulo": "Quer cadastrar?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 1260,
+          "y": 360
+        }
+      },
+      {
+        "id": "end_sem_cadastro",
+        "data": {
+          "texto": "Tudo bem! Quando quiser fazer seu cadastro, é só me chamar de novo. 👋"
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 1500,
+          "y": 520
+        }
+      },
+      {
+        "id": "kyc_iniciar",
+        "data": {
+          "url": "/api/kyc/iniciar",
+          "chave": "kyc",
+          "metodo": "POST",
+          "titulo": "Iniciar KYC"
+        },
+        "type": "api",
+        "position": {
+          "x": 1500,
+          "y": 760
+        }
+      },
+      {
+        "id": "kyc_msg",
+        "data": {
+          "texto": "Falta só confirmar que é você mesmo, por segurança. 🤳\n\nAbra este link e faça uma selfie rápida:\n{{kyc.url}}\n\nAssim que você confirmar por lá, eu sigo automaticamente aqui — pode deixar comigo. 💚"
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 1740,
+          "y": 760
+        }
+      },
+      {
+        "id": "kyc_pergunta",
+        "data": {
+          "chave": "kyc_pronto",
+          "texto": "Estou te aguardando fazer a selfie no link acima. 🤳\nAssim que você confirmar por lá, eu sigo sozinho aqui — não precisa responder nada.",
+          "semReescrita": true,
+          "tipoPergunta": "texto"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 1980,
+          "y": 880
+        }
+      },
+      {
+        "id": "kyc_reset",
+        "data": {
+          "chave": "kyc_pronto",
+          "valor": ""
+        },
+        "type": "atribuir",
+        "position": {
+          "x": 2940,
+          "y": 760
+        }
+      },
+      {
+        "id": "kyc_ok",
+        "data": {
+          "texto": "✅ Identidade confirmada! Obrigada. 💚\nVamos continuar seu atendimento."
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 2460,
+          "y": 40
+        }
       }
     ],
     "edges": [
@@ -613,7 +683,7 @@
         "id": "e_6",
         "label": "false",
         "source": "existe",
-        "target": "cad_intro"
+        "target": "cad_pergunta"
       },
       {
         "id": "e_7",
@@ -699,7 +769,7 @@
       {
         "id": "by_msg_cadastro_68886",
         "source": "msg_cadastro",
-        "target": "contar_historia"
+        "target": "kyc_iniciar"
       },
       {
         "id": "sx_classificar_sf_alimentacao_78961",
@@ -785,12 +855,12 @@
         "id": "cs_cond_dados_api_casos_23910",
         "label": "true",
         "source": "cond_dados",
-        "target": "api_casos"
+        "target": "kyc_iniciar"
       },
       {
         "id": "cs_msg_upd_api_casos_23910",
         "source": "msg_upd",
-        "target": "api_casos"
+        "target": "kyc_iniciar"
       },
       {
         "id": "cs_api_casos_cond_tem_casos_23910",
@@ -832,14 +902,309 @@
         "target": "pergunta_sel_caso"
       },
       {
-        "id": "cs_pergunta_sel_caso_msg_provisoria_23910",
-        "source": "pergunta_sel_caso",
-        "target": "msg_provisoria"
-      },
-      {
         "id": "cs_msg_provisoria_fim_23910",
         "source": "msg_provisoria",
         "target": "fim"
+      },
+      {
+        "id": "e_cadp_cond",
+        "source": "cad_pergunta",
+        "target": "cond_quer_cadastrar"
+      },
+      {
+        "id": "e_cond_simcad",
+        "label": "true",
+        "source": "cond_quer_cadastrar",
+        "target": "cad_intro"
+      },
+      {
+        "id": "e_cond_naocad",
+        "label": "false",
+        "source": "cond_quer_cadastrar",
+        "target": "end_sem_cadastro"
+      },
+      {
+        "id": "ek_ini_msg",
+        "source": "kyc_iniciar",
+        "target": "kyc_msg"
+      },
+      {
+        "id": "ek_msg_perg",
+        "source": "kyc_msg",
+        "target": "kyc_pergunta"
+      },
+      {
+        "id": "ek_perg_kyc",
+        "source": "kyc_pergunta",
+        "target": "kyc"
+      },
+      {
+        "id": "ek_kyc_cond",
+        "source": "kyc",
+        "target": "cond_kyc"
+      },
+      {
+        "id": "ek_cond_ok",
+        "label": "true",
+        "source": "cond_kyc",
+        "target": "kyc_ok"
+      },
+      {
+        "id": "ek_cond_erro",
+        "label": "false",
+        "source": "cond_kyc",
+        "target": "erro_kyc"
+      },
+      {
+        "id": "ek_reset_ini",
+        "source": "kyc_reset",
+        "target": "kyc_iniciar"
+      },
+      {
+        "id": "ek_erro_reset",
+        "source": "erro_kyc",
+        "target": "kyc_reset"
+      },
+      {
+        "id": "ek_ok_casos",
+        "source": "kyc_ok",
+        "target": "api_casos"
+      },
+      {
+        "id": "e_selcaso_prov",
+        "source": "pergunta_sel_caso",
+        "target": "msg_provisoria"
+      }
+    ]
+  },
+  {
+    "id": "cmqi6csra0000ltqlohwncifk",
+    "name": "Tema: Acompanhar Processo",
+    "active": false,
+    "nodes": [
+      {
+        "id": "api_processos",
+        "data": {
+          "url": "/api/processos/consultar",
+          "chave": "processos",
+          "metodo": "POST",
+          "titulo": "Consultar processos"
+        },
+        "type": "api",
+        "position": {
+          "x": 60,
+          "y": 40
+        }
+      },
+      {
+        "id": "tem_processo",
+        "data": {
+          "campo": "processos.tem_processo",
+          "titulo": "Tem processo?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 300,
+          "y": 40
+        }
+      },
+      {
+        "id": "selecionar_processo",
+        "data": {
+          "chave": "processo_sel",
+          "texto": "Encontrei estes processos no seu CPF:\n\n{{processos.lista}}\n\nQual deles você quer acompanhar? Pode me dizer o *número do processo* ou só o item da lista (ex: 1). 📋",
+          "tipoPergunta": "texto",
+          "semReescrita": true
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 540,
+          "y": 40
+        }
+      },
+      {
+        "id": "ver_detalhes",
+        "data": {
+          "texto": "📂 *Sobre o seu processo:*\n\n{{resumo_processo.resumo}}"
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 780,
+          "y": 40
+        }
+      },
+      {
+        "id": "ver_outro",
+        "data": {
+          "chave": "outro_assunto",
+          "texto": "Deseja tratar de outro assunto?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 1020,
+          "y": 40
+        }
+      },
+      {
+        "id": "cond_outro",
+        "data": {
+          "campo": "outro_assunto",
+          "titulo": "Outro assunto?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 1260,
+          "y": 40
+        }
+      },
+      {
+        "id": "saida_voltar",
+        "data": {
+          "saida": "voltar",
+          "texto": ""
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 1500,
+          "y": -20
+        }
+      },
+      {
+        "id": "saida_fim",
+        "data": {
+          "saida": "fim",
+          "texto": ""
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 1500,
+          "y": 120
+        }
+      },
+      {
+        "id": "erro_processo",
+        "data": {
+          "texto": "Não encontramos processos vinculados ao seu CPF."
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 300,
+          "y": 220
+        }
+      },
+      {
+        "id": "tentar_processo",
+        "data": {
+          "chave": "retry_proc",
+          "texto": "Deseja tentar a consulta novamente?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 540,
+          "y": 220
+        }
+      },
+      {
+        "id": "cond_retry",
+        "data": {
+          "campo": "retry_proc",
+          "titulo": "Tentar de novo?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 780,
+          "y": 220
+        }
+      },
+      {
+        "id": "api_resumo",
+        "type": "api",
+        "position": {
+          "x": 660,
+          "y": 180
+        },
+        "data": {
+          "tipo": "api",
+          "titulo": "Resumo do processo (IA)",
+          "url": "/api/processos/resumo",
+          "metodo": "POST",
+          "chave": "resumo_processo"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "api_processos",
+        "target": "tem_processo"
+      },
+      {
+        "id": "e2",
+        "label": "true",
+        "source": "tem_processo",
+        "target": "selecionar_processo"
+      },
+      {
+        "id": "e3",
+        "label": "false",
+        "source": "tem_processo",
+        "target": "erro_processo"
+      },
+      {
+        "id": "e5",
+        "source": "ver_detalhes",
+        "target": "ver_outro"
+      },
+      {
+        "id": "e6",
+        "source": "ver_outro",
+        "target": "cond_outro"
+      },
+      {
+        "id": "e7",
+        "label": "true",
+        "source": "cond_outro",
+        "target": "saida_voltar"
+      },
+      {
+        "id": "e8",
+        "label": "false",
+        "source": "cond_outro",
+        "target": "saida_fim"
+      },
+      {
+        "id": "e9",
+        "source": "erro_processo",
+        "target": "tentar_processo"
+      },
+      {
+        "id": "e10",
+        "source": "tentar_processo",
+        "target": "cond_retry"
+      },
+      {
+        "id": "e11",
+        "label": "true",
+        "source": "cond_retry",
+        "target": "api_processos"
+      },
+      {
+        "id": "e12",
+        "label": "false",
+        "source": "cond_retry",
+        "target": "ver_outro"
+      },
+      {
+        "id": "e_sel_resumo",
+        "source": "selecionar_processo",
+        "target": "api_resumo"
+      },
+      {
+        "id": "e_resumo_det",
+        "source": "api_resumo",
+        "target": "ver_detalhes"
       }
     ]
   },
@@ -1036,6 +1401,81 @@
     ]
   },
   {
+    "id": "cmqi6mz880001ltqlk8bklskq",
+    "name": "Tema: Fora de Competência",
+    "active": false,
+    "nodes": [
+      {
+        "id": "fc_pergunta",
+        "data": {
+          "chave": "voltar_fc",
+          "texto": "Esse assunto está fora da competência da Defensoria Pública.\n\nDeseja tratar de outro assunto?",
+          "tipoPergunta": "sim_nao"
+        },
+        "type": "pergunta",
+        "position": {
+          "x": 60,
+          "y": 40
+        }
+      },
+      {
+        "id": "fc_cond",
+        "data": {
+          "campo": "voltar_fc",
+          "titulo": "Voltar?"
+        },
+        "type": "condicao",
+        "position": {
+          "x": 300,
+          "y": 40
+        }
+      },
+      {
+        "id": "fc_saida_voltar",
+        "data": {
+          "saida": "voltar",
+          "texto": ""
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 540,
+          "y": -20
+        }
+      },
+      {
+        "id": "fc_saida_fim",
+        "data": {
+          "saida": "fim",
+          "texto": ""
+        },
+        "type": "mensagem",
+        "position": {
+          "x": 540,
+          "y": 120
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "fc_pergunta",
+        "target": "fc_cond"
+      },
+      {
+        "id": "e2",
+        "label": "true",
+        "source": "fc_cond",
+        "target": "fc_saida_voltar"
+      },
+      {
+        "id": "e3",
+        "label": "false",
+        "source": "fc_cond",
+        "target": "fc_saida_fim"
+      }
+    ]
+  },
+  {
     "id": "cmqi63iy90002lt3tbidplhgd",
     "name": "Tema: Outros",
     "active": false,
@@ -1108,291 +1548,6 @@
         "id": "e2",
         "source": "outros_ja_procurou",
         "target": "outros_tem_documentos"
-      }
-    ]
-  },
-  {
-    "id": "cmqi6csra0000ltqlohwncifk",
-    "name": "Tema: Acompanhar Processo",
-    "active": false,
-    "nodes": [
-      {
-        "id": "api_processos",
-        "data": {
-          "url": "/mock/processos",
-          "chave": "processos",
-          "metodo": "POST",
-          "titulo": "Consultar processos"
-        },
-        "type": "api",
-        "position": {
-          "x": 60,
-          "y": 40
-        }
-      },
-      {
-        "id": "tem_processo",
-        "data": {
-          "campo": "processos.tem_processo",
-          "titulo": "Tem processo?"
-        },
-        "type": "condicao",
-        "position": {
-          "x": 300,
-          "y": 40
-        }
-      },
-      {
-        "id": "selecionar_processo",
-        "data": {
-          "chave": "processo_sel",
-          "texto": "Digite o número do processo que deseja acompanhar:",
-          "tipoPergunta": "texto"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 540,
-          "y": 40
-        }
-      },
-      {
-        "id": "ver_detalhes",
-        "data": {
-          "texto": "📂 Processo {{processo_sel}} — em andamento. Equipe notificada."
-        },
-        "type": "mensagem",
-        "position": {
-          "x": 780,
-          "y": 40
-        }
-      },
-      {
-        "id": "ver_outro",
-        "data": {
-          "chave": "outro_assunto",
-          "texto": "Deseja tratar de outro assunto?",
-          "tipoPergunta": "sim_nao"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 1020,
-          "y": 40
-        }
-      },
-      {
-        "id": "cond_outro",
-        "data": {
-          "campo": "outro_assunto",
-          "titulo": "Outro assunto?"
-        },
-        "type": "condicao",
-        "position": {
-          "x": 1260,
-          "y": 40
-        }
-      },
-      {
-        "id": "saida_voltar",
-        "data": {
-          "saida": "voltar",
-          "texto": ""
-        },
-        "type": "mensagem",
-        "position": {
-          "x": 1500,
-          "y": -20
-        }
-      },
-      {
-        "id": "saida_fim",
-        "data": {
-          "saida": "fim",
-          "texto": ""
-        },
-        "type": "mensagem",
-        "position": {
-          "x": 1500,
-          "y": 120
-        }
-      },
-      {
-        "id": "erro_processo",
-        "data": {
-          "texto": "Não encontramos processos vinculados ao seu CPF."
-        },
-        "type": "mensagem",
-        "position": {
-          "x": 300,
-          "y": 220
-        }
-      },
-      {
-        "id": "tentar_processo",
-        "data": {
-          "chave": "retry_proc",
-          "texto": "Deseja tentar a consulta novamente?",
-          "tipoPergunta": "sim_nao"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 540,
-          "y": 220
-        }
-      },
-      {
-        "id": "cond_retry",
-        "data": {
-          "campo": "retry_proc",
-          "titulo": "Tentar de novo?"
-        },
-        "type": "condicao",
-        "position": {
-          "x": 780,
-          "y": 220
-        }
-      }
-    ],
-    "edges": [
-      {
-        "id": "e1",
-        "source": "api_processos",
-        "target": "tem_processo"
-      },
-      {
-        "id": "e2",
-        "label": "true",
-        "source": "tem_processo",
-        "target": "selecionar_processo"
-      },
-      {
-        "id": "e3",
-        "label": "false",
-        "source": "tem_processo",
-        "target": "erro_processo"
-      },
-      {
-        "id": "e4",
-        "source": "selecionar_processo",
-        "target": "ver_detalhes"
-      },
-      {
-        "id": "e5",
-        "source": "ver_detalhes",
-        "target": "ver_outro"
-      },
-      {
-        "id": "e6",
-        "source": "ver_outro",
-        "target": "cond_outro"
-      },
-      {
-        "id": "e7",
-        "label": "true",
-        "source": "cond_outro",
-        "target": "saida_voltar"
-      },
-      {
-        "id": "e8",
-        "label": "false",
-        "source": "cond_outro",
-        "target": "saida_fim"
-      },
-      {
-        "id": "e9",
-        "source": "erro_processo",
-        "target": "tentar_processo"
-      },
-      {
-        "id": "e10",
-        "source": "tentar_processo",
-        "target": "cond_retry"
-      },
-      {
-        "id": "e11",
-        "label": "true",
-        "source": "cond_retry",
-        "target": "api_processos"
-      },
-      {
-        "id": "e12",
-        "label": "false",
-        "source": "cond_retry",
-        "target": "ver_outro"
-      }
-    ]
-  },
-  {
-    "id": "cmqi6mz880001ltqlk8bklskq",
-    "name": "Tema: Fora de Competência",
-    "active": false,
-    "nodes": [
-      {
-        "id": "fc_pergunta",
-        "data": {
-          "chave": "voltar_fc",
-          "texto": "Esse assunto está fora da competência da Defensoria Pública.\n\nDeseja tratar de outro assunto?",
-          "tipoPergunta": "sim_nao"
-        },
-        "type": "pergunta",
-        "position": {
-          "x": 60,
-          "y": 40
-        }
-      },
-      {
-        "id": "fc_cond",
-        "data": {
-          "campo": "voltar_fc",
-          "titulo": "Voltar?"
-        },
-        "type": "condicao",
-        "position": {
-          "x": 300,
-          "y": 40
-        }
-      },
-      {
-        "id": "fc_saida_voltar",
-        "data": {
-          "saida": "voltar",
-          "texto": ""
-        },
-        "type": "mensagem",
-        "position": {
-          "x": 540,
-          "y": -20
-        }
-      },
-      {
-        "id": "fc_saida_fim",
-        "data": {
-          "saida": "fim",
-          "texto": ""
-        },
-        "type": "mensagem",
-        "position": {
-          "x": 540,
-          "y": 120
-        }
-      }
-    ],
-    "edges": [
-      {
-        "id": "e1",
-        "source": "fc_pergunta",
-        "target": "fc_cond"
-      },
-      {
-        "id": "e2",
-        "label": "true",
-        "source": "fc_cond",
-        "target": "fc_saida_voltar"
-      },
-      {
-        "id": "e3",
-        "label": "false",
-        "source": "fc_cond",
-        "target": "fc_saida_fim"
       }
     ]
   }

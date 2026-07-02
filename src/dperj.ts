@@ -1,8 +1,8 @@
-import Database from "better-sqlite3";
-import { mkdirSync } from "fs";
+import { prisma } from "./db.js";
 
-// Cliente da API interna da DPERJ + fila local de retry.
+// Cliente da API interna da DPERJ + fila de retry no Postgres (model DperjFila).
 // Sem DPERJ_API_URL configurada roda em modo mock: gera protocolo local e loga o payload.
+// Sem DATABASE_URL (dev) a fila fica desativada — só loga a falha (o atendimento segue).
 
 export interface PayloadDPERJ {
   canal: "whatsapp" | "web";
@@ -26,16 +26,6 @@ export interface PayloadDPERJ {
   };
   dados_caso: Record<string, string>;
 }
-
-mkdirSync("./data", { recursive: true });
-const db = new Database("./data/fila-envios.db");
-db.exec(`CREATE TABLE IF NOT EXISTS fila_envios (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  payload TEXT NOT NULL,
-  tentativas INTEGER NOT NULL DEFAULT 0,
-  ultimo_erro TEXT,
-  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
-)`);
 
 function gerarProtocoloLocal(): string {
   const ano = new Date().getFullYear();
@@ -72,32 +62,32 @@ export async function enviarParaDPERJ(payload: PayloadDPERJ): Promise<string | n
     return await postDPERJ(payload);
   } catch (err) {
     console.error("[dperj] envio falhou, salvando na fila:", err);
-    db.prepare("INSERT INTO fila_envios (payload, ultimo_erro) VALUES (?, ?)").run(
-      JSON.stringify(payload),
-      String(err)
-    );
+    if (prisma) {
+      await prisma.dperjFila
+        .create({ data: { payload: payload as object, ultimoErro: String(err) } })
+        .catch((e) => console.error("[dperj] falha ao enfileirar:", e));
+    } else {
+      console.error("[dperj] sem DATABASE_URL — fila desativada, payload perdido");
+    }
     return null;
   }
 }
 
 // Reprocessa a fila de envios pendentes (chamado periodicamente pelo server).
 export async function processarFila(): Promise<void> {
-  if (!process.env.DPERJ_API_URL) return;
-  const pendentes = db
-    .prepare("SELECT id, payload, tentativas FROM fila_envios ORDER BY id LIMIT 20")
-    .all() as { id: number; payload: string; tentativas: number }[];
+  if (!process.env.DPERJ_API_URL || !prisma) return;
+  const pendentes = await prisma.dperjFila.findMany({ orderBy: { criadoEm: "asc" }, take: 20 });
 
   for (const item of pendentes) {
     try {
-      const protocolo = await postDPERJ(JSON.parse(item.payload));
-      db.prepare("DELETE FROM fila_envios WHERE id = ?").run(item.id);
-      console.log(`[dperj] retry ok — fila #${item.id} → protocolo ${protocolo}`);
+      const protocolo = await postDPERJ(item.payload as unknown as PayloadDPERJ);
+      await prisma.dperjFila.delete({ where: { id: item.id } });
+      console.log(`[dperj] retry ok — fila ${item.id} → protocolo ${protocolo}`);
     } catch (err) {
-      db.prepare("UPDATE fila_envios SET tentativas = ?, ultimo_erro = ? WHERE id = ?").run(
-        item.tentativas + 1,
-        String(err),
-        item.id
-      );
+      await prisma.dperjFila.update({
+        where: { id: item.id },
+        data: { tentativas: item.tentativas + 1, ultimoErro: String(err) },
+      });
     }
   }
 }

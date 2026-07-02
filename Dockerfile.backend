@@ -13,6 +13,8 @@ RUN pnpm build   # prisma generate + tsc
 
 FROM base AS runner
 ENV NODE_ENV=production
+# fontes p/ render da ficha (sharp/SVG) — sem isso o Alpine mostra texto como □□□
+RUN apk add --no-cache fontconfig ttf-dejavu && fc-cache -f
 # node_modules vêm do build (inclui o Prisma Client gerado)
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
