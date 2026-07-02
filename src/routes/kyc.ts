@@ -20,7 +20,9 @@ const tokens = new Map<string, { cpf: string; sessao?: string; canal?: string; c
 const TTL_MS = 30 * 60 * 1000;
 
 const soDigitos = (v: unknown) => String(v ?? "").replace(/\D/g, "");
-const baseUrl = () => process.env.SELF_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+// Link aberto pelo CELULAR do assistido → precisa ser público (PUBLIC_URL).
+// Cai para SELF_URL/localhost só em dev.
+const baseUrl = () => process.env.PUBLIC_URL ?? process.env.SELF_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
 
 function limparExpirados() {
   const agora = Date.now();

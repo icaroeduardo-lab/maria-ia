@@ -40,6 +40,8 @@ export interface FlowNode {
     saida?: string;            // sub-flow: nomeia a saída deste nó-folha (casa com label da seta do subfluxo)
     semReescrita?: boolean;    // pergunta: não reescrever com IA (texto fixo — ex: LGPD/links)
     valor?: string;            // atribuir
+    ctaUrl?: string;           // mensagem: botão que abre link (interpolável, ex: {{kyc.url}})
+    ctaTexto?: string;         // mensagem: rótulo do botão cta_url (<=20 chars)
   };
 }
 
@@ -307,8 +309,12 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
         const txt = node.data.texto
           ? { type: "text", text: interpolar(String(node.data.texto), state.dadosColetados) }
           : null;
+        // botão que abre link (ex: KYC). ctaUrl interpolado; rótulo em ctaTexto.
+        const cta = node.data.ctaUrl
+          ? { type: "cta_url", url: interpolar(String(node.data.ctaUrl), state.dadosColetados), text: node.data.ctaTexto ? String(node.data.ctaTexto) : "Abrir" }
+          : null;
         // padrão: imagem antes do texto. textoAntes=true inverte (texto → imagem)
-        const blocos = (node.data.textoAntes ? [txt, img] : [img, txt]).filter(Boolean);
+        const blocos = [...(node.data.textoAntes ? [txt, img] : [img, txt]), cta].filter(Boolean);
         return { messages: [new AIMessage({ content: blocos as never })] };
       };
 

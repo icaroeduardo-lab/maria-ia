@@ -62,6 +62,7 @@ locals {
     { name = "BEDROCK_MODEL_ID", value = var.bedrock_model_id },
     { name = "BEDROCK_KB_ID", value = var.bedrock_kb_id },
     { name = "BEDROCK_KB_DS_ID", value = var.bedrock_kb_ds_id },
+    { name = "PUBLIC_URL", value = var.public_url },
   ]
 }
 

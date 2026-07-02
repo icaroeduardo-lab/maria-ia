@@ -8,6 +8,7 @@ type Bloco = {
   text?: string;
   image_url?: { url: string };
   options?: string[];
+  url?: string; // cta_url: link do botão
 };
 
 // WhatsApp usa *negrito* com um asterisco; markdown interno usa **
@@ -46,6 +47,21 @@ export function toWhatsAppPayloads(to: string, content: MessageContent): object[
               { type: "reply", reply: { id: "true", title: "Sim" } },
               { type: "reply", reply: { id: "false", title: "Não" } },
             ],
+          },
+        },
+      });
+      textoPendente = "";
+    } else if (b.type === "cta_url" && b.url) {
+      // botão que abre um link (WhatsApp exige URL https). Rótulo em b.text.
+      payloads.push({
+        ...base,
+        type: "interactive",
+        interactive: {
+          type: "cta_url",
+          body: { text: formatar(textoPendente || " ") },
+          action: {
+            name: "cta_url",
+            parameters: { display_text: truncar(b.text || "Abrir", 20), url: b.url },
           },
         },
       });

@@ -152,6 +152,12 @@ variable "s3_bucket" {
   description = "Bucket S3 de fichas/áudios (efêmeros)."
 }
 
+variable "public_url" {
+  type        = string
+  default     = ""
+  description = "URL pública (dominio/tunel) para links abertos pelo assistido (KYC). Vazio = usa SELF_URL."
+}
+
 variable "alarm_email" {
   type        = string
   default     = ""
