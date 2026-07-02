@@ -136,10 +136,13 @@ data/
   checkpoints.db          ← SQLite, gitignored
 public/
   index.html              ← frontend web (estilo WhatsApp)
-docker-compose.yml        ← postgres + redis + backend + frontend + nginx
-Dockerfile.backend        ← build multi-stage Node.js 22 Alpine
-nginx/nginx.conf          ← reverse proxy
+Dockerfile.api            ← imagem do serviço api
+Dockerfile.worker         ← imagem do serviço worker
 ```
+
+> Estrutura v2 (branch AWS): `src/` está dividido em `api/` (server + routes),
+> `worker/`, `jobs/` e `core/` (engine, nodes, services, channels, integrações).
+> Ver `docs/STRUCTURE.md`.
 
 ### Variáveis de Ambiente (`.env` — nunca commitar)
 
@@ -187,11 +190,10 @@ pnpm seed          # cria org DPERJ + admin (admin@mariachat.local / SEED_ADMIN_
 npx prisma migrate dev             # aplica migrações no Postgres
 
 cd frontend && pnpm dev            # painel admin em http://localhost:5173 (proxy → :3000)
-
-docker compose up postgres redis   # sobe só o banco para dev
-docker compose up                  # sobe tudo
-docker compose --profile prod up   # sobe com nginx (produção)
 ```
+
+> Deploy v2 na AWS (ECS Fargate + SQS + EventBridge) via Terraform em `infra/`.
+> Ver `docs/deploy-aws-v2.md`.
 
 ---
 

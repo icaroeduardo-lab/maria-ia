@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { env } from "../src/core/env.js";
+import { env, validarEnv } from "../src/core/env.js";
 
 test("defaults quando as envs não estão setadas", () => {
   delete process.env.AWS_REGION;
@@ -30,5 +30,13 @@ test("pdpjApiUrl remove barra final", () => {
 test("port respeita override numérico", () => {
   process.env.PORT = "8080";
   assert.equal(env.port(), 8080);
+  delete process.env.PORT;
+});
+
+test("validarEnv passa com env válido e falha em PORT malformado", () => {
+  delete process.env.PORT;
+  assert.doesNotThrow(() => validarEnv());
+  process.env.PORT = "abc";
+  assert.throws(() => validarEnv(), /malformada/);
   delete process.env.PORT;
 });

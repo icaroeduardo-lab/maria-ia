@@ -1,20 +1,14 @@
-name: deploy
+name: ci
 
-# Build das imagens api/worker → push no ECR → force-new-deployment no ECS.
-# Autenticação via OIDC (sem chave AWS): setar a variável de repositório
-# AWS_ROLE_ARN (output `github_actions_role_arn` do Terraform).
+# PR → só "test". Merge na main → "test" e, se passar, "deploy".
+# Deploy = build imagens api/worker → push ECR → force-new-deployment no ECS.
+# Auth via OIDC (variável de repositório AWS_ROLE_ARN). Não roda Terraform.
 
 on:
+  pull_request:
+    branches: [main]
   push:
-    branches: [main, arch/aws-fargate-v2]
-    paths:
-      - "src/**"
-      - "prisma/**"
-      - "Dockerfile.api"
-      - "Dockerfile.worker"
-      - "package.json"
-      - ".github/workflows/deploy.yml"
-  workflow_dispatch:
+    branches: [main]
 
 permissions:
   id-token: write
@@ -26,7 +20,24 @@ env:
   ECR_NAMESPACE: maria-chat-prod
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm --filter ./frontend build
+
   deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,8 +53,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build e push (api)
-        env:
-          REG: ${{ steps.ecr.outputs.registry }}
+        env: { REG: "${{ steps.ecr.outputs.registry }}" }
         run: |
           IMG="$REG/${{ env.ECR_NAMESPACE }}/api"
           docker build -f Dockerfile.api -t "$IMG:$GITHUB_SHA" -t "$IMG:latest" .
@@ -51,8 +61,7 @@ jobs:
           docker push "$IMG:latest"
 
       - name: Build e push (worker)
-        env:
-          REG: ${{ steps.ecr.outputs.registry }}
+        env: { REG: "${{ steps.ecr.outputs.registry }}" }
         run: |
           IMG="$REG/${{ env.ECR_NAMESPACE }}/worker"
           docker build -f Dockerfile.worker -t "$IMG:$GITHUB_SHA" -t "$IMG:latest" .

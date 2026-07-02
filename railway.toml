@@ -1,8 +1,0 @@
-[build]
-builder = "dockerfile"
-dockerfilePath = "Dockerfile.backend"
-
-[deploy]
-startCommand = "pnpm start"
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3

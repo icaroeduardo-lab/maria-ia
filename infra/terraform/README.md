@@ -1,7 +1,7 @@
 # Infra — Terraform (arquitetura-alvo AWS)
 
 IaC do backend Maria Chat v2 (ECS Fargate + SQS + EventBridge). Ver
-`../../STRUCTURE.md` e `../../docs/arquitetura-maria.drawio`.
+`../../docs/STRUCTURE.md` e `../../docs/arquitetura-maria.drawio`.
 
 ## Estado atual (Fases 0–1)
 - `network.tf` — VPC, sub-redes pública/privada (2 AZs), IGW, NAT, rotas.
@@ -43,9 +43,9 @@ O RDS é **dedicado a esta aplicação**, então vive na VPC nova (privado), com
   permissão de push no ECR e deploy no ECS (sem chave AWS no GitHub).
 - Após `apply`: `terraform output github_actions_role_arn` → setar como variável
   de repositório **`AWS_ROLE_ARN`** (GitHub → Settings → Variables → Actions).
-- Workflow: `infra/ci/deploy.yml` (build api/worker → ECR → force deploy).
-  **Ativar:** copiar para `.github/workflows/deploy.yml` (o push do workflow exige
-  token com escopo `workflow` — fazer pela UI do GitHub ou `gh auth refresh -s workflow`).
+- Workflow: `infra/ci/ci.yml` (PR = testes; merge na main = testes → build api/worker
+  → ECR → force-deploy ECS, job `deploy` gated pelo `test`). Ativar: copiar para
+  `.github/workflows/ci.yml` (ver `infra/ci/README.md`).
 
 ## Fase 5 — código (fora do Terraform)
 Extrair `packages/core`/`db`, montar `services/api` e `services/worker`, criar
