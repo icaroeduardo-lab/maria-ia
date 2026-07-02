@@ -68,14 +68,14 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# HTTPS:443 — só quando há certificado ACM.
+# HTTPS:443 — quando há certificado (criado por domain_name ou override manual).
 resource "aws_lb_listener" "https" {
-  count             = var.acm_certificate_arn == "" ? 0 : 1
+  count             = local.https_ativo ? 1 : 0
   load_balancer_arn = aws_lb.main.arn
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = var.acm_certificate_arn
+  certificate_arn   = local.cert_arn
 
   default_action {
     type             = "forward"
