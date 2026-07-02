@@ -183,7 +183,7 @@ function EditorAssistido({
   const [form, setForm] = useState<Record<string, string>>({});
   useEffect(() => {
     const f: Record<string, string> = {};
-    for (const { chave } of CAMPOS) f[chave] = String((fonte as Record<string, unknown>)[chave] ?? "");
+    for (const { chave } of CAMPOS) f[chave] = String((fonte as unknown as Record<string, unknown>)[chave] ?? "");
     setForm(f);
   }, [fonte]);
   const set = (k: string, v: string) => setForm((p) => ({ ...p, [k]: v }));
