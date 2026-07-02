@@ -1,7 +1,7 @@
 # Infra — Terraform (arquitetura-alvo AWS)
 
 IaC do backend Maria Chat v2 (ECS Fargate + SQS + EventBridge). Ver
-`../../STRUCTURE.md` e `../../docs/arquitetura-maria.drawio`.
+`../../docs/STRUCTURE.md` e `../../docs/arquitetura-maria.drawio`.
 
 ## Estado atual (Fases 0–1)
 - `network.tf` — VPC, sub-redes pública/privada (2 AZs), IGW, NAT, rotas.

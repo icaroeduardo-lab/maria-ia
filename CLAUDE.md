@@ -142,7 +142,7 @@ Dockerfile.worker         ← imagem do serviço worker
 
 > Estrutura v2 (branch AWS): `src/` está dividido em `api/` (server + routes),
 > `worker/`, `jobs/` e `core/` (engine, nodes, services, channels, integrações).
-> Ver `STRUCTURE.md`.
+> Ver `docs/STRUCTURE.md`.
 
 ### Variáveis de Ambiente (`.env` — nunca commitar)
 
