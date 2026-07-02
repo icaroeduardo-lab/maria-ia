@@ -6,17 +6,17 @@ locals {
   jobs = {
     retry-dperj = {
       schedule = "rate(5 minutes)"
-      command  = ["node", "dist/jobs.js", "retry-dperj"]
+      command  = ["node", "dist/jobs/jobs.js", "retry-dperj"]
       desc     = "Reenvia à DPERJ os payloads que falharam (fila)."
     }
     limpeza = {
       schedule = "cron(0 3 * * ? *)" # 03:00 UTC diário
-      command  = ["node", "dist/jobs.js", "limpeza"]
+      command  = ["node", "dist/jobs/jobs.js", "limpeza"]
       desc     = "Expira conversas inativas e dados efêmeros."
     }
     health = {
       schedule = "rate(6 hours)"
-      command  = ["node", "dist/jobs.js", "health"]
+      command  = ["node", "dist/jobs/jobs.js", "health"]
       desc     = "Verifica validade do token do WhatsApp e alerta."
     }
   }

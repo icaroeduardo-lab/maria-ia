@@ -3,8 +3,8 @@ import dns from "node:dns";
 // prefere IPv4 (redes com IPv6 quebrado estouram ETIMEDOUT no fetch — ex: Graph API).
 dns.setDefaultResultOrder("ipv4first");
 
-import { consumir, filaConfigurada } from "./queue.js";
-import { processarMensagemWhatsApp } from "./channels/whatsapp.js";
+import { consumir, filaConfigurada } from "../queue.js";
+import { processarMensagemWhatsApp } from "../channels/whatsapp.js";
 
 // Serviço worker: consome a fila SQS e processa cada mensagem do WhatsApp
 // (transcreve se áudio → roda o grafo → responde via Graph API).

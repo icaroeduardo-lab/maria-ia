@@ -30,7 +30,7 @@ O RDS é **dedicado a esta aplicação**, então vive na VPC nova (privado), com
 ## Fase 3 (feita)
 - `eventbridge.tf` — 3 jobs agendados (retry DPERJ 5min, limpeza diária, health 6h)
   como tasks Fargate pontuais (RunTask) reusando a imagem do worker com o comando
-  sobrescrito (`node dist/jobs.js <job>`). IAM p/ o EventBridge rodar ECS.
+  sobrescrito (`node dist/jobs/jobs.js <job>`). IAM p/ o EventBridge rodar ECS.
 
 ## Fase 4 (feita)
 - `observability.tf` — SNS (e-mail opcional), alarmes (DLQ não-vazia, fila atrasada,

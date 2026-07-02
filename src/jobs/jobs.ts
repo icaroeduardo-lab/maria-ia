@@ -3,10 +3,10 @@ import dns from "node:dns";
 dns.setDefaultResultOrder("ipv4first");
 
 import pg from "pg";
-import { processarFila } from "./dperj.js";
-import { limparConversasInativas } from "./limpeza.js";
-import { avisarSeTokenMorto } from "./health.js";
-import { env } from "./env.js";
+import { processarFila } from "../dperj.js";
+import { limparConversasInativas } from "../limpeza.js";
+import { avisarSeTokenMorto } from "../health.js";
+import { env } from "../env.js";
 
 // Limpa os checkpoints das threads de WhatsApp (recomeça as conversas do zero).
 // Útil em demo/teste quando o estado de uma conversa fica travado.

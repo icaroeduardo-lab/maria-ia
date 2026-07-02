@@ -9,30 +9,30 @@ import fastifyCors from "@fastify/cors";
 import fastifyJwt from "@fastify/jwt";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { processarMensagem } from "./chat.js";
-import { whatsappRoutes } from "./channels/whatsapp.js";
-import { authRoutes } from "./routes/auth.js";
-import { adminRoutes } from "./routes/admin.js";
-import { processarFila } from "./dperj.js";
-import { limparConversasInativas } from "./limpeza.js";
-import { verificarDb, verificarTokenWhatsApp, avisarSeTokenMorto } from "./health.js";
-import { prisma } from "./db.js";
-import { validarFlow } from "./engine/validar.js";
-import type { FlowNode, FlowEdge } from "./engine/builder.js";
-import { mockRoutes } from "./routes/mock.js";
-import { assistidosFlowRoutes } from "./routes/assistidos.js";
-import { fichaRoutes } from "./routes/ficha.js";
-import { kycRoutes } from "./routes/kyc.js";
-import { processosRoutes } from "./routes/processos.js";
-import { filaConfigurada } from "./queue.js";
-import { env } from "./env.js";
+import { processarMensagem } from "../chat.js";
+import { whatsappRoutes } from "../channels/whatsapp.js";
+import { authRoutes } from "../routes/auth.js";
+import { adminRoutes } from "../routes/admin.js";
+import { processarFila } from "../dperj.js";
+import { limparConversasInativas } from "../limpeza.js";
+import { verificarDb, verificarTokenWhatsApp, avisarSeTokenMorto } from "../health.js";
+import { prisma } from "../db.js";
+import { validarFlow } from "../engine/validar.js";
+import type { FlowNode, FlowEdge } from "../engine/builder.js";
+import { mockRoutes } from "../routes/mock.js";
+import { assistidosFlowRoutes } from "../routes/assistidos.js";
+import { fichaRoutes } from "../routes/ficha.js";
+import { kycRoutes } from "../routes/kyc.js";
+import { processosRoutes } from "../routes/processos.js";
+import { filaConfigurada } from "../queue.js";
+import { env } from "../env.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = Fastify();
 
 await app.register(fastifyCors, { origin: true });
 await app.register(fastifyJwt, { secret: env.jwtSecret() });
-await app.register(fastifyStatic, { root: join(__dirname, "../public") });
+await app.register(fastifyStatic, { root: join(__dirname, "../../public") });
 
 app.post("/api/chat", async (req) => {
   const { sessionId, message } = req.body as { sessionId: string; message?: string };

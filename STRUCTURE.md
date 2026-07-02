@@ -35,9 +35,11 @@ Decisão pragmática: o split **funcional** foi feito por **entrypoints** que
 reusam o `src/` (menos risco que mover tudo para `packages/`). O layout de
 monorepo acima fica como **refactor opcional** futuro.
 
-- `src/server.ts` — **api**: webhook (enfileira no SQS) + /admin + /api/chat + /health.
-- `src/worker.ts` — **worker**: consome a fila e processa (`processarMensagemWhatsApp`).
-- `src/jobs.ts` — **jobs**: entrypoint dos 3 jobs (`node dist/jobs.js <job>`).
+- `src/api/server.ts` — **api**: webhook (enfileira no SQS) + /admin + /api/chat + /health.
+- `src/worker/worker.ts` — **worker**: consome a fila e processa (`processarMensagemWhatsApp`).
+- `src/jobs/jobs.ts` — **jobs**: entrypoint dos jobs (`node dist/jobs/jobs.js <job>`).
+- Demais módulos (engine, nodes, services, channels, integrações) seguem em `src/`
+  como **core compartilhado** (reorg física para `src/core` fica como passo opcional).
 - `src/queue.ts` — produtor/consumidor SQS FIFO (grupo por conversa, dedupe por msg id).
 - Webhook: com `SQS_QUEUE_URL` a api **enfileira**; sem fila (dev) processa inline.
 - `Dockerfile.api` / `Dockerfile.worker` — imagens dos dois serviços.
