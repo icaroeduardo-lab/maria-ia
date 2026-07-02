@@ -31,6 +31,7 @@
     "@types/bcryptjs": "^3.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.9.2",
+    "@types/pg": "^8.20.0",
     "nodemon": "^3.1.14",
     "prisma": "^6.19.3",
     "tsx": "^4.22.4",
@@ -53,6 +54,7 @@
     "better-sqlite3": "^12.10.0",
     "dotenv": "^17.4.2",
     "fastify": "^5.8.5",
+    "pg": "^8.22.0",
     "sharp": "^0.35.1",
     "stripe": "^22.2.0",
     "zod": "^4.4.3"

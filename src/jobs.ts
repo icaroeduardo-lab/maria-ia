@@ -2,16 +2,33 @@ import "dotenv/config";
 import dns from "node:dns";
 dns.setDefaultResultOrder("ipv4first");
 
+import pg from "pg";
 import { processarFila } from "./dperj.js";
 import { limparConversasInativas } from "./limpeza.js";
 import { avisarSeTokenMorto } from "./health.js";
 
+// Limpa os checkpoints das threads de WhatsApp (recomeça as conversas do zero).
+// Útil em demo/teste quando o estado de uma conversa fica travado.
+async function resetWhatsApp(): Promise<void> {
+  const url = (process.env.DATABASE_URL ?? "").replace(/sslmode=require/i, "sslmode=no-verify");
+  const cli = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
+  await cli.connect();
+  let total = 0;
+  for (const t of ["checkpoints", "checkpoint_writes", "checkpoint_blobs"]) {
+    const r = await cli.query(`DELETE FROM langgraph.${t} WHERE thread_id LIKE '%wa:%'`);
+    total += r.rowCount ?? 0;
+  }
+  await cli.end();
+  console.log(`[jobs] reset-wa: ${total} linha(s) removida(s)`);
+}
+
 // Entrypoint dos jobs agendados (EventBridge → RunTask com este comando).
-// Uso: node dist/jobs.js <retry-dperj|limpeza|health>
+// Uso: node dist/jobs.js <retry-dperj|limpeza|health|reset-wa>
 const jobs: Record<string, () => Promise<unknown>> = {
   "retry-dperj": processarFila,
   "limpeza": limparConversasInativas,
   "health": avisarSeTokenMorto,
+  "reset-wa": resetWhatsApp,
 };
 
 async function main() {
