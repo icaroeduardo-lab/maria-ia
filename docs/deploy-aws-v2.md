@@ -102,13 +102,21 @@ O RDS é privado (só acessível pelo proxy, dentro da VPC). Opções:
 ## 6. HTTPS + webhook do WhatsApp
 
 A Meta exige **webhook HTTPS com certificado válido** — o ALB só com HTTP:80 não
-serve. Providenciar domínio + certificado:
+serve. Com o domínio numa hosted zone do **Route53**, o Terraform emite/valida o
+certificado (ACM) e aponta o domínio para o ALB automaticamente:
 
-1. Emitir certificado no **ACM** para o domínio (ex: `maria.dperj...`).
-2. `terraform apply` com `-var acm_certificate_arn=<arn>` → cria o listener 443.
-3. Apontar o DNS do domínio (CNAME/alias) para o `alb_dns_name`.
-4. No app da Meta: webhook = `https://<dominio>/webhook/whatsapp`,
-   verify token = `WA_WEBHOOK_VERIFY_TOKEN` (adicionar ao segredo/app).
+1. `terraform apply` com:
+   ```
+   -var 'domain_name=maria.dperj.rj.gov.br' -var 'route53_zone_name=dperj.rj.gov.br'
+   ```
+   Cria: certificado ACM (validação DNS), registros de validação, listener 443 e
+   o alias A do domínio → ALB. Saída: `app_url = https://<dominio>`.
+2. `PUBLIC_URL` = `app_url` (secret `app`) → links do KYC ficam no domínio, sem túnel.
+3. No app da Meta: webhook = `https://<dominio>/webhook/whatsapp`,
+   verify token = `WA_WEBHOOK_VERIFY_TOKEN`.
+
+> Se o DNS **não** estiver no Route53: valide o certificado no ACM manualmente e
+> passe `-var acm_certificate_arn=<arn>` (o listener 443 usa esse ARN).
 
 ## 7. Verificar
 

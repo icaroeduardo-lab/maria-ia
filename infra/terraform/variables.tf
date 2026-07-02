@@ -143,7 +143,20 @@ variable "worker_msgs_per_task" {
 variable "acm_certificate_arn" {
   type        = string
   default     = ""
-  description = "ARN do certificado ACM para HTTPS no ALB. Vazio = só HTTP:80."
+  description = "ARN de um certificado ACM já existente (override manual). Vazio = usa o criado por domain_name, se houver."
+}
+
+# ── Domínio / HTTPS (webhook da Meta exige HTTPS válido) ──────────────────────
+variable "domain_name" {
+  type        = string
+  default     = ""
+  description = "Domínio público do app (ex: maria.dperj.rj.gov.br). Vazio = só HTTP (sem HTTPS)."
+}
+
+variable "route53_zone_name" {
+  type        = string
+  default     = ""
+  description = "Nome da hosted zone no Route53 onde o domínio vive (ex: dperj.rj.gov.br). Necessário para emitir/validar o certificado ACM automaticamente."
 }
 
 variable "s3_bucket" {
