@@ -35,11 +35,26 @@ Decisão pragmática: o split **funcional** foi feito por **entrypoints** que
 reusam o `src/` (menos risco que mover tudo para `packages/`). O layout de
 monorepo acima fica como **refactor opcional** futuro.
 
-- `src/api/server.ts` — **api**: webhook (enfileira no SQS) + /admin + /api/chat + /health.
-- `src/worker/worker.ts` — **worker**: consome a fila e processa (`processarMensagemWhatsApp`).
-- `src/jobs/jobs.ts` — **jobs**: entrypoint dos jobs (`node dist/jobs/jobs.js <job>`).
-- Demais módulos (engine, nodes, services, channels, integrações) seguem em `src/`
-  como **core compartilhado** (reorg física para `src/core` fica como passo opcional).
+```
+src/
+├── api/        server.ts + routes/          ← entrada (webhook, /admin, /api/chat, /health)
+├── worker/     worker.ts                     ← consumidor SQS
+├── jobs/       jobs.ts                        ← jobs agendados (EventBridge)
+└── core/                                      ← domínio compartilhado
+    ├── engine/     builder, ia, campos, validar
+    ├── nodes/      onboarding, atendimento, coleta
+    ├── services/   familia-pensao, trabalhista, inss, outros
+    ├── channels/   whatsapp, payloads (api recebe, worker envia)
+    ├── state.ts perguntas.ts registro-perguntas.ts graph.ts chat.ts queue.ts
+    ├── dperj.ts processos.ts resumo.ts mask.ts transcribe.ts
+    └── config.ts env.ts db.ts health.ts limpeza.ts
+```
+
+- `src/api/server.ts` — api; `routes/` vive sob a api (é da camada de entrada).
+- `src/worker/worker.ts` — consome a fila e processa (`processarMensagemWhatsApp`).
+- `src/jobs/jobs.ts` — jobs (`node dist/jobs/jobs.js <job>`).
+- `src/core/**` — tudo que api/worker/jobs compartilham. Fronteira explícita no disco.
+- Build: `dist/api`, `dist/worker`, `dist/jobs`, `dist/core` (paths dos scripts/infra já batem).
 - `src/queue.ts` — produtor/consumidor SQS FIFO (grupo por conversa, dedupe por msg id).
 - Webhook: com `SQS_QUEUE_URL` a api **enfileira**; sem fila (dev) processa inline.
 - `Dockerfile.api` / `Dockerfile.worker` — imagens dos dois serviços.

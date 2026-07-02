@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { toWhatsAppPayloads, formatar, truncar } from "../src/channels/payloads.js";
+import { toWhatsAppPayloads, formatar, truncar } from "../src/core/channels/payloads.js";
 
 const TO = "5521999999999";
 

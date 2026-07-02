@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extrairMensagens } from "../src/channels/whatsapp.js";
+import { extrairMensagens } from "../src/core/channels/whatsapp.js";
 
 // Corpo no formato do webhook da Meta.
 const corpo = (msgs: unknown[]) => ({

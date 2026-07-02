@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "crypto";
 import { AIMessage } from "@langchain/core/messages";
-import { processarMensagem } from "../chat.js";
-import { enviarWhatsApp } from "../channels/whatsapp.js";
-import { env } from "../env.js";
+import { processarMensagem } from "../../core/chat.js";
+import { enviarWhatsApp } from "../../core/channels/whatsapp.js";
+import { env } from "../../core/env.js";
 
 // KYC de demonstração: a página /kyc.html abre a câmera do celular, "reconhece"
 // o rosto e marca a identidade como confirmada. Ao confirmar, o backend RETOMA

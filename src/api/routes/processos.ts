@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { consultarPorCpf, consultarPorNumero, resumirProcesso, listaNumerada } from "../processos.js";
+import { consultarPorCpf, consultarPorNumero, resumirProcesso, listaNumerada } from "../../core/processos.js";
 
 // Rotas internas chamadas pelos nós "api" do fluxo (mesmo padrão do /mock).
 // Sem auth: só o engine chama via SELF_URL.

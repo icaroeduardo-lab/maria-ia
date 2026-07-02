@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mascararCpf, mascararTelefone, mascararEmail, mascararAssistido } from "../src/mask.js";
+import { mascararCpf, mascararTelefone, mascararEmail, mascararAssistido } from "../src/core/mask.js";
 
 test("mascararCpf mostra só o 9º dígito", () => {
   assert.equal(mascararCpf("11144477735"), "•••.•••.••7-••");

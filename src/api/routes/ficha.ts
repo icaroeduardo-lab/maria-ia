@@ -2,8 +2,8 @@ import type { FastifyInstance } from "fastify";
 import sharp from "sharp";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
-import { mascararCpf, mascararTelefone } from "../mask.js";
-import { env } from "../env.js";
+import { mascararCpf, mascararTelefone } from "../../core/mask.js";
+import { env } from "../../core/env.js";
 
 // Gera uma "ficha" do assistido: escreve os dados (consultados pelo CPF) por cima
 // de uma imagem de prancheta e hospeda o resultado no S3. Usado pelo fluxo via

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validarFlow } from "../src/engine/validar.js";
-import type { FlowNode, FlowEdge } from "../src/engine/builder.js";
+import { validarFlow } from "../src/core/engine/validar.js";
+import type { FlowNode, FlowEdge } from "../src/core/engine/builder.js";
 
 const N = (id: string, type: FlowNode["type"], data: FlowNode["data"] = {}): FlowNode => ({ id, type, data });
 const E = (source: string, target: string, label?: string): FlowEdge => ({ id: `${source}_${target}`, source, target, label });
