@@ -1,0 +1,24 @@
+name: terraform-check
+
+# Checagem de Terraform em PR que toca a infra: fmt + validate.
+# NÃO precisa de credenciais AWS nem de state (validate roda com -backend=false).
+# NÃO faz plan/apply — pega erro de sintaxe/config cedo, sem tocar em nada.
+# Ativar: copiar para .github/workflows/tf-check.yml (ver infra/ci/README.md).
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ["infra/terraform/**"]
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run: { working-directory: infra/terraform }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "1.9.8" }
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate -no-color
