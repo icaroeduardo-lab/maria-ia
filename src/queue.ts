@@ -10,10 +10,11 @@ import {
 // em ordem, nunca em paralelo. MessageDeduplicationId = id da mensagem da Meta
 // → reentregas são descartadas nativamente pela fila FIFO.
 
-const REGION = process.env.AWS_REGION ?? "us-east-1";
-const QUEUE_URL = () => process.env.SQS_QUEUE_URL ?? "";
+import { env } from "./env.js";
 
-const client = new SQSClient({ region: REGION });
+const QUEUE_URL = () => env.sqsQueueUrl();
+
+const client = new SQSClient({ region: env.awsRegion() });
 
 // Payload que trafega na fila (uma mensagem recebida do WhatsApp).
 export interface MsgFila {

@@ -1,17 +1,18 @@
 import { ChatBedrockConverse } from "@langchain/aws";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { obterEstilo } from "./config.js";
+import { env } from "./env.js";
 
 // Cliente da API real de processos do PDPJ (Data Lake / PJe).
 // Busca por CPF da parte (cpfCnpjParte) e por número (numeroProcesso).
 // Token é temporário — vem do .env (PDPJ_API_TOKEN). Sem token/URL → desligado.
 
-const BASE = () => (process.env.PDPJ_API_URL ?? "").replace(/\/+$/, "");
-const TOKEN = () => process.env.PDPJ_API_TOKEN ?? "";
+const BASE = () => env.pdpjApiUrl();
+const TOKEN = () => env.pdpjApiToken();
 
 const model = new ChatBedrockConverse({
-  model: process.env.BEDROCK_MODEL_ID ?? "anthropic.claude-3-haiku-20240307-v1:0",
-  region: process.env.AWS_REGION ?? "us-east-1",
+  model: env.bedrockModelId(),
+  region: env.awsRegion(),
   temperature: 0.2,
 });
 

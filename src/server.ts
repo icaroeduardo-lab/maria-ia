@@ -25,12 +25,13 @@ import { fichaRoutes } from "./routes/ficha.js";
 import { kycRoutes } from "./routes/kyc.js";
 import { processosRoutes } from "./routes/processos.js";
 import { filaConfigurada } from "./queue.js";
+import { env } from "./env.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = Fastify();
 
 await app.register(fastifyCors, { origin: true });
-await app.register(fastifyJwt, { secret: process.env.JWT_SECRET ?? "dev-secret-trocar-em-producao" });
+await app.register(fastifyJwt, { secret: env.jwtSecret() });
 await app.register(fastifyStatic, { root: join(__dirname, "../public") });
 
 app.post("/api/chat", async (req) => {
@@ -90,6 +91,6 @@ if (!filaConfigurada()) {
   if (r.ok) console.log(`[flow] fluxo ativo "${ativo.name}" válido ✓`);
 })().catch(console.error);
 
-const PORT = Number(process.env.PORT ?? 3000);
+const PORT = env.port();
 await app.listen({ port: PORT, host: "0.0.0.0" });
 console.log(`Servidor em http://localhost:${PORT}`);

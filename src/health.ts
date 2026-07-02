@@ -4,7 +4,8 @@ import { prisma } from "./db.js";
 // O token de teste do WhatsApp expira a cada ~24h; detectar cedo evita "demo
 // quebrada" silenciosa (o envio falha com 401/403 só quando alguém escreve).
 
-const GRAPH = process.env.WA_GRAPH_URL ?? "https://graph.facebook.com";
+import { env } from "./env.js";
+const GRAPH = env.waGraphUrl();
 const API = "v23.0";
 
 export async function verificarDb(): Promise<boolean> {
@@ -19,8 +20,8 @@ export async function verificarDb(): Promise<boolean> {
 
 // true = token válido; false = inválido/expirado; null = não configurado
 export async function verificarTokenWhatsApp(): Promise<boolean | null> {
-  const token = process.env.WA_ACCESS_TOKEN;
-  const phoneId = process.env.WA_PHONE_NUMBER_ID;
+  const token = env.waAccessToken();
+  const phoneId = env.waPhoneNumberId();
   if (!token || !phoneId) return null;
   try {
     const res = await fetch(`${GRAPH}/${API}/${phoneId}?fields=id`, {

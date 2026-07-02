@@ -6,11 +6,12 @@ import pg from "pg";
 import { processarFila } from "./dperj.js";
 import { limparConversasInativas } from "./limpeza.js";
 import { avisarSeTokenMorto } from "./health.js";
+import { env } from "./env.js";
 
 // Limpa os checkpoints das threads de WhatsApp (recomeça as conversas do zero).
 // Útil em demo/teste quando o estado de uma conversa fica travado.
 async function resetWhatsApp(): Promise<void> {
-  const url = (process.env.DATABASE_URL ?? "").replace(/sslmode=require/i, "sslmode=no-verify");
+  const url = (env.databaseUrl() ?? "").replace(/sslmode=require/i, "sslmode=no-verify");
   const cli = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
   await cli.connect();
   let total = 0;

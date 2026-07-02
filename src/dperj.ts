@@ -1,4 +1,5 @@
 import { prisma } from "./db.js";
+import { env } from "./env.js";
 
 // Cliente da API interna da DPERJ + fila de retry no Postgres (model DperjFila).
 // Sem DPERJ_API_URL configurada roda em modo mock: gera protocolo local e loga o payload.
@@ -34,12 +35,12 @@ function gerarProtocoloLocal(): string {
 }
 
 async function postDPERJ(payload: PayloadDPERJ): Promise<string> {
-  const url = process.env.DPERJ_API_URL!;
+  const url = env.dperjApiUrl()!;
   const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.DPERJ_API_KEY ?? ""}`,
+      Authorization: `Bearer ${env.dperjApiKey() ?? ""}`,
     },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(10_000),
@@ -52,7 +53,7 @@ async function postDPERJ(payload: PayloadDPERJ): Promise<string> {
 // Envia o atendimento. Retorna o protocolo, ou null se a API falhou
 // (payload fica na fila para retry posterior — ver processarFila).
 export async function enviarParaDPERJ(payload: PayloadDPERJ): Promise<string | null> {
-  if (!process.env.DPERJ_API_URL) {
+  if (!env.dperjApiUrl()) {
     const protocolo = gerarProtocoloLocal();
     console.log(`[dperj] mock (DPERJ_API_URL não configurada) — protocolo ${protocolo}`);
     console.log(`[dperj] payload:`, JSON.stringify(payload));
@@ -75,7 +76,7 @@ export async function enviarParaDPERJ(payload: PayloadDPERJ): Promise<string | n
 
 // Reprocessa a fila de envios pendentes (chamado periodicamente pelo server).
 export async function processarFila(): Promise<void> {
-  if (!process.env.DPERJ_API_URL || !prisma) return;
+  if (!env.dperjApiUrl() || !prisma) return;
   const pendentes = await prisma.dperjFila.findMany({ orderBy: { criadoEm: "asc" }, take: 20 });
 
   for (const item of pendentes) {

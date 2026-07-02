@@ -4,6 +4,7 @@ import { AIMessage } from "@langchain/core/messages";
 import { processarMensagem } from "../chat.js";
 import { transcreverAudioWA } from "../transcribe.js";
 import { filaConfigurada, enfileirar } from "../queue.js";
+import { env } from "../env.js";
 import { toWhatsAppPayloads, formatar } from "./payloads.js";
 
 export { toWhatsAppPayloads } from "./payloads.js";
@@ -14,8 +15,8 @@ export { toWhatsAppPayloads } from "./payloads.js";
 //
 // Sem WA_ACCESS_TOKEN configurado o sender roda em modo dev: loga o payload em vez de enviar.
 
-const GRAPH_URL = () => process.env.WA_GRAPH_URL ?? "https://graph.facebook.com";
-const API_VERSION = () => process.env.WA_API_VERSION ?? "v23.0";
+const GRAPH_URL = () => env.waGraphUrl();
+const API_VERSION = () => env.waApiVersion();
 
 // ── Recebimento: formato Meta → interno ─────────────────────────────────────
 
@@ -111,8 +112,8 @@ async function uploadMedia(linkUrl: string, phoneNumberId: string, token: string
 }
 
 export async function enviarWhatsApp(to: string, messages: BaseMessage[]): Promise<void> {
-  const phoneNumberId = process.env.WA_PHONE_NUMBER_ID;
-  const accessToken = process.env.WA_ACCESS_TOKEN;
+  const phoneNumberId = env.waPhoneNumberId();
+  const accessToken = env.waAccessToken();
   const payloads = messages.flatMap((msg) => toWhatsAppPayloads(to, msg.content));
   for (let i = 0; i < payloads.length; i++) {
     const payload = payloads[i] as { type?: string; image?: { link?: string; id?: string } };
@@ -170,7 +171,7 @@ function jaProcessado(id: string): boolean {
 export async function processarMensagemWhatsApp(msg: MensagemRecebida): Promise<void> {
   let texto = msg.texto;
   if (msg.audioId) {
-    texto = await transcreverAudioWA(msg.audioId, process.env.WA_ACCESS_TOKEN);
+    texto = await transcreverAudioWA(msg.audioId, env.waAccessToken());
     if (!texto) {
       await enviarWhatsApp(msg.from, [
         new AIMessage("Desculpe, não consegui entender o áudio. Pode escrever ou enviar novamente? 🎤"),
@@ -186,7 +187,7 @@ export async function processarMensagemWhatsApp(msg: MensagemRecebida): Promise<
 export async function whatsappRoutes(app: FastifyInstance) {
   app.get("/webhook/whatsapp", async (req, reply) => {
     const q = req.query as Record<string, string>;
-    if (q["hub.mode"] === "subscribe" && q["hub.verify_token"] === process.env.WA_WEBHOOK_VERIFY_TOKEN) {
+    if (q["hub.mode"] === "subscribe" && q["hub.verify_token"] === env.waWebhookVerifyToken()) {
       return reply.send(q["hub.challenge"]);
     }
     return reply.code(403).send();

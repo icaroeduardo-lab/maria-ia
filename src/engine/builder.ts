@@ -5,6 +5,7 @@ import { AmazonKnowledgeBaseRetriever } from "@langchain/aws";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import { obterEstilo, obterConfig } from "../config.js";
+import { env } from "../env.js";
 import { GraphAnnotation, type GraphState } from "../state.js";
 import { checkpointer, graph as graphEstatico } from "../graph.js";
 import { mensagemPergunta, proxima, type Pergunta, type TipoPergunta } from "../perguntas.js";
@@ -62,15 +63,15 @@ export interface FlowJSON {
 }
 
 const model = new ChatBedrockConverse({
-  model: process.env.BEDROCK_MODEL_ID ?? "anthropic.claude-3-haiku-20240307-v1:0",
-  region: process.env.AWS_REGION ?? "us-east-1",
+  model: env.bedrockModelId(),
+  region: env.awsRegion(),
 });
 
-const retriever = process.env.BEDROCK_KB_ID
+const retriever = env.bedrockKbId()
   ? new AmazonKnowledgeBaseRetriever({
       topK: 3,
-      knowledgeBaseId: process.env.BEDROCK_KB_ID,
-      region: process.env.AWS_REGION ?? "us-east-1",
+      knowledgeBaseId: env.bedrockKbId()!,
+      region: env.awsRegion(),
     })
   : null;
 
@@ -293,7 +294,7 @@ function interpolar(txt: string, dados: Record<string, unknown>): string {
 
 // base do próprio servidor para chamadas internas do fluxo (nós api com url relativa)
 function baseUrlInterna(): string {
-  return process.env.SELF_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
+  return env.selfUrl();
 }
 
 // ── Funções de nó ─────────────────────────────────────────────────────────────

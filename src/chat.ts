@@ -4,6 +4,7 @@ import { graph as graphEstatico, checkpointer } from "./graph.js";
 import { graphDoFlow, subfluxosReferenciados } from "./engine/builder.js";
 import { prisma } from "./db.js";
 import { montarMetadados, gerarResumoTexto } from "./resumo.js";
+import { env } from "./env.js";
 
 // Comando do usuário para reiniciar a conversa do zero (qualquer canal).
 const COMANDO_REINICIAR = "#sair";
@@ -99,7 +100,7 @@ export async function processarMensagem(
   // de um intervalo (default 60min), saúda antes de repetir a pergunta pendente.
   const ultimaAtividade = prevState.createdAt ? new Date(prevState.createdAt).getTime() : 0;
   const gapMs = Date.now() - ultimaAtividade;
-  const RETOMADA_MS = Number(process.env.RETOMADA_MIN ?? 60) * 60 * 1000;
+  const RETOMADA_MS = env.retomadaMin() * 60 * 1000;
   const retomandoAposPausa = isResuming && ultimaAtividade > 0 && gapMs > RETOMADA_MS;
 
   if (isResuming && message) {

@@ -1,13 +1,14 @@
 import { ChatBedrockConverse } from "@langchain/aws";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { obterEstilo } from "./config.js";
+import { env } from "./env.js";
 
 // Gera, no fim do atendimento, um resumo em linguagem natural + metadados
 // limpos (identidade + caso do tema escolhido) — para enviar/salvar na DPERJ.
 
 const model = new ChatBedrockConverse({
-  model: process.env.BEDROCK_MODEL_ID ?? "anthropic.claude-3-haiku-20240307-v1:0",
-  region: process.env.AWS_REGION ?? "us-east-1",
+  model: env.bedrockModelId(),
+  region: env.awsRegion(),
   temperature: 0.2,
 });
 

@@ -1,5 +1,6 @@
 import { prisma } from "./db.js";
 import { checkpointer } from "./graph.js";
+import { env } from "./env.js";
 
 // Conversas em andamento ("active") guardam o estado completo (PII) no checkpointer
 // do LangGraph para permitir retomar de onde parou. Se o assistido nunca voltar,
@@ -7,7 +8,7 @@ import { checkpointer } from "./graph.js";
 // inativas há mais de CONVERSA_TTL_DIAS — o registro da Conversation (resumo +
 // metadados já mascarados) permanece no painel; só o estado pesado/retomável some.
 // Ao voltar depois disso, o assistido começa um atendimento novo.
-const TTL_DIAS = Number(process.env.CONVERSA_TTL_DIAS ?? 30);
+const TTL_DIAS = env.conversaTtlDias();
 
 export async function limparConversasInativas(diasTtl = TTL_DIAS): Promise<number> {
   if (!prisma) return 0;
