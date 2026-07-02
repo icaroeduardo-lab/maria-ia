@@ -13,7 +13,7 @@ resource "aws_vpc_endpoint" "s3" {
 # ── SG dos interface endpoints (443 das tasks) ────────────────────────────────
 resource "aws_security_group" "vpce" {
   name        = "${local.name}-vpce"
-  description = "Interface endpoints — 443 das tasks"
+  description = "Interface endpoints - 443 das tasks"
   vpc_id      = aws_vpc.main.id
 
   ingress {

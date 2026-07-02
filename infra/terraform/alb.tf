@@ -2,7 +2,7 @@
 
 resource "aws_security_group" "alb" {
   name        = "${local.name}-alb"
-  description = "ALB — entrada HTTP/HTTPS da internet"
+  description = "ALB - entrada HTTP/HTTPS da internet"
   vpc_id      = aws_vpc.main.id
 
   ingress {

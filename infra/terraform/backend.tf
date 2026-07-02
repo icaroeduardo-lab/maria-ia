@@ -9,7 +9,7 @@
 # Depois preencher os nomes abaixo e rodar `terraform init`.
 terraform {
   backend "s3" {
-    bucket         = "maria-tfstate"
+    bucket         = "maria-tfstate-185327115563"
     key            = "aws-fargate-v2/terraform.tfstate"
     region         = "us-east-1"
     dynamodb_table = "maria-tf-lock"

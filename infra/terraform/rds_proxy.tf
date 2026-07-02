@@ -4,7 +4,7 @@
 # SG do proxy: aceita 5432 das tasks (refinar para o SG app na Fase 2).
 resource "aws_security_group" "rds_proxy" {
   name        = "${local.name}-rds-proxy"
-  description = "RDS Proxy — aceita conexões das tasks Fargate"
+  description = "RDS Proxy - aceita conexoes das tasks Fargate"
   vpc_id      = aws_vpc.main.id
 
   ingress {

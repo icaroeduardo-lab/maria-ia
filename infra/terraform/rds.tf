@@ -12,7 +12,7 @@ resource "aws_db_subnet_group" "main" {
 # SG do banco: aceita 5432 apenas do RDS Proxy.
 resource "aws_security_group" "rds" {
   name        = "${local.name}-rds"
-  description = "RDS — acesso só via RDS Proxy"
+  description = "RDS - acesso so via RDS Proxy"
   vpc_id      = aws_vpc.main.id
 
   ingress {

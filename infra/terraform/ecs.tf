@@ -4,7 +4,7 @@
 # ── SG das tasks ──────────────────────────────────────────────────────────────
 resource "aws_security_group" "tasks" {
   name        = "${local.name}-tasks"
-  description = "Tasks Fargate — inbound só do ALB (api); egress liberado"
+  description = "Tasks Fargate - inbound so do ALB (api); egress liberado"
   vpc_id      = aws_vpc.main.id
 
   ingress {
