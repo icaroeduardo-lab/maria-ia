@@ -90,12 +90,12 @@ O RDS é privado (só acessível pelo proxy, dentro da VPC). Opções:
 
 ## 5. Primeiro deploy das imagens (CI)
 
-0. **Ativar o workflow:** copiar `infra/ci/deploy.yml` → `.github/workflows/deploy.yml`
-   (o push desse caminho exige token com escopo `workflow` — pela UI do GitHub ou
-   `gh auth refresh -s workflow`).
+0. **Ativar o workflow:** copiar `infra/ci/ci.yml` → `.github/workflows/ci.yml`
+   (push de workflow exige escopo `workflow` — UI do GitHub ou `gh auth refresh -s workflow`).
+   Ele roda testes em PR e **deploya no merge para main** (test → build → ECR → force-deploy ECS).
 1. GitHub → repo → Settings → Variables → Actions → criar **`AWS_ROLE_ARN`** =
    `terraform output github_actions_role_arn`.
-2. Rodar o workflow **deploy** (push nas paths monitoradas ou `workflow_dispatch`).
+2. Merge na main dispara o deploy automaticamente (job `deploy`, gated pelo `test`).
    Ele builda `api`/`worker`, publica no ECR e força novo deployment.
 3. As tasks ECS puxam as imagens e estabilizam.
 
