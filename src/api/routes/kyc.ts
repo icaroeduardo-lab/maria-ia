@@ -1,6 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "crypto";
-import { AIMessage } from "@langchain/core/messages";
 import { processarMensagem } from "../../core/chat.js";
 import { enviarWhatsApp } from "../../core/channels/whatsapp.js";
 import { env } from "../../core/env.js";

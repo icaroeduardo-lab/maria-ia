@@ -111,7 +111,7 @@ export async function processarMensagem(
   // de vez, devolve um fallback amigável — o assistido nunca fica no escuro e o
   // estado fica intacto (LangGraph não commita super-step que lançou erro → pode
   // reenviar a mesma mensagem).
-  let result;
+  let result: Awaited<ReturnType<typeof invokeComRetry>>;
   try {
     // retry só no resume (invoke(null) idempotente); fresh não re-invoca (input
     // não-nulo em thread existente reiniciaria o grafo — padrão crítico)
