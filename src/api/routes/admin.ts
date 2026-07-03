@@ -1,8 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import bcrypt from "bcryptjs";
+import { createHash } from "node:crypto";
+import fastifyMultipart from "@fastify/multipart";
+import sharp from "sharp";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import type { BaseMessage } from "@langchain/core/messages";
 import { HumanMessage } from "@langchain/core/messages";
 import { prisma } from "../../core/db.js";
+import { env } from "../../core/env.js";
 import { autenticar, exigirAdmin } from "./auth.js";
 import { graphDoFlow, graphEstatico, subfluxosReferenciados, type FlowNode, type FlowEdge } from "../../core/engine/builder.js";
 import { validarFlow } from "../../core/engine/validar.js";
@@ -21,6 +26,50 @@ export async function adminRoutes(app: FastifyInstance) {
   const db = prisma!; // preHandler acima garante que handler não roda sem banco
 
   app.addHook("preHandler", autenticar);
+  await app.register(fastifyMultipart, { limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
+
+  // ── Upload de imagem (p/ nós mensagem/pergunta do builder) ────────────────
+  // Re-encoda com sharp (remove EXIF/metadados), grava no S3 público do projeto
+  // e devolve a URL permanente. webp converte p/ jpeg/png (WhatsApp não aceita
+  // webp como imagem comum). Key por hash do conteúdo → dedup e cache imutável.
+  const s3 = new S3Client({ region: env.awsRegion() });
+  app.post("/upload", { preHandler: [exigirAdmin] }, async (req, reply) => {
+    const file = await req.file().catch(() => null);
+    if (!file) return reply.code(400).send({ erro: "envie um arquivo (multipart, campo 'file')" });
+
+    let bruto: Buffer;
+    try {
+      bruto = await file.toBuffer();
+    } catch {
+      return reply.code(413).send({ erro: "arquivo grande demais (máx 5MB)" });
+    }
+
+    let meta: sharp.Metadata;
+    try {
+      meta = await sharp(bruto).metadata();
+    } catch {
+      return reply.code(415).send({ erro: "arquivo não é uma imagem válida" });
+    }
+    if (!meta.format || !["jpeg", "png", "webp"].includes(meta.format)) {
+      return reply.code(415).send({ erro: `formato não suportado: ${meta.format ?? "?"} (aceitos: jpeg, png, webp)` });
+    }
+
+    const formato = meta.format === "webp" ? (meta.hasAlpha ? "png" : "jpeg") : meta.format;
+    // rotate() aplica a orientação EXIF; o re-encode descarta os metadados
+    const corpo = await sharp(bruto).rotate().toFormat(formato as "jpeg" | "png").toBuffer();
+    const hash = createHash("sha1").update(corpo).digest("hex").slice(0, 16);
+    const key = `uploads/${hash}.${formato === "jpeg" ? "jpg" : formato}`;
+
+    await s3.send(new PutObjectCommand({
+      Bucket: env.s3Bucket(),
+      Key: key,
+      Body: corpo,
+      ContentType: `image/${formato}`,
+      CacheControl: "public, max-age=31536000, immutable",
+    }));
+
+    return { url: `https://${env.s3Bucket()}.s3.${env.awsRegion()}.amazonaws.com/${key}` };
+  });
 
   // registra acesso a PII (quem revelou o quê)
   const registrarAuditoria = async (user: { sub: string; email: string }, alvoTipo: string, alvoId: string) => {
