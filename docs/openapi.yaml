@@ -239,6 +239,28 @@ paths:
       tags: [Admin — Flows]
       summary: Remove fluxo (admin)
       responses: { "200": { description: OK } }
+  /admin/flows/{id}/versoes:
+    get:
+      tags: [Admin — Flows]
+      summary: Histórico de versões do fluxo (snapshot a cada save)
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses: { "200": { description: "[{ versao, name, autor, criadoEm }] (desc)" }, "404": { description: Não encontrado } }
+  /admin/flows/{id}/versoes/{versao}:
+    get:
+      tags: [Admin — Flows]
+      summary: Detalhe de uma versão (com nodes/edges, p/ preview)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+        - { in: path, name: versao, required: true, schema: { type: integer } }
+      responses: { "200": { description: "FlowVersion completa" }, "404": { description: Não encontrada } }
+  /admin/flows/{id}/versoes/{versao}/restaurar:
+    post:
+      tags: [Admin — Flows]
+      summary: Restaura uma versão (admin) — estado atual vira nova versão antes (reversível)
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+        - { in: path, name: versao, required: true, schema: { type: integer } }
+      responses: { "200": { description: "Flow restaurado" }, "404": { description: Não encontrada } }
   /admin/flows/{id}/validar:
     get:
       tags: [Admin — Flows]

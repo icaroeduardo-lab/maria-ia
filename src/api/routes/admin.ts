@@ -98,6 +98,8 @@ export async function adminRoutes(app: FastifyInstance) {
         updatedAt: existe.updatedAt,
       });
     }
+    // versiona ANTES de sobrescrever: snapshot do estado atual → histórico/rollback
+    await criarVersao(id, existe, req.user.email);
     return db.flow.update({
       where: { id },
       data: {
@@ -105,6 +107,66 @@ export async function adminRoutes(app: FastifyInstance) {
         ...(nodes !== undefined && { nodes: nodes as object[] }),
         ...(edges !== undefined && { edges: edges as object[] }),
       },
+    });
+  });
+
+  // snapshot do estado ATUAL do flow (chamado antes de sobrescrever/restaurar)
+  const criarVersao = async (
+    flowId: string,
+    atual: { name: string; nodes: unknown; edges: unknown },
+    autor?: string
+  ) => {
+    const ultima = await db.flowVersion.findFirst({
+      where: { flowId },
+      orderBy: { versao: "desc" },
+      select: { versao: true },
+    });
+    await db.flowVersion.create({
+      data: {
+        flowId,
+        versao: (ultima?.versao ?? 0) + 1,
+        name: atual.name,
+        nodes: atual.nodes as object[],
+        edges: atual.edges as object[],
+        autor,
+      },
+    });
+  };
+
+  // histórico de versões (sem nodes/edges — leve pra listar)
+  app.get("/flows/:id/versoes", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const existe = await db.flow.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return reply.code(404).send({ erro: "fluxo não encontrado" });
+    return db.flowVersion.findMany({
+      where: { flowId: id },
+      orderBy: { versao: "desc" },
+      select: { versao: true, name: true, autor: true, criadoEm: true },
+    });
+  });
+
+  // detalhe de uma versão (com nodes/edges — pra preview no canvas)
+  app.get("/flows/:id/versoes/:versao", async (req, reply) => {
+    const { id, versao } = req.params as { id: string; versao: string };
+    const v = await db.flowVersion.findUnique({
+      where: { flowId_versao: { flowId: id, versao: Number(versao) } },
+    });
+    return v ?? reply.code(404).send({ erro: "versão não encontrada" });
+  });
+
+  // restaura uma versão (o estado atual vira uma nova versão antes — restore é reversível)
+  app.post("/flows/:id/versoes/:versao/restaurar", { preHandler: [exigirAdmin] }, async (req, reply) => {
+    const { id, versao } = req.params as { id: string; versao: string };
+    const [flow, v] = await Promise.all([
+      db.flow.findUnique({ where: { id } }),
+      db.flowVersion.findUnique({ where: { flowId_versao: { flowId: id, versao: Number(versao) } } }),
+    ]);
+    if (!flow) return reply.code(404).send({ erro: "fluxo não encontrado" });
+    if (!v) return reply.code(404).send({ erro: "versão não encontrada" });
+    await criarVersao(id, flow, req.user.email);
+    return db.flow.update({
+      where: { id },
+      data: { name: v.name, nodes: v.nodes as object[], edges: v.edges as object[] },
     });
   });
 

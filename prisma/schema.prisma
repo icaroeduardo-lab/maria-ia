@@ -8,13 +8,30 @@ datasource db {
 }
 
 model Flow {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   name      String
-  nodes     Json     @default("[]") // array de FlowNode
-  edges     Json     @default("[]") // array de FlowEdge
-  active    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  nodes     Json          @default("[]") // array de FlowNode
+  edges     Json          @default("[]") // array de FlowEdge
+  active    Boolean       @default(false)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  versions  FlowVersion[]
+}
+
+// Snapshot do fluxo a cada save (PUT) — permite histórico e rollback no painel.
+model FlowVersion {
+  id       String   @id @default(cuid())
+  flowId   String
+  flow     Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  versao   Int // sequencial por flow (1, 2, 3...)
+  name     String
+  nodes    Json     @default("[]")
+  edges    Json     @default("[]")
+  autor    String? // email de quem salvou (do JWT)
+  criadoEm DateTime @default(now())
+
+  @@unique([flowId, versao])
+  @@index([flowId, criadoEm])
 }
 
 // Fila de retry de envios à DPERJ que falharam (antes em SQLite local efêmero).
