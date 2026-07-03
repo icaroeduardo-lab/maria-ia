@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { prisma } from "./db.js";
 
 // Preâmbulo de estilo aplicado a TODA geração de texto da IA voltada ao
@@ -43,6 +44,12 @@ export async function obterConfig(): Promise<ConfigIA> {
 
 export async function obterEstilo(): Promise<string> {
   return (await obterConfig()).estilo;
+}
+
+// Versão do estilo (hash curto) — entra na chave do cache de reescrita.
+// Editar o estilo no painel muda o hash → invalida o cache automaticamente.
+export async function styleVersion(): Promise<string> {
+  return createHash("sha1").update(await obterEstilo()).digest("hex").slice(0, 8);
 }
 
 export function invalidarEstilo() {

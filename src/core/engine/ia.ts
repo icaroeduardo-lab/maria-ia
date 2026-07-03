@@ -1,10 +1,12 @@
+import { createHash } from "node:crypto";
 import { ChatBedrockConverse, AmazonKnowledgeBaseRetriever } from "@langchain/aws";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { z } from "zod";
 import { env } from "../env.js";
 import type { GraphState } from "../state.js";
 import type { Pergunta } from "../perguntas.js";
-import { resolverCampo } from "./campos.js";
+import { interpolar } from "./campos.js";
+import { cacheGet, cacheSet } from "../cache.js";
 
 // Lógica de IA do engine: classificação de tema (com RAG), extração antecipada
 // do relato e reescrita conversacional das perguntas. Isolado do builder para
@@ -143,56 +145,65 @@ export async function extrairDoRelato(
 }
 
 // ── Reescrita conversacional das perguntas ────────────────────────────────────
-// Reescreve a pergunta de forma curta, simples e acolhedora, preservando
-// exatamente o que está sendo pedido. Falha → texto original.
+// Reescreve a pergunta e CACHEIA (Redis/memória): gera um POOL de variações 1×
+// por (pergunta+tom+estilo), com {{nome}} como placeholder, e reusa entre
+// conversas. Serve escolhendo uma variação e interpolando os dados do assistido.
+const N_VARIACOES = 4;
+const TTL_REESCRITA = 60 * 60 * 24 * 14; // 14 dias
+
+const TOM_GUIA: Record<string, string> = {
+  neutro: "Tom acolhedor e sereno, equilibrado.",
+  empatico: "Tom mais empático e caloroso, reconhecendo o momento da pessoa.",
+  "acolhedor-forte": "Tom muito acolhedor e cuidadoso — a pessoa pode estar fragilizada; passe segurança.",
+};
+
+async function gerarVariacoes(raw: string, p: Pergunta, tom: string, estilo: string): Promise<string[]> {
+  const regras = [
+    "Você é a Maria, da Defensoria. Reescreva a PERGUNTA de forma CALOROSA, humana e ACOLHEDORA — nunca fria/robótica.",
+    "Acolha de forma GENÉRICA (ex: 'Sei que não é fácil falar disso', 'Pode ficar tranquilo(a), vou te ajudar'). NÃO cite dados específicos.",
+    "É PROIBIDO começar com 'Entendo'/'Entendi' e com saudação ('Olá'/'Oi'/'Bom dia') — a conversa já começou.",
+    "Onde o NOME da pessoa couber, use o placeholder {{nome}} (NÃO invente nome). Não precisa usar em toda variação.",
+    "Preserve outros placeholders {{...}}, links, números e formatos (CPF, datas) exatamente.",
+    "Emojis: no máximo 1, só quando combinar (difícil → 💔/🙏; criança → 🧒; documento → 📄; pensão → 💰; acolhimento → 😊).",
+    "Até 3 frases curtas. Formule como pergunta DIRETA pedindo o dado. Mantenha EXATAMENTE a informação pedida.",
+    TOM_GUIA[tom] ?? TOM_GUIA.neutro,
+    p.tipo === "sim_nao" ? "A pergunta deve poder ser respondida com Sim ou Não." : "",
+    p.tipo === "opcoes" ? "NÃO liste as opções (aparecem como botões)." : "",
+    `Gere ${N_VARIACOES} variações DIFERENTES entre si.`,
+  ].filter(Boolean).join("\n");
+
+  try {
+    const out = await model.withStructuredOutput(
+      z.object({ variacoes: z.array(z.string()).describe(`${N_VARIACOES} reescritas diferentes da pergunta`) })
+    ).invoke([
+      new SystemMessage(`${estilo}\n\n${regras}`),
+      new HumanMessage(`Pergunta a reescrever: "${raw}"\n\nResponda com as variações.`),
+    ]);
+    return (out.variacoes ?? [])
+      .map((v) => String(v).replace(/\[[^\]\n]{0,40}\]/g, "").replace(/\s+([,.!?])/g, "$1").replace(/\s{2,}/g, " ").trim())
+      .filter(Boolean);
+  } catch (err) {
+    console.warn("[conversacional] falha ao gerar variações:", String(err).slice(0, 100));
+    return [];
+  }
+}
+
 export async function reescreverPergunta(
-  textoBase: string,
   p: Pergunta,
   state: GraphState,
-  estilo: string
+  estilo: string,
+  opts: { tom?: string; styleVersion: string }
 ): Promise<string> {
-  try {
-    const fala = ultimaFalaUsuario(state);
-    // nome do assistido (cadastro existente ou novo) p/ tratamento pessoal
-    const nomeCompleto = resolverCampo(state.dadosColetados, "resultado_cpf.dados.nome") || resolverCampo(state.dadosColetados, "nome");
-    const primeiroNome = nomeCompleto.split(" ")[0];
-    const regras = [
-      "Você é a Maria, da Defensoria. Está PERGUNTANDO ao cidadão para coletar uma informação. Reescreva a PERGUNTA abaixo de forma CALOROSA, humana e ACOLHEDORA — como uma atendente atenciosa conversando, nunca fria ou robótica.",
-      "Acolha a pessoa: demonstre empatia e cuidado, e passe segurança de que você está ali pra ajudar em cada passo. Pode reconhecer o sentimento/o momento dela de forma GENÉRICA e calorosa (ex: 'Sei que não é fácil falar sobre isso', 'Obrigada por confiar na gente', 'Pode ficar tranquilo(a), vou te ajudar').",
-      "NÃO repita nem cite os DADOS específicos que ela acabou de informar (pra não atribuir errado, ex: confundir o nome da outra parte com o dela). Acolha o sentimento, não o dado.",
-      "Varie as aberturas e o acolhimento; é PROIBIDO começar com 'Entendo'/'Entendi'.",
-      primeiroNome
-        ? `O nome da pessoa é ${primeiroNome} — use às vezes, com carinho (sem repetir toda vez).`
-        : "Você AINDA NÃO sabe o nome da pessoa. NÃO use nome nenhum e NUNCA use placeholders como [nome], {nome} ou similares.",
-      "NUNCA escreva colchetes ou chaves de placeholder no texto final (ex: [nome], {dado}). Se não tem a informação, não a mencione.",
-      "Emojis: no máximo 1, só quando combinar com o sentido (situação difícil → 💔/🙏; criança → 🧒; documento → 📄; pensão → 💰; acolhimento → 😊). Não force em toda mensagem.",
-      "Formule como uma pergunta DIRETA pedindo o dado ao cidadão. NUNCA inverta (não diga que a pessoa quer saber algo).",
-      "Mantenha EXATAMENTE a mesma informação pedida. Não acrescente nem troque por outra pergunta.",
-      "Até 3 frases curtas. NUNCA comece com saudação ('Olá', 'Oi', 'Bom dia') — a conversa já começou; vá direto ao acolhimento/pergunta.",
-      "Preserve links, números, formatos (ex: CPF, datas) e termos legais exatamente como estão.",
-      p.tipo === "sim_nao" ? "A pergunta deve poder ser respondida com Sim ou Não." : "",
-      p.tipo === "opcoes" ? "NÃO liste as opções no texto (elas aparecem como botões)." : "",
-    ].filter(Boolean).join("\n");
+  const raw = p.texto;
+  const tom = opts.tom || "neutro";
+  const chave = `resc:${createHash("sha1").update(`${raw}|${p.tipo}|${tom}|${opts.styleVersion}`).digest("hex").slice(0, 16)}`;
 
-    const res = await model.invoke([
-      new SystemMessage(`${estilo}\n\n${regras}`),
-      new HumanMessage(
-        `Pergunta a fazer: "${textoBase}"` +
-        (primeiroNome ? `\nNome da pessoa: ${primeiroNome} (pode usar o nome com naturalidade, sem repetir toda vez)` : "") +
-        (fala ? `\nÚltima fala da pessoa: "${fala}"` : "") +
-        `\n\nResponda só com a pergunta reescrita.`
-      ),
-    ]);
-    // rede de segurança: remove placeholders entre colchetes que o LLM possa ter
-    // deixado (ex: "[nome]") e ajeita espaços/pontuação resultantes
-    const txt = String(res.content)
-      .replace(/\[[^\]\n]{0,40}\]/g, "")
-      .replace(/\s+([,.!?])/g, "$1")
-      .replace(/\s{2,}/g, " ")
-      .trim();
-    return txt || textoBase;
-  } catch (err) {
-    console.warn("[conversacional] falha ao reescrever:", String(err).slice(0, 100));
-    return textoBase;
+  let variacoes = await cacheGet<string[]>(chave);
+  if (!variacoes?.length) {
+    variacoes = await gerarVariacoes(raw, p, tom, estilo);
+    if (variacoes.length) await cacheSet(chave, variacoes, TTL_REESCRITA);
   }
+  // escolhe uma variação (variedade); fallback = texto cru. Interpola {{nome}} etc.
+  const escolhida = variacoes.length ? variacoes[Math.floor(Math.random() * variacoes.length)] : raw;
+  return interpolar(escolhida, state.dadosColetados);
 }

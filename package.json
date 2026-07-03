@@ -16,7 +16,7 @@
     "studio": "npx @langchain/langgraph-cli dev",
     "seed": "tsx prisma/seed.ts",
     "flows:export": "tsx scripts/export-flows.ts",
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "node --import tsx --test --test-force-exit test/*.test.ts",
     "lint": "biome lint src test",
     "format": "biome format --write src test",
     "check": "tsc --noEmit && biome lint src test && pnpm test"
@@ -58,6 +58,7 @@
     "better-sqlite3": "^12.10.0",
     "dotenv": "^17.4.2",
     "fastify": "^5.8.5",
+    "ioredis": "^5.11.1",
     "pg": "^8.22.0",
     "sharp": "^0.35.1",
     "stripe": "^22.2.0",
