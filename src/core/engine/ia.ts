@@ -7,6 +7,7 @@ import type { GraphState } from "../state.js";
 import type { Pergunta } from "../perguntas.js";
 import { interpolar } from "./campos.js";
 import { cacheGet, cacheSet } from "../cache.js";
+import { medirReescrita } from "../metricas.js";
 
 // Lógica de IA do engine: classificação de tema (com RAG), extração antecipada
 // do relato e reescrita conversacional das perguntas. Isolado do builder para
@@ -208,9 +209,13 @@ export async function reescreverPergunta(
   const chave = `resc:${createHash("sha1").update(`${raw}|${p.tipo}|${tom}|${opts.styleVersion}`).digest("hex").slice(0, 16)}`;
 
   let variacoes = await cacheGet<string[]>(chave);
-  if (!variacoes?.length) {
+  if (variacoes?.length) {
+    medirReescrita("hit");
+  } else {
+    medirReescrita("miss");
     variacoes = await gerarVariacoes(raw, p, tom, estilo);
     if (variacoes.length) await cacheSet(chave, variacoes, TTL_REESCRITA);
+    else medirReescrita("falha"); // geração falhou → serviu o texto cru
   }
   // escolhe uma variação (variedade); fallback = texto cru. Interpola {{nome}} etc.
   const escolhida = variacoes.length ? variacoes[Math.floor(Math.random() * variacoes.length)] : raw;
