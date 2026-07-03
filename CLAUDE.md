@@ -266,13 +266,15 @@ aws bedrock-agent start-ingestion-job \
 - [ ] **HA**: RDS `multi_az=true`, 2º nó ElastiCache, avaliar 2º NAT gateway.
 - [ ] `pnpm audit` limpo + Dependabot/Renovate ligado (repo trata dados LGPD).
 
-### 🔧 Melhorias de dev (baratas, evitam retrabalho — fazer quando tocar na área)
+### ✅ Melhorias de dev — concluídas (jul/2026)
 
-- [ ] Guard no CI: rotas do Fastify × `docs/openapi.yaml` (doc à mão diverge
-  silenciosamente; falhar CI se rota nova não documentada)
-- [ ] Teste de integração do fluxo completo (grafo estático, LLM mockado,
-  LGPD → CPF → tema → encerramento) — pega regressão de fiação do grafo
-- [ ] Métricas de hit/miss do cache de reescrita (validar economia projetada)
+- [x] Guard no CI: rotas do Fastify × `docs/openapi.yaml`, nas duas direções
+  (`test/openapi.test.ts`; rotas sempre registradas — sem banco, preHandler 503)
+- [x] Teste de integração do fluxo (`test/fluxo.test.ts`): multi-turn com
+  interrupt/resume, skip-gate, condição, classificar com fallback — sem Bedrock
+  (credenciais falsas antes dos imports → determinístico)
+- [x] Métricas hit/miss do cache de reescrita (`src/core/metricas.ts` — log
+  `[metricas]` a cada 50 reescritas, agregável no CloudWatch Logs Insights)
 
 ### ✅ Fase 2 — concluída (jun/2026)
 - [x] `src/nodes/atendimento/extrator.ts` — extrai campos do contexto (evita repetir perguntas)
