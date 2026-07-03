@@ -69,6 +69,12 @@
         <mxCell id="n_transcribe" value="Transcribe (áudio→texto)" style="sphere=0;html=1;whiteSpace=wrap;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.transcribe;fillColor=#01A88D;strokeColor=none;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
           <mxGeometry x="1150" y="440" width="70" height="70" as="geometry" />
         </mxCell>
+        <mxCell id="n_elasticache" value="ElastiCache Redis (cache de reescrita)" style="sphere=0;html=1;whiteSpace=wrap;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.elasticache;fillColor=#527FFF;strokeColor=none;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="560" width="70" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="n_comprehend" value="Comprehend (sentimento)" style="sphere=0;html=1;whiteSpace=wrap;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.comprehend;fillColor=#01A88D;strokeColor=none;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="560" width="70" height="70" as="geometry" />
+        </mxCell>
 
         <!-- ===== PLATAFORMA (rodapé) ===== -->
         <mxCell id="n_eventbridge" value="EventBridge Scheduler" style="sphere=0;html=1;whiteSpace=wrap;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.eventbridge;fillColor=#E7157B;strokeColor=none;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
@@ -105,6 +111,8 @@
         <mxCell id="e18" value="segredos" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" edge="1" parent="1" source="n_secrets" target="n_worker"><mxGeometry relative="1" as="geometry" /></mxCell>
         <mxCell id="e19" value="imagem" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" edge="1" parent="1" source="n_ecr" target="n_worker"><mxGeometry relative="1" as="geometry" /></mxCell>
         <mxCell id="e20" value="logs / métricas" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;dashed=1;" edge="1" parent="1" source="n_worker" target="n_cloudwatch"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e21" value="cache reescrita (get/set)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" parent="1" source="n_worker" target="n_elasticache"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e22" value="sentimento (perguntas livres de tema)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;fontSize=10;" edge="1" parent="1" source="n_worker" target="n_comprehend"><mxGeometry relative="1" as="geometry" /></mxCell>
       </root>
     </mxGraphModel>
   </diagram>
