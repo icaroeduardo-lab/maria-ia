@@ -165,6 +165,12 @@ variable "s3_bucket" {
   description = "Bucket S3 de fichas/áudios (efêmeros)."
 }
 
+variable "elasticache_node_type" {
+  type        = string
+  default     = "cache.t4g.micro"
+  description = "Tipo de nó do ElastiCache (cache de reescrita)."
+}
+
 variable "public_url" {
   type        = string
   default     = ""

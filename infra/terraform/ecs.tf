@@ -63,6 +63,7 @@ locals {
     { name = "BEDROCK_KB_ID", value = var.bedrock_kb_id },
     { name = "BEDROCK_KB_DS_ID", value = var.bedrock_kb_ds_id },
     { name = "PUBLIC_URL", value = var.public_url },
+    { name = "REDIS_URL", value = "redis://${aws_elasticache_replication_group.main.primary_endpoint_address}:6379" },
   ]
 }
 

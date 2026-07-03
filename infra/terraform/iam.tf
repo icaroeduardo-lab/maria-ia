@@ -60,6 +60,11 @@ data "aws_iam_policy_document" "task" {
     actions   = ["transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob"]
     resources = ["*"]
   }
+  # Comprehend (análise de sentimento nas perguntas livres de tema)
+  statement {
+    actions   = ["comprehend:DetectSentiment"]
+    resources = ["*"]
+  }
   # S3 (fichas/áudios)
   statement {
     actions   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
