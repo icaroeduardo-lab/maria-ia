@@ -130,6 +130,7 @@ prisma/
   seed.ts             ← org DPERJ + usuário admin
 docs/
   openapi.yaml            ← spec OpenAPI servida no Swagger UI (/docs) — manter atualizada
+  guia-frontend.md        ← o que um painel admin (repo separado) precisa ter
   plano-implementacao.md  ← blueprint completo das próximas fases
   servicos.md             ← conteúdo do KB (S3)
   guia-linguagem.md       ← guia de tom/linguagem (rascunho — validar com DPERJ)
