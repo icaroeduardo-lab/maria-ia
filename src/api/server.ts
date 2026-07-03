@@ -7,6 +7,9 @@ import Fastify from "fastify";
 import fastifyStatic from "@fastify/static";
 import fastifyCors from "@fastify/cors";
 import fastifyJwt from "@fastify/jwt";
+import fastifySwagger from "@fastify/swagger";
+import fastifySwaggerUi from "@fastify/swagger-ui";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { processarMensagem } from "../core/chat.js";
@@ -35,6 +38,19 @@ const app = Fastify();
 await app.register(fastifyCors, { origin: true });
 await app.register(fastifyJwt, { secret: env.jwtSecret() });
 await app.register(fastifyStatic, { root: join(__dirname, "../../public") });
+
+// Documentação da API: serve docs/openapi.yaml (fonte da verdade, mantida à mão)
+// no Swagger UI em /docs. Sem o arquivo (ex: imagem antiga), o server sobe normal.
+const openapiPath = join(__dirname, "../../docs/openapi.yaml");
+if (existsSync(openapiPath)) {
+  await app.register(fastifySwagger, {
+    mode: "static",
+    specification: { path: openapiPath, baseDir: dirname(openapiPath) },
+  });
+  await app.register(fastifySwaggerUi, { routePrefix: "/docs" });
+} else {
+  console.warn("[docs] docs/openapi.yaml não encontrado — /docs desabilitado");
+}
 
 app.post("/api/chat", async (req) => {
   const { sessionId, message } = req.body as { sessionId: string; message?: string };

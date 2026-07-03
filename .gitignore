@@ -146,3 +146,7 @@ dist
 .langgraph_api
 data/
 .env.production
+
+# Terraform
+infra/terraform/tfplan
+infra/terraform/*.tfplan

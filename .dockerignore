@@ -4,9 +4,7 @@
 
 # Deps e build (reinstalados/gerados no build)
 node_modules
-frontend/node_modules
 dist
-frontend/dist
 
 # Estado local efêmero
 data
@@ -18,11 +16,10 @@ data
 .gitignore
 .github
 
-# Não usados no build do backend
-frontend
-docs
+# Não usados no build do backend (docs entra: openapi.yaml servido em /docs)
+docs/*
+!docs/openapi.yaml
 cloudformation
-nginx
 test
 .claude
 *.log

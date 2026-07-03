@@ -27,7 +27,7 @@ const TEMAS_SENSIVEIS = ["violencia", "violência", "penal", "saude", "saúde", 
 export interface FlowNode {
   id: string;
   type: "mensagem" | "pergunta" | "condicao" | "ia" | "classificar" | "api" | "subgrafo" | "subfluxo" | "atribuir" | "encerrar";
-  position?: { x: number; y: number }; // usado só pelo frontend
+  position?: { x: number; y: number }; // layout do builder visual (ignorado pelo engine)
   data: {
     label?: string;
     titulo?: string;           // identificação no canvas (api | condicao | classificar | subfluxo)

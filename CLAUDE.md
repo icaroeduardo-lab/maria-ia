@@ -84,9 +84,13 @@ __start__ → saudacao → lgpd [INTERRUPT]
 | Embeddings | Amazon Titan Embed v2 (1024 dims, cosine, S3 Vectors) |
 | Checkpoints | `PostgresSaver` (com `DATABASE_URL`) ou `SqliteSaver` (fallback dev) |
 | Banco admin | PostgreSQL 16 + Prisma 6 (Organization, User, Flow, Conversation) |
-| Servidor | Fastify 5 — `src/server.ts` (JWT, CORS, static) |
-| Painel admin | `frontend/` — Vite + React 19 + Tailwind 4 + React Flow 12 + TanStack Router/Query + Zustand + Recharts |
+| Servidor | Fastify 5 — `src/api/server.ts` (JWT, CORS, static) |
+| Docs da API | Swagger UI em `/docs` — serve `docs/openapi.yaml` (fonte da verdade, manter à mão) |
 | Package manager | pnpm |
+
+> **Sem frontend neste repo** (não é mais monorepo): o painel admin foi removido;
+> a API é consumida via rotas documentadas no Swagger (`/docs`). O chat web de
+> teste (`public/index.html`) continua servido pela api.
 
 ### Estrutura de Pastas
 
@@ -124,18 +128,15 @@ src/
 prisma/
   schema.prisma       ← Organization | User | Flow (nodes/edges JSON) | Conversation
   seed.ts             ← org DPERJ + usuário admin
-frontend/             ← painel admin (Vite + React)
-  src/router.tsx      ← TanStack Router (login + rotas protegidas por JWT)
-  src/pages/          Login | Dashboard (Recharts) | Flows | Builder (React Flow) | Conversations
-  Dockerfile + nginx.conf ← build estático p/ docker-compose
 docs/
+  openapi.yaml            ← spec OpenAPI servida no Swagger UI (/docs) — manter atualizada
   plano-implementacao.md  ← blueprint completo das próximas fases
   servicos.md             ← conteúdo do KB (S3)
   guia-linguagem.md       ← guia de tom/linguagem (rascunho — validar com DPERJ)
 data/
   checkpoints.db          ← SQLite, gitignored
 public/
-  index.html              ← frontend web (estilo WhatsApp)
+  index.html              ← chat web de teste (estilo WhatsApp)
 Dockerfile.api            ← imagem do serviço api
 Dockerfile.worker         ← imagem do serviço worker
 ```
@@ -188,9 +189,9 @@ pnpm studio        # LangGraph Studio (visualização do grafo)
 pnpm build         # compila TypeScript
 pnpm seed          # cria org DPERJ + admin (admin@mariachat.local / SEED_ADMIN_PASSWORD, default admin123)
 npx prisma migrate dev             # aplica migrações no Postgres
-
-cd frontend && pnpm dev            # painel admin em http://localhost:5173 (proxy → :3000)
 ```
+
+> Docs da API: `http://localhost:3000/docs` (Swagger UI de `docs/openapi.yaml`).
 
 > Deploy v2 na AWS (ECS Fargate + SQS + EventBridge) via Terraform em `infra/`.
 > Ver `docs/deploy-aws-v2.md`.
@@ -217,7 +218,7 @@ Lógica em `server.ts`: `prevLen > 0` → updateState + invoke(null). Caso contr
 
 ---
 
-## Tipos de Mensagem Customizados (frontend + WhatsApp)
+## Tipos de Mensagem Customizados (chat web + WhatsApp)
 
 Content blocks suportados além de `text`:
 
@@ -262,7 +263,7 @@ aws bedrock-agent start-ingestion-job \
 
 ### ✅ Fase 4 — concluída (jun/2026)
 - [x] WhatsApp Business API (webhook + sender) em `src/channels/whatsapp.ts`
-- [ ] Configurar app Meta real: preencher `WA_PHONE_NUMBER_ID`/`WA_ACCESS_TOKEN`/`WA_WEBHOOK_VERIFY_TOKEN` no `.env` e apontar o webhook da Meta para `https://<host>/webhook/whatsapp` (precisa de URL pública)
+- [x] Configurar app Meta real: `WA_PHONE_NUMBER_ID`/`WA_ACCESS_TOKEN`/`WA_WEBHOOK_VERIFY_TOKEN` no secret `maria-chat-prod/app` (AWS) + webhook validado (número de teste — token expira ~24h, precisa renovar periodicamente até virar número de produção)
 
 ### ✅ Fase 5 — concluída (jun/2026)
 - [x] Migrar Express → Fastify + SQLite → PostgreSQL (PostgresSaver + Prisma; SQLite continua como fallback dev)

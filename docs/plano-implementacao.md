@@ -3,6 +3,10 @@
 Blueprint técnico para a IA completar o produto fase a fase.
 Leia junto com `CLAUDE.md` que descreve o estado atual do código.
 
+> **Nota (jul/2026):** as referências a `frontend/` abaixo são históricas — o
+> painel admin foi removido deste repositório (não é mais monorepo). A API é
+> documentada via Swagger UI em `/docs` (`docs/openapi.yaml`).
+
 ---
 
 ## Stack Completo
