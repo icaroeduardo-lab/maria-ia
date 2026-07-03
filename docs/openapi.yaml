@@ -214,8 +214,27 @@ paths:
       responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/Flow' } } } }, "404": { description: Não encontrado } }
     put:
       tags: [Admin — Flows]
-      summary: Atualiza fluxo (admin)
-      responses: { "200": { description: OK } }
+      summary: Atualiza fluxo (admin) — lock otimista opcional
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                nodes: { type: array, items: { type: object } }
+                edges: { type: array, items: { type: object } }
+                updatedAt:
+                  type: string
+                  format: date-time
+                  description: >
+                    Lock otimista (opcional): updatedAt carregado pelo cliente.
+                    Se o fluxo mudou desde então, a API responde 409 — recarregue
+                    antes de salvar. Omitido = save incondicional.
+      responses:
+        "200": { description: OK }
+        "404": { description: Não encontrado }
+        "409": { description: "Conflito: fluxo alterado por outro editor ({ erro, updatedAt })" }
     delete:
       tags: [Admin — Flows]
       summary: Remove fluxo (admin)
