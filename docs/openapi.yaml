@@ -196,6 +196,23 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/User' }
 
+  # ── Admin: Upload ──────────────────────────────────────────
+  /admin/upload:
+    post:
+      tags: [Admin — Flows]
+      summary: Upload de imagem p/ os fluxos (admin) — re-encoda (remove EXIF) e grava no S3
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary, description: "jpeg/png/webp, máx 5MB" }
+      responses:
+        "200": { description: "{ url } — URL pública permanente (S3)" }
+        "413": { description: Arquivo grande demais }
+        "415": { description: Formato não suportado }
+
   # ── Admin: Flows ───────────────────────────────────────────
   /admin/flows:
     get:

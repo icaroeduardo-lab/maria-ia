@@ -146,7 +146,7 @@ mesmo contrato do WhatsApp.
 | Versionamento de flow | editar sobrescreve; sem rollback/draft | back: tabela de versões; front: histórico + "restaurar" |
 | Autosave/lock de edição | dois editores se sobrescrevem | lock otimista via `updatedAt` (409 se mudou) |
 | Multi-org | v2 é single-org (DPERJ) | só se o produto virar multi-tenant |
-| Upload de imagem | `imagem` é URL externa | endpoint de upload → S3 |
+| ~~Upload de imagem~~ | **resolvido**: `POST /admin/upload` (multipart `file`, jpeg/png/webp ≤5MB) → `{ url }` pública permanente | front: dropzone no editor de nó; usar a url no campo `imagem` |
 | Websocket/streaming | test-chat é request/response | suficiente pra V1 |
 
 ---
