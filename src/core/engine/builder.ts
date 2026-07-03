@@ -1,7 +1,7 @@
 import { StateGraph, END, START } from "@langchain/langgraph";
 import { AIMessage } from "@langchain/core/messages";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { obterEstilo, obterConfig } from "../config.js";
+import { obterEstilo, obterConfig, styleVersion } from "../config.js";
 import { env } from "../env.js";
 import { resolverCampo, resolverCampoCondicao, interpolar } from "./campos.js";
 import {
@@ -107,12 +107,14 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
       const p = perguntaDoNode(node);
       const semReescrita = node.data.semReescrita === true;
       return async (state: GraphState) => {
-        const textoBase = interpolar(p.texto, state.dadosColetados);
-        // conversacional: a IA reescreve a pergunta de forma acolhedora (preserva o pedido)
+        // conversacional: reescrita acolhedora (cacheada por pergunta+tom+estilo)
         const cfg = await obterConfig();
         const texto = cfg.conversacional && !semReescrita
-          ? await reescreverPergunta(textoBase, p, state, cfg.estilo)
-          : textoBase;
+          ? await reescreverPergunta(p, state, cfg.estilo, {
+              tom: state.dadosColetados.tom,
+              styleVersion: await styleVersion(),
+            })
+          : interpolar(p.texto, state.dadosColetados);
         return {
           messages: [mensagemPergunta({ ...p, texto, imagem: p.imagem ? interpolar(p.imagem, state.dadosColetados) : undefined })],
           perguntasFeitas: [p.chave],

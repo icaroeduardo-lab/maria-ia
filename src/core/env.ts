@@ -37,9 +37,10 @@ export const env = {
   dperjApiUrl: () => process.env.DPERJ_API_URL,
   dperjApiKey: () => process.env.DPERJ_API_KEY,
 
-  // Fila + storage
+  // Fila + storage + cache
   sqsQueueUrl: () => process.env.SQS_QUEUE_URL ?? "",
   s3Bucket: () => process.env.S3_BUCKET ?? "maria-ia",
+  redisUrl: () => process.env.REDIS_URL ?? "",
 
   // Timers / limites
   conversaTtlDias: () => num(process.env.CONVERSA_TTL_DIAS, 30),
