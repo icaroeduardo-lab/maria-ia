@@ -111,11 +111,15 @@ export async function extrairDoRelato(
     const desc = p.tipo === "opcoes" && p.opcoes?.length ? `${p.texto} (opções: ${p.opcoes.join(", ")})` : p.texto;
     shape[p.chave] = z.string().nullish().describe(desc);
   }
+  // sentimento do relato → define o tom das próximas perguntas (mesma chamada, custo zero extra)
+  shape._sentimento = z.enum(["neutro", "empatico", "acolhedor-forte"]).nullish()
+    .describe("tom emocional do relato: 'acolhedor-forte' se a pessoa parece fragilizada/aflita/em sofrimento; 'empatico' se abalada; 'neutro' se serena");
 
   try {
     const system = `Você extrai dados do relato de um cidadão (Defensoria Pública do RJ).
 - Extraia APENAS o que foi dito EXPLICITAMENTE no relato. NUNCA deduza, suponha ou invente.
-- Em dúvida, deixe null. Campos sim/não: só preencha se afirmado claramente, use "sim" ou "não".`;
+- Em dúvida, deixe null. Campos sim/não: só preencha se afirmado claramente, use "sim" ou "não".
+- Em "_sentimento", avalie o tom emocional geral do relato.`;
     const out = await model.withStructuredOutput(z.object(shape)).invoke([
       new SystemMessage(system),
       new HumanMessage(`Relato: "${relato}"\n\nExtraia os dados informados (deixe null o que não foi dito).`),
@@ -133,6 +137,11 @@ export async function extrairDoRelato(
       if (p.tipo === "opcoes") { const o = casarOpcaoGen(p, v); if (o) updates[k] = o; continue; }
       if (p.validar && !p.validar(v)) continue;
       updates[k] = v.trim();
+    }
+    // tom detectado (fora do loop de campos — não é uma pergunta)
+    const sent = (out as Record<string, unknown>)._sentimento;
+    if (typeof sent === "string" && ["neutro", "empatico", "acolhedor-forte"].includes(sent)) {
+      updates.tom = sent;
     }
     if (Object.keys(updates).length) console.log(`[extrair] pré-preenchido: ${Object.keys(updates).join(", ")}`);
     return updates;
