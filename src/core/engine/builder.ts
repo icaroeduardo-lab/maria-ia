@@ -16,6 +16,9 @@ import { enviarDados } from "../nodes/atendimento/enviar-dados.js";
 import { encerramento } from "../nodes/atendimento/encerramento.js";
 import { servicoDe } from "../registro-perguntas.js";
 
+// categorias que sempre pedem o tom mais acolhedor (público fragilizado)
+const TEMAS_SENSIVEIS = ["violencia", "violência", "penal", "saude", "saúde", "menor", "crianca", "criança", "obito", "óbito"];
+
 // Compila um Flow (JSON criado no builder visual do painel admin) em um grafo
 // LangGraph executável. Tipos de nó (espelho da paleta do React Flow):
 //   mensagem | pergunta | condicao | ia | api | subgrafo | atribuir | encerrar
@@ -164,6 +167,8 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
         const categoria = await classificarTexto(fala, opcoes, node.data.prompt, contextoRag);
         const perguntasTema = porCategoria[categoria.toLowerCase()] ?? ctx?.perguntas ?? [];
         const extra = await extrairDoRelato(fala, perguntasTema, state.dadosColetados);
+        // regra de segurança: tema sensível força o tom mais acolhedor (público vulnerável)
+        if (TEMAS_SENSIVEIS.some((t) => categoria.toLowerCase().includes(t))) extra.tom = "acolhedor-forte";
         return { dadosColetados: { [chave]: categoria, ...extra }, categoria };
       };
     }
