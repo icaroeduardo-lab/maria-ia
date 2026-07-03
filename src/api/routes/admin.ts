@@ -13,11 +13,12 @@ import { mascararAssistido } from "../../core/mask.js";
 // API do painel admin (registrada com prefix /admin). Tudo exige JWT;
 // mutações exigem role admin. Exige DATABASE_URL (Postgres).
 export async function adminRoutes(app: FastifyInstance) {
+  // sem banco: rotas continuam registradas (conjunto determinístico — o guard
+  // do openapi depende disso), mas todas respondem 503 via preHandler
   if (!prisma) {
-    app.all("*", async (_req, reply) => reply.code(503).send({ erro: "banco não configurado" }));
-    return;
+    app.addHook("preHandler", async (_req, reply) => reply.code(503).send({ erro: "banco não configurado" }));
   }
-  const db = prisma;
+  const db = prisma!; // preHandler acima garante que handler não roda sem banco
 
   app.addHook("preHandler", autenticar);
 
