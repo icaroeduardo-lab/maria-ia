@@ -143,7 +143,7 @@ mesmo contrato do WhatsApp.
 
 | Lacuna | Impacto no front | Sugestão |
 |---|---|---|
-| Versionamento de flow | editar sobrescreve; sem rollback/draft | back: tabela de versões; front: histórico + "restaurar" |
+| ~~Versionamento de flow~~ | **resolvido**: snapshot automático a cada save; `GET /admin/flows/{id}/versoes` (lista), `GET .../versoes/{n}` (preview), `POST .../versoes/{n}/restaurar` (reversível) | front: página/painel "histórico" com preview no canvas + botão restaurar |
 | ~~Autosave/lock de edição~~ | **resolvido**: `PUT /admin/flows/{id}` aceita `updatedAt` → **409** se outro editor salvou | front: mandar o `updatedAt` carregado e tratar 409 com "recarregar" |
 | Multi-org | v2 é single-org (DPERJ) | só se o produto virar multi-tenant |
 | Upload de imagem | `imagem` é URL externa | endpoint de upload → S3 |
