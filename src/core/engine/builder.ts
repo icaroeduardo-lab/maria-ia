@@ -8,6 +8,7 @@ import {
   model, retriever, ultimaFalaUsuario,
   classificarTexto, extrairDoRelato, reescreverPergunta,
 } from "./ia.js";
+import { avaliarTom } from "./sentimento.js";
 import { GraphAnnotation, type GraphState } from "../state.js";
 import { checkpointer, graph as graphEstatico } from "../graph.js";
 import { mensagemPergunta, proxima, type Pergunta, type TipoPergunta } from "../perguntas.js";
@@ -233,13 +234,20 @@ export function interpretarSimNao(fala: string): "sim" | "não" {
   return "não"; // ambíguo → não (seguro para aceites como LGPD)
 }
 
-// captura a resposta do usuário após o interrupt de um node pergunta
-function criarCaptura(p: Pergunta) {
+// captura a resposta do usuário após o interrupt de um node pergunta.
+// avaliarSentimento: só true p/ perguntas livres de tema (sf_* + tipo texto) —
+// V2 do tom via Comprehend, reavalia por turno com histerese (só escalona).
+function criarCaptura(p: Pergunta, avaliarSentimento = false) {
   return async (state: GraphState) => {
     const fala = ultimaFalaUsuario(state);
     if (!fala) return {};
     const valor = p.tipo === "sim_nao" ? interpretarSimNao(fala) : fala;
-    return { dadosColetados: { [p.chave]: valor } };
+    const dados: Record<string, unknown> = { [p.chave]: valor };
+    if (avaliarSentimento) {
+      const tom = await avaliarTom(fala, state.dadosColetados.tom as string | undefined);
+      if (tom) dados.tom = tom;
+    }
+    return { dadosColetados: dados };
   };
 }
 
@@ -378,7 +386,9 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
     builder.addNode(node.id, criarNode(node, ctx));
     if (node.type === "pergunta") {
       builder.addNode(`gate_${node.id}`, async () => ({})); // no-op; decisão na conditional edge
-      builder.addNode(`cap_${node.id}`, criarCaptura(perguntaDoNode(node)));
+      // pergunta livre de tema (dentro de subfluxo expandido, texto aberto) → V2 do tom
+      const livreDeTema = node.id.startsWith("sf_") && (node.data.tipoPergunta ?? "texto") === "texto";
+      builder.addNode(`cap_${node.id}`, criarCaptura(perguntaDoNode(node), livreDeTema));
       interrupts.push(node.id);
     }
     if (node.type === "subgrafo") {
