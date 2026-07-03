@@ -9,8 +9,8 @@ info:
     e mocks de teste (/mock/*). Rotas do painel exigem Bearer JWT; mutações
     exigem papel admin.
 servers:
-  - url: https://maria-backend-production.up.railway.app
-    description: Produção (Railway)
+  - url: http://maria-chat-prod-alb-554264540.us-east-1.elb.amazonaws.com
+    description: Produção (AWS ALB)
   - url: http://localhost:3000
     description: Local
 

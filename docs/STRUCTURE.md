@@ -17,7 +17,6 @@ maria-chat/
 │   ├── core/               # engine compartilhado: graph builder, nodes, state, integrações
 │   │                       #   (Bedrock, PDPJ, DPERJ, Transcribe, ficha, mask, resumo)
 │   └── db/                 # Prisma schema + client gerado
-├── frontend/               # painel admin (inalterado)
 └── docs/                   # modelagem (requisitos, arquitetura, UML, LGPD, openapi...)
 ```
 
