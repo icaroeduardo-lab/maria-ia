@@ -84,9 +84,20 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.put("/flows/:id", { preHandler: [exigirAdmin] }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const { name, nodes, edges } = (req.body ?? {}) as { name?: string; nodes?: unknown[]; edges?: unknown[] };
+    const { name, nodes, edges, updatedAt } = (req.body ?? {}) as {
+      name?: string; nodes?: unknown[]; edges?: unknown[]; updatedAt?: string;
+    };
     const existe = await db.flow.findUnique({ where: { id } });
     if (!existe) return reply.code(404).send({ erro: "fluxo não encontrado" });
+    // lock otimista: cliente manda o updatedAt que carregou; se o flow mudou
+    // nesse meio-tempo (outro editor salvou), 409 — evita sobrescrita silenciosa.
+    // Campo opcional: sem updatedAt o save é incondicional (compatível).
+    if (updatedAt && new Date(updatedAt).getTime() !== existe.updatedAt.getTime()) {
+      return reply.code(409).send({
+        erro: "fluxo foi alterado por outra pessoa — recarregue antes de salvar",
+        updatedAt: existe.updatedAt,
+      });
+    }
     return db.flow.update({
       where: { id },
       data: {
