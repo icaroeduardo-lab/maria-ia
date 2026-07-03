@@ -250,6 +250,30 @@ aws bedrock-agent start-ingestion-job \
 
 ## O Que Falta Construir (TODO)
 
+### 🚀 Checklist de Go-Live (pré-produção — NÃO urgente em dev)
+
+> Itens de confiabilidade operacional. Só importam quando cidadão real
+> depender do sistema. Fazer ANTES de anunciar produção; ignorar até lá.
+
+- [ ] **Domínio fixo + HTTPS** — comprar domínio (~US$15/ano Route53), preencher
+  `domain_name`/`route53_zone_name` no tfvars e aplicar (ACM+alias já codificados
+  em `infra/terraform/acm.tf`). Elimina o tunnel cloudflared efêmero (hoje: tunnel
+  cai → WhatsApp morre → reconfigurar webhook na Meta manualmente).
+- [ ] **Token WhatsApp permanente** — token de teste expira ~24h. Tirar o app Meta
+  do modo teste / usar System User token (não expira). Elimina renovação diária.
+- [ ] **Alarme de health → email** — CloudWatch alarm em target unhealthy do ALB
+  (`/health` 503) → SNS → `alarm_email`. Hoje token morto = falha silenciosa.
+- [ ] **HA**: RDS `multi_az=true`, 2º nó ElastiCache, avaliar 2º NAT gateway.
+- [ ] `pnpm audit` limpo + Dependabot/Renovate ligado (repo trata dados LGPD).
+
+### 🔧 Melhorias de dev (baratas, evitam retrabalho — fazer quando tocar na área)
+
+- [ ] Guard no CI: rotas do Fastify × `docs/openapi.yaml` (doc à mão diverge
+  silenciosamente; falhar CI se rota nova não documentada)
+- [ ] Teste de integração do fluxo completo (grafo estático, LLM mockado,
+  LGPD → CPF → tema → encerramento) — pega regressão de fiação do grafo
+- [ ] Métricas de hit/miss do cache de reescrita (validar economia projetada)
+
 ### ✅ Fase 2 — concluída (jun/2026)
 - [x] `src/nodes/atendimento/extrator.ts` — extrai campos do contexto (evita repetir perguntas)
 - [x] Perguntas reais nos subgrafos `services/familia-pensao`, `trabalhista`, `inss`, `outros`
