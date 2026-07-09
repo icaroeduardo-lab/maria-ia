@@ -126,6 +126,121 @@ components:
       required: [cpf]
       properties:
         cpf: { type: string }
+    ConversaResumo:
+      type: object
+      description: Item da listagem — select enxuto, SEM PII (LGPD)
+      required: [id, sessionId, channel, status, startedAt, updatedAt]
+      properties:
+        id: { type: string }
+        sessionId: { type: string }
+        channel: { type: string, description: "whatsapp | web" }
+        flowId: { type: string, nullable: true }
+        status: { type: string, description: "active | completed | abandoned" }
+        categoria: { type: string, nullable: true }
+        ultimaEtapa: { type: string, nullable: true }
+        protocoloDperj: { type: string, nullable: true }
+        startedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+    ConversasPage:
+      type: object
+      required: [total, page, itens]
+      properties:
+        total: { type: integer }
+        page: { type: integer }
+        itens: { type: array, items: { $ref: '#/components/schemas/ConversaResumo' } }
+    ConversaDetalhe:
+      allOf:
+        - $ref: '#/components/schemas/ConversaResumo'
+        - type: object
+          properties:
+            dadosColetados: { type: object, additionalProperties: true }
+            resumo: { type: string, nullable: true }
+            metadados:
+              type: object
+              nullable: true
+              additionalProperties: true
+              description: "assistido dentro de metadados vem MASCARADO (LGPD); completo só via /revelar"
+    MensagemHistorico:
+      type: object
+      required: [role, content]
+      properties:
+        role: { type: string, description: "human | ai" }
+        content:
+          description: "string ou array de content blocks (text, image_url, boolean, options, cta_url)"
+    HistoricoResp:
+      type: object
+      required: [messages]
+      properties:
+        messages: { type: array, items: { $ref: '#/components/schemas/MensagemHistorico' } }
+    Assistido:
+      type: object
+      description: "Nas listagens os campos de PII vêm MASCARADOS; completos só no detalhe (auditado) e no /revelar"
+      required: [id, cpf, nome, situacao]
+      properties:
+        id: { type: string }
+        cpf: { type: string }
+        nome: { type: string }
+        dataNascimento: { type: string, nullable: true }
+        nomeMae: { type: string, nullable: true }
+        situacao: { type: string }
+        municipio: { type: string, nullable: true }
+        uf: { type: string, nullable: true }
+        telefone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        cep: { type: string, nullable: true }
+        bairro: { type: string, nullable: true }
+        logradouro: { type: string, nullable: true }
+        numero: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AssistidosPage:
+      type: object
+      required: [total, page, itens]
+      properties:
+        total: { type: integer }
+        page: { type: integer }
+        itens: { type: array, items: { $ref: '#/components/schemas/Assistido' } }
+    AnalyticsSummary:
+      type: object
+      required: [total, taxaConclusao, porStatus, porCategoria, porCanal, abandonoPorEtapa, serieDiaria]
+      properties:
+        total: { type: integer }
+        taxaConclusao: { type: number, description: "0..1" }
+        porStatus:
+          type: array
+          items: { type: object, required: [status, total], properties: { status: { type: string }, total: { type: integer } } }
+        porCategoria:
+          type: array
+          items: { type: object, required: [categoria, total], properties: { categoria: { type: string }, total: { type: integer } } }
+        porCanal:
+          type: array
+          items: { type: object, required: [canal, total], properties: { canal: { type: string }, total: { type: integer } } }
+        abandonoPorEtapa:
+          type: array
+          items: { type: object, required: [etapa, total], properties: { etapa: { type: string }, total: { type: integer } } }
+        serieDiaria:
+          type: array
+          description: "últimos 30 dias"
+          items: { type: object, required: [dia, total, concluidas], properties: { dia: { type: string }, total: { type: integer }, concluidas: { type: integer } } }
+    AuditLogItem:
+      type: object
+      required: [id, userId, userEmail, acao, alvoTipo, alvoId, criadoEm]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        userEmail: { type: string }
+        acao: { type: string, description: "revelar" }
+        alvoTipo: { type: string, description: "assistido | conversa" }
+        alvoId: { type: string }
+        criadoEm: { type: string, format: date-time }
+    AuditPage:
+      type: object
+      required: [total, page, itens]
+      properties:
+        total: { type: integer }
+        page: { type: integer }
+        itens: { type: array, items: { $ref: '#/components/schemas/AuditLogItem' } }
 
 security:
   - bearerAuth: []
@@ -301,52 +416,90 @@ paths:
   /admin/conversations:
     get:
       tags: [Admin — Conversations]
-      summary: Lista conversas (filtros status/categoria/channel, paginado)
+      summary: Lista conversas (filtros status/categoria/channel, paginado; itens SEM PII)
       parameters:
         - { in: query, name: status, schema: { type: string } }
         - { in: query, name: categoria, schema: { type: string } }
         - { in: query, name: channel, schema: { type: string } }
         - { in: query, name: page, schema: { type: integer } }
-      responses: { "200": { description: "{ total, page, itens[] }" } }
+      responses:
+        "200":
+          description: Página de conversas (select enxuto, sem PII)
+          content: { application/json: { schema: { $ref: '#/components/schemas/ConversasPage' } } }
   /admin/conversations/{sessionId}:
     get:
       tags: [Admin — Conversations]
       summary: Detalha conversa (assistido mascarado nos metadados)
       parameters: [{ in: path, name: sessionId, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK }, "404": { description: Não encontrada } }
+      responses:
+        "200":
+          description: Conversa completa com PII mascarada
+          content: { application/json: { schema: { $ref: '#/components/schemas/ConversaDetalhe' } } }
+        "404": { description: Não encontrada }
   /admin/conversations/{sessionId}/historico:
     get:
       tags: [Admin — Conversations]
       summary: Histórico do chat (lê o checkpoint)
       parameters: [{ in: path, name: sessionId, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: Mensagens da conversa (content blocks)
+          content: { application/json: { schema: { $ref: '#/components/schemas/HistoricoResp' } } }
   /admin/conversations/{sessionId}/revelar:
     post:
       tags: [Admin — Conversations]
       summary: Revela PII do assistido (admin, auditado)
       parameters: [{ in: path, name: sessionId, required: true, schema: { type: string } }]
-      responses: { "200": { description: "{ assistido }" } }
+      responses:
+        "200":
+          description: Dados completos do assistido (acesso registrado em auditoria)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assistido]
+                properties:
+                  assistido:
+                    allOf: [{ $ref: '#/components/schemas/Assistido' }]
+                    nullable: true
 
   # ── Admin: Assistidos ──────────────────────────────────────
   /admin/assistidos:
     get:
       tags: [Admin — Assistidos]
-      summary: Lista assistidos (mascarados)
-      responses: { "200": { description: OK } }
+      summary: Lista assistidos (mascarados; busca por cpf/nome)
+      parameters:
+        - { in: query, name: busca, schema: { type: string } }
+        - { in: query, name: page, schema: { type: integer } }
+      responses:
+        "200":
+          description: Página de assistidos com PII mascarada
+          content: { application/json: { schema: { $ref: '#/components/schemas/AssistidosPage' } } }
     post:
       tags: [Admin — Assistidos]
       summary: Cria assistido (admin)
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: Assistido criado
+          content: { application/json: { schema: { $ref: '#/components/schemas/Assistido' } } }
   /admin/assistidos/{id}:
     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
     get:
       tags: [Admin — Assistidos]
       summary: Detalha assistido (admin, dados completos + auditoria)
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: Dados completos (acesso auditado)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Assistido' } } }
+        "404": { description: Não encontrado }
     put:
       tags: [Admin — Assistidos]
       summary: Atualiza assistido (admin)
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: Assistido atualizado
+          content: { application/json: { schema: { $ref: '#/components/schemas/Assistido' } } }
+        "404": { description: Não encontrado }
     delete:
       tags: [Admin — Assistidos]
       summary: Remove assistido (admin)
@@ -375,12 +528,19 @@ paths:
     get:
       tags: [Admin — Config/Users/Analytics/Audit]
       summary: Métricas agregadas
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: Resumo analítico (30 dias na série diária)
+          content: { application/json: { schema: { $ref: '#/components/schemas/AnalyticsSummary' } } }
   /admin/audit:
     get:
       tags: [Admin — Config/Users/Analytics/Audit]
       summary: Log de auditoria (admin) — quem revelou PII
-      responses: { "200": { description: OK } }
+      parameters: [{ in: query, name: page, schema: { type: integer } }]
+      responses:
+        "200":
+          description: Página da trilha de auditoria
+          content: { application/json: { schema: { $ref: '#/components/schemas/AuditPage' } } }
   /admin/test-chat:
     post:
       tags: [Admin — Config/Users/Analytics/Audit]
