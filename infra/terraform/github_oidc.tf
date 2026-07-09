@@ -25,7 +25,8 @@ data "aws_iam_policy_document" "gha_assume" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repo}:*"]
+      # back (ECR/ECS) e front (S3/CloudFront do painel) usam a mesma role
+      values = ["repo:${var.github_repo}:*", "repo:${var.github_repo_front}:*"]
     }
   }
 }
@@ -61,6 +62,15 @@ data "aws_iam_policy_document" "gha" {
   statement {
     actions   = ["iam:PassRole"]
     resources = [aws_iam_role.execution.arn, aws_iam_role.task.arn]
+  }
+  # deploy do painel (CI do front): sync no S3 + invalidation no CloudFront
+  statement {
+    actions   = ["s3:PutObject", "s3:DeleteObject", "s3:GetObject", "s3:ListBucket"]
+    resources = [aws_s3_bucket.painel.arn, "${aws_s3_bucket.painel.arn}/*"]
+  }
+  statement {
+    actions   = ["cloudfront:CreateInvalidation"]
+    resources = [aws_cloudfront_distribution.painel.arn]
   }
 }
 
