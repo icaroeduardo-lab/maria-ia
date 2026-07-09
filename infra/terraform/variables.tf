@@ -207,3 +207,9 @@ variable "bedrock_kb_ds_id" {
   default     = "V6AOSMT9CQ"
   description = "ID do data source da Knowledge Base."
 }
+
+variable "github_repo_front" {
+  description = "Repo do painel (owner/nome) autorizado a assumir a role gha (deploy S3/CloudFront)"
+  type        = string
+  default     = "icaroeduardo-lab/maria-ia-front-end"
+}
