@@ -255,9 +255,21 @@ export async function adminRoutes(app: FastifyInstance) {
       ...(q.categoria && { categoria: q.categoria }),
       ...(q.channel && { channel: q.channel }),
     };
+    // select enxuto: SEM metadados/dadosColetados/resumo — carregam PII sem
+    // máscara (LGPD) e a listagem não precisa deles; detalhe mascara, revelar audita
     const [total, itens] = await Promise.all([
       db.conversation.count({ where }),
-      db.conversation.findMany({ where, orderBy: { startedAt: "desc" }, skip: (page - 1) * 50, take: 50 }),
+      db.conversation.findMany({
+        where,
+        orderBy: { startedAt: "desc" },
+        skip: (page - 1) * 50,
+        take: 50,
+        select: {
+          id: true, sessionId: true, channel: true, flowId: true, status: true,
+          categoria: true, ultimaEtapa: true, protocoloDperj: true,
+          startedAt: true, updatedAt: true, completedAt: true,
+        },
+      }),
     ]);
     return { total, page, itens };
   });
