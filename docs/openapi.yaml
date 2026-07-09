@@ -72,14 +72,61 @@ components:
               role: { type: string }
               content: {}
         lgpdAceito: { type: boolean }
+    FlowNode:
+      type: object
+      required: [id, type, position, data]
+      properties:
+        id: { type: string, description: "Estável — mudar reseta o cache de reescrita" }
+        type:
+          type: string
+          enum: [mensagem, pergunta, condicao, classificar, ia, api, subgrafo, subfluxo, atribuir, encerrar]
+        position:
+          type: object
+          required: [x, y]
+          properties:
+            x: { type: number }
+            y: { type: number }
+        data:
+          type: object
+          additionalProperties: true
+          description: "Campos por tipo de nó — ver docs/guia-frontend.md §2.2"
+    FlowEdge:
+      type: object
+      required: [id, source, target]
+      properties:
+        id: { type: string }
+        source: { type: string }
+        target: { type: string }
+        label: { type: string, description: "Valor esperado em condicao/classificar; '*' = default" }
     Flow:
       type: object
+      required: [id, name, nodes, edges, active]
       properties:
         id: { type: string }
         name: { type: string }
-        nodes: { type: array, items: { type: object } }
-        edges: { type: array, items: { type: object } }
+        nodes: { type: array, items: { $ref: '#/components/schemas/FlowNode' } }
+        edges: { type: array, items: { $ref: '#/components/schemas/FlowEdge' } }
         active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    FlowVersionResumo:
+      type: object
+      required: [versao, name, criadoEm]
+      properties:
+        versao: { type: integer }
+        name: { type: string }
+        autor: { type: string, nullable: true, description: "email de quem salvou" }
+        criadoEm: { type: string, format: date-time }
+    FlowVersionCompleta:
+      allOf:
+        - $ref: '#/components/schemas/FlowVersionResumo'
+        - type: object
+          required: [id, flowId, nodes, edges]
+          properties:
+            id: { type: string }
+            flowId: { type: string }
+            nodes: { type: array, items: { $ref: '#/components/schemas/FlowNode' } }
+            edges: { type: array, items: { $ref: '#/components/schemas/FlowEdge' } }
     ProcessosConsultaReq:
       type: object
       required: [cpf]
@@ -218,11 +265,29 @@ paths:
     get:
       tags: [Admin — Flows]
       summary: Lista fluxos
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: Lista (sem nodes/edges — resumo)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, name, active]
+                  properties:
+                    id: { type: string }
+                    name: { type: string }
+                    active: { type: boolean }
+                    createdAt: { type: string, format: date-time }
+                    updatedAt: { type: string, format: date-time }
     post:
       tags: [Admin — Flows]
       summary: Cria fluxo (admin)
-      responses: { "200": { description: Criado } }
+      responses:
+        "200":
+          description: Criado
+          content: { application/json: { schema: { $ref: '#/components/schemas/Flow' } } }
   /admin/flows/{id}:
     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
     get:
@@ -239,8 +304,8 @@ paths:
               type: object
               properties:
                 name: { type: string }
-                nodes: { type: array, items: { type: object } }
-                edges: { type: array, items: { type: object } }
+                nodes: { type: array, items: { $ref: '#/components/schemas/FlowNode' } }
+                edges: { type: array, items: { $ref: '#/components/schemas/FlowEdge' } }
                 updatedAt:
                   type: string
                   format: date-time
@@ -249,9 +314,20 @@ paths:
                     Se o fluxo mudou desde então, a API responde 409 — recarregue
                     antes de salvar. Omitido = save incondicional.
       responses:
-        "200": { description: OK }
+        "200":
+          description: Fluxo atualizado
+          content: { application/json: { schema: { $ref: '#/components/schemas/Flow' } } }
         "404": { description: Não encontrado }
-        "409": { description: "Conflito: fluxo alterado por outro editor ({ erro, updatedAt })" }
+        "409":
+          description: "Conflito: fluxo alterado por outro editor"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [erro, updatedAt]
+                properties:
+                  erro: { type: string }
+                  updatedAt: { type: string, format: date-time }
     delete:
       tags: [Admin — Flows]
       summary: Remove fluxo (admin)
@@ -261,7 +337,15 @@ paths:
       tags: [Admin — Flows]
       summary: Histórico de versões do fluxo (snapshot a cada save)
       parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
-      responses: { "200": { description: "[{ versao, name, autor, criadoEm }] (desc)" }, "404": { description: Não encontrado } }
+      responses:
+        "200":
+          description: Versões, mais recente primeiro
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/FlowVersionResumo' }
+        "404": { description: Não encontrado }
   /admin/flows/{id}/versoes/{versao}:
     get:
       tags: [Admin — Flows]
@@ -269,7 +353,11 @@ paths:
       parameters:
         - { in: path, name: id, required: true, schema: { type: string } }
         - { in: path, name: versao, required: true, schema: { type: integer } }
-      responses: { "200": { description: "FlowVersion completa" }, "404": { description: Não encontrada } }
+      responses:
+        "200":
+          description: Versão completa
+          content: { application/json: { schema: { $ref: '#/components/schemas/FlowVersionCompleta' } } }
+        "404": { description: Não encontrada }
   /admin/flows/{id}/versoes/{versao}/restaurar:
     post:
       tags: [Admin — Flows]
@@ -277,7 +365,11 @@ paths:
       parameters:
         - { in: path, name: id, required: true, schema: { type: string } }
         - { in: path, name: versao, required: true, schema: { type: integer } }
-      responses: { "200": { description: "Flow restaurado" }, "404": { description: Não encontrada } }
+      responses:
+        "200":
+          description: Fluxo restaurado
+          content: { application/json: { schema: { $ref: '#/components/schemas/Flow' } } }
+        "404": { description: Não encontrada }
   /admin/flows/{id}/validar:
     get:
       tags: [Admin — Flows]
