@@ -173,6 +173,22 @@ components:
       required: [cpf]
       properties:
         cpf: { type: string }
+    ConfigIA:
+      type: object
+      description: Configuração global da IA (singleton id=default)
+      required: [estiloPrompt, conversacional]
+      properties:
+        estiloPrompt:
+          type: string
+          description: Preâmbulo de estilo aplicado a TODA fala da IA (vazio = usa o padrão)
+        conversacional:
+          type: boolean
+          description: Liga/desliga a reescrita acolhedora das perguntas
+        padrao:
+          type: string
+          description: Texto padrão do estilo (só no GET — alimenta o "restaurar padrão")
+        id: { type: string }
+        updatedAt: { type: string, format: date-time }
     ConversaResumo:
       type: object
       description: Item da listagem — select enxuto, SEM PII (LGPD)
@@ -602,11 +618,25 @@ paths:
     get:
       tags: [Admin — Config/Users/Analytics/Audit]
       summary: Lê config global (estilo + conversacional)
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: Config atual + texto padrão do estilo
+          content: { application/json: { schema: { $ref: '#/components/schemas/ConfigIA' } } }
     put:
       tags: [Admin — Config/Users/Analytics/Audit]
-      summary: Atualiza config global (admin)
-      responses: { "200": { description: OK } }
+      summary: Atualiza config global (admin) — invalida o cache de reescrita
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                estiloPrompt: { type: string }
+                conversacional: { type: boolean }
+      responses:
+        "200":
+          description: Config persistida
+          content: { application/json: { schema: { $ref: '#/components/schemas/ConfigIA' } } }
   /admin/users:
     get:
       tags: [Admin — Config/Users/Analytics/Audit]
