@@ -70,12 +70,14 @@ export async function montarApp(opts: MontarAppOpts = {}) {
     };
   });
 
-  // healthcheck: DB + validade do token WhatsApp (503 se algo crítico degradado)
+  // healthcheck do ALB: 503 SÓ com dependência vital fora (DB). Token do
+  // WhatsApp inválido é degradação do CANAL, não morte da API — reportado no
+  // corpo (e nos logs via avisarSeTokenMorto), sem derrubar painel/fluxos.
+  // Histórico: token de demo expirado (24h) derrubava a API em loop (#42).
   app.get("/health", async (_req, reply) => {
     const [db, token] = await Promise.all([verificarDb(), verificarTokenWhatsApp()]);
-    const ok = db && token !== false; // token null (não configurado) não derruba
-    return reply.code(ok ? 200 : 503).send({
-      ok,
+    return reply.code(db ? 200 : 503).send({
+      ok: db,
       db: db ? "ok" : "erro",
       whatsappToken: token === null ? "nao_configurado" : token ? "ok" : "invalido",
     });
