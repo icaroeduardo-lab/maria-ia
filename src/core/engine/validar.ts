@@ -64,10 +64,33 @@ export function validarFlow(nodes: FlowNode[], edges: FlowEdge[]): ResultadoVali
       case "condicao":
         if (!d.campo) erros.push(`condicao "${n.id}" sem data.campo`);
         break;
-      case "pergunta":
+      case "pergunta": {
         if (!d.chave) erros.push(`pergunta "${n.id}" sem data.chave`);
         if (!d.texto) avisos.push(`pergunta "${n.id}" sem texto`);
+        // múltiplas saídas: só roteiam em sim_nao com labels true/false —
+        // sem isso o engine executa TODOS os ramos (fan-out silencioso, #45)
+        const saidas = edges.filter((e) => e.source === n.id);
+        if (saidas.length > 1) {
+          if (d.tipoPergunta !== "sim_nao") {
+            erros.push(
+              `pergunta "${n.id}" tem ${saidas.length} saídas mas não é sim_nao — todos os ramos executariam juntos; use um nó condição para rotear`
+            );
+          } else {
+            const labels = saidas.map((e) => (e.label ?? "").toLowerCase().trim());
+            const validos = new Set(["true", "false", "*", ""]);
+            const invalidos = labels.filter((l) => !validos.has(l));
+            if (invalidos.length)
+              erros.push(
+                `pergunta "${n.id}": labels ${invalidos.map((l) => `"${l}"`).join(", ")} não roteiam — use "true"/"false" (ids dos botões)`
+              );
+            if (!labels.some((l) => l === "true" || l === "false"))
+              erros.push(
+                `pergunta "${n.id}" tem ${saidas.length} saídas sem labels true/false — todos os ramos executariam juntos`
+              );
+          }
+        }
         break;
+      }
       case "api":
         if (!d.url) erros.push(`api "${n.id}" sem data.url`);
         if (!d.chave) avisos.push(`api "${n.id}" sem data.chave (resultado não é gravado)`);

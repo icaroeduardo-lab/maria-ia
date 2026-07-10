@@ -150,3 +150,62 @@ test("classificar cai no matcher por palavra-chave sem Bedrock e roteia o tema",
   assert.equal(r.dadosColetados.categoria, "alimentação");
   assert.match(textos(r), /Tema: pensão alimentícia/);
 });
+
+test("pergunta sim_nao com saídas rotuladas roteia direto (sem nó condição)", async () => {
+  const flow: FlowJSON = {
+    id: "t5",
+    nodes: [
+      { id: "p_aceita", type: "pergunta", data: { texto: "Aceita os termos?", chave: "aceita", tipoPergunta: "sim_nao", semReescrita: true } },
+      { id: "m_sim", type: "mensagem", data: { texto: "Ramo ACEITOU" } },
+      { id: "m_nao", type: "mensagem", data: { texto: "Ramo RECUSOU" } },
+      { id: "fim", type: "encerrar", data: {} },
+    ],
+    edges: [
+      // labels direto na pergunta — o caso do card #20260113
+      { id: "e1", source: "p_aceita", target: "m_sim", label: "true" },
+      { id: "e2", source: "p_aceita", target: "m_nao", label: "false" },
+      { id: "e3", source: "m_sim", target: "fim" },
+      { id: "e4", source: "m_nao", target: "fim" },
+    ],
+  };
+  const graph = buildGraphFromFlow(flow);
+
+  const cfgSim = config();
+  await graph.invoke({}, cfgSim);
+  const rSim = await responder(graph, cfgSim, "sim");
+  assert.match(textos(rSim), /Ramo ACEITOU/);
+  assert.doesNotMatch(textos(rSim), /Ramo RECUSOU/, "fan-out: só um ramo pode executar");
+
+  const cfgNao = config();
+  await graph.invoke({}, cfgNao);
+  const rNao = await responder(graph, cfgNao, "não");
+  assert.match(textos(rNao), /Ramo RECUSOU/);
+  assert.doesNotMatch(textos(rNao), /Ramo ACEITOU/);
+});
+
+test("skip-gate em pergunta rotulada roteia pela resposta já preenchida", async () => {
+  const flow: FlowJSON = {
+    id: "t6",
+    nodes: [
+      { id: "seta", type: "atribuir", data: { chave: "aceita", valor: "não" } },
+      { id: "p_aceita", type: "pergunta", data: { texto: "Aceita?", chave: "aceita", tipoPergunta: "sim_nao", semReescrita: true } },
+      { id: "m_sim", type: "mensagem", data: { texto: "Ramo ACEITOU" } },
+      { id: "m_nao", type: "mensagem", data: { texto: "Ramo RECUSOU" } },
+      { id: "fim", type: "encerrar", data: {} },
+    ],
+    edges: [
+      { id: "e0", source: "seta", target: "p_aceita" },
+      { id: "e1", source: "p_aceita", target: "m_sim", label: "true" },
+      { id: "e2", source: "p_aceita", target: "m_nao", label: "false" },
+      { id: "e3", source: "m_sim", target: "fim" },
+      { id: "e4", source: "m_nao", target: "fim" },
+    ],
+  };
+  const graph = buildGraphFromFlow(flow);
+  const cfg = config();
+  // "aceita" já preenchido com "não" → pula a pergunta E cai no ramo certo
+  const r = await graph.invoke({}, cfg);
+  assert.doesNotMatch(textos(r), /Aceita\?/);
+  assert.match(textos(r), /Ramo RECUSOU/);
+  assert.doesNotMatch(textos(r), /Ramo ACEITOU/);
+});
