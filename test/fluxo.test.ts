@@ -209,3 +209,35 @@ test("skip-gate em pergunta rotulada roteia pela resposta já preenchida", async
   assert.match(textos(r), /Ramo RECUSOU/);
   assert.doesNotMatch(textos(r), /Ramo ACEITOU/);
 });
+
+test("encerrar com texto customizado interpola {{protocolo}} e {{chave}}", async () => {
+  const flow: FlowJSON = {
+    id: "t-encerrar-texto",
+    nodes: [
+      { id: "seta", type: "atribuir", data: { chave: "nome", valor: "Maria" } },
+      { id: "fim", type: "encerrar", data: { texto: "Obrigada {{nome}}! Protocolo: {{protocolo}}." } },
+    ],
+    edges: [{ id: "e1", source: "seta", target: "fim" }],
+  };
+  const graph = buildGraphFromFlow(flow);
+  const r = await graph.invoke({}, config());
+  assert.ok(r.protocolo, "envio mock deve gerar protocolo antes da despedida");
+  assert.match(textos(r), new RegExp(`Obrigada Maria! Protocolo: ${r.protocolo}\\.`));
+  // não vaza placeholder cru
+  assert.doesNotMatch(textos(r), /\{\{/);
+});
+
+test("encerrar sem texto mantém a mensagem padrão (regressão)", async () => {
+  const flow: FlowJSON = {
+    id: "t-encerrar-padrao",
+    nodes: [
+      { id: "seta", type: "atribuir", data: { chave: "nome", valor: "Maria" } },
+      { id: "fim", type: "encerrar", data: {} },
+    ],
+    edges: [{ id: "e1", source: "seta", target: "fim" }],
+  };
+  const graph = buildGraphFromFlow(flow);
+  const r = await graph.invoke({}, config());
+  assert.ok(r.protocolo);
+  assert.match(textos(r), /protocolo \*/i); // texto padrão do encerramento cita o protocolo
+});

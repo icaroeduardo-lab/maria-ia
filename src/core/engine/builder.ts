@@ -31,7 +31,7 @@ export interface FlowNode {
   data: {
     label?: string;
     titulo?: string;           // identificação no canvas (api | condicao | classificar | subfluxo)
-    texto?: string;            // mensagem | pergunta
+    texto?: string;            // mensagem | pergunta | encerrar (despedida opcional; {{protocolo}} disponível)
     imagem?: string;           // mensagem (url)
     textoAntes?: boolean;      // mensagem: emite texto antes da imagem (padrão: imagem primeiro)
     chave?: string;            // pergunta | api | atribuir | classificar (campo onde grava a categoria)
@@ -396,7 +396,17 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
       interrupts.push(node.id);
     }
     if (node.type === "encerrar") {
-      builder.addNode(`msg_${node.id}`, encerramento);
+      // despedida customizada pelo gestor (data.texto) substitui a mensagem padrão;
+      // {{protocolo}} entra como variável (msg_ roda depois do enviarDados)
+      const despedida = node.data.texto ? String(node.data.texto) : null;
+      builder.addNode(
+        `msg_${node.id}`,
+        despedida
+          ? async (state: GraphState) => ({
+              messages: [new AIMessage(interpolar(despedida, { ...state.dadosColetados, protocolo: state.protocolo ?? "" }))],
+            })
+          : encerramento
+      );
       builder.addEdge(node.id, `msg_${node.id}`);
       builder.addEdge(`msg_${node.id}`, END);
     }
