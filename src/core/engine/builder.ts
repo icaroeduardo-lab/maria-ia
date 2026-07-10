@@ -40,8 +40,11 @@ export interface FlowNode {
     campo?: string;            // condicao: campo de dadosColetados a comparar
     prompt?: string;           // ia | classificar: instrução extra ao LLM
     usarRag?: boolean;         // ia
-    url?: string;              // api
+    url?: string;              // api (relativa = interna; absoluta = externa)
     metodo?: "GET" | "POST";   // api
+    headers?: Record<string, string>; // api: headers extras; valor aceita {{chave}} e {{secret:NOME}} (env)
+    camposCorpo?: string[];    // api: chaves de dadosColetados enviadas no corpo (externa sem isso = corpo vazio)
+    limiteResposta?: number;   // api: limite de chars da resposta gravada (default 2000)
     servico?: string;          // subgrafo: categoria (familia_pensao | trabalhista | ...)
     refFlowId?: string;        // subfluxo: id do Flow embutido (tema editável no painel)
     saida?: string;            // sub-flow: nomeia a saída deste nó-folha (casa com label da seta do subfluxo)
@@ -83,6 +86,16 @@ function perguntaDoNode(node: FlowNode): Pergunta {
 // base do próprio servidor para chamadas internas do fluxo (nós api com url relativa)
 function baseUrlInterna(): string {
   return env.selfUrl();
+}
+
+// {{secret:NOME}} em headers do nó api resolve de env/Secrets Manager em
+// runtime — o valor NUNCA vive no JSON do fluxo (banco) nem aparece em log
+function resolverSecrets(valor: string, nodeId: string): string {
+  return valor.replace(/\{\{secret:(\w+)\}\}/g, (_, nome) => {
+    const v = process.env[nome];
+    if (v === undefined) console.warn(`[engine] node api ${nodeId}: secret "${nome}" não definida no ambiente`);
+    return v ?? "";
+  });
 }
 
 // ── Funções de nó ─────────────────────────────────────────────────────────────
@@ -174,29 +187,50 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
       };
     }
 
-    case "api":
+    case "api": {
+      const chave = node.data.chave ?? "api_resultado";
+      // url relativa ("/api/...") = endpoint interno; absoluta = API externa
+      const interna = String(node.data.url ?? "").startsWith("/");
       return async (state: GraphState, config?: { configurable?: { thread_id?: string } }) => {
         if (!node.data.url) return {};
         try {
-          // url relativa ("/api/...") resolve contra SELF_URL → portável (não fixa localhost)
+          // url relativa resolve contra SELF_URL → portável (não fixa localhost)
           const interpolada = interpolar(String(node.data.url), state.dadosColetados);
-          const url = interpolada.startsWith("/") ? `${baseUrlInterna()}${interpolada}` : interpolada;
-          // inclui sessão/canal no corpo p/ endpoints que precisam retomar o fluxo
-          // de forma assíncrona (ex: KYC confirma e empurra a próxima msg sozinho)
-          const corpoEnvio = { ...state.dadosColetados, _sessao: config?.configurable?.thread_id, _canal: state.canal };
+          const url = interna ? `${baseUrlInterna()}${interpolada}` : interpolada;
+          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          for (const [nome, valor] of Object.entries((node.data.headers ?? {}) as Record<string, string>))
+            headers[nome] = resolverSecrets(interpolar(String(valor), state.dadosColetados), node.id);
+          // corpo: seleção explícita de chaves quando configurada; sem seleção,
+          // interna mantém o payload completo e externa manda VAZIO (LGPD —
+          // PII de terceiros só com escolha consciente do gestor)
+          const campos = Array.isArray(node.data.camposCorpo) ? (node.data.camposCorpo as string[]) : null;
+          const corpoEnvio: Record<string, unknown> = campos
+            ? Object.fromEntries(campos.map((c) => [c, state.dadosColetados[c]]))
+            : interna
+              ? { ...state.dadosColetados }
+              : {};
+          // sessão/canal permitem retomada assíncrona (ex: KYC) — só pra dentro,
+          // identificador de sessão não vaza pra terceiros
+          if (interna) Object.assign(corpoEnvio, { _sessao: config?.configurable?.thread_id, _canal: state.canal });
           const res = await fetch(url, {
             method: node.data.metodo ?? "POST",
-            headers: { "Content-Type": "application/json" },
+            headers,
             body: node.data.metodo === "GET" ? undefined : JSON.stringify(corpoEnvio),
             signal: AbortSignal.timeout(10_000),
           });
+          if (!res.ok) throw new Error(`status ${res.status}`);
+          const limite = Number(node.data.limiteResposta) > 0 ? Number(node.data.limiteResposta) : 2000;
           const corpo = await res.text();
-          return { dadosColetados: { [node.data.chave ?? "api_resultado"]: corpo.slice(0, 2000) } };
+          if (corpo.length > limite)
+            console.warn(`[engine] node api ${node.id}: resposta truncada (${corpo.length} > ${limite} chars)`);
+          return { dadosColetados: { [chave]: corpo.slice(0, limite), [`${chave}_erro`]: "false" } };
         } catch (err) {
           console.error(`[engine] node api ${node.id} falhou:`, err);
-          return {};
+          // marca a falha p/ rotear pela edge "erro" (quando existir) ou por condição
+          return { dadosColetados: { [`${chave}_erro`]: "true" } };
         }
       };
+    }
 
     case "atribuir":
       return async (_state: GraphState) =>
@@ -479,6 +513,22 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
         const match = saidas.find((e) => (e.label ?? "").toLowerCase().trim() === valor);
         const fallback = saidas.find((e) => !e.label || e.label === "*");
         const alvo = (match ?? fallback ?? saidas[0])?.target;
+        return alvo ? entrada(alvo) : END;
+      };
+      const destinos = Object.fromEntries(saidas.map((e) => [entrada(e.target), entrada(e.target)]));
+      builder.addConditionalEdges(node.id, rota, { ...destinos, [END]: END });
+      continue;
+    }
+
+    // api com saída rotulada "erro" roteia falha/timeout/status não-ok pra lá;
+    // as demais saídas (sem label ou "*") são o caminho feliz
+    if (node.type === "api" && saidas.some((e) => (e.label ?? "").toLowerCase().trim() === "erro")) {
+      const chave = node.data.chave ?? "api_resultado";
+      const edgeErro = saidas.find((e) => (e.label ?? "").toLowerCase().trim() === "erro")!;
+      const edgeOk = saidas.find((e) => e !== edgeErro);
+      const rota = (state: GraphState) => {
+        const falhou = resolverCampo(state.dadosColetados, `${chave}_erro`) === "true";
+        const alvo = (falhou ? edgeErro : edgeOk)?.target;
         return alvo ? entrada(alvo) : END;
       };
       const destinos = Object.fromEntries(saidas.map((e) => [entrada(e.target), entrada(e.target)]));

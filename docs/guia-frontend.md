@@ -54,7 +54,7 @@ Editor de grafo (ex: React Flow). O flow é JSON `{ nodes, edges }`:
 | `condicao` | `campo` (de `dadosColetados`) | roteia pela edge cujo `label` = valor |
 | `classificar` | `chave`, `opcoes[]` (categorias), `prompt`, `usarRag` | LLM classifica o relato → roteia pelo label |
 | `ia` | `prompt`, `usarRag` | resposta livre do LLM |
-| `api` | `url`, `metodo` (GET/POST), `chave` (onde grava resposta) | chama API; url relativa resolve no próprio server |
+| `api` | `url`, `metodo` (GET/POST), `chave`, `headers` (valores aceitam `{{chave}}` e `{{secret:NOME}}` — resolvido do ambiente, nunca salvar credencial crua), `camposCorpo[]` (chaves enviadas no corpo), `limiteResposta` (chars, default 2000) | chama API; url relativa = interna (resolve no próprio server, corpo completo + `_sessao`/`_canal`); url absoluta = externa (corpo SÓ com `camposCorpo`; sem seleção = corpo vazio — LGPD). Status ≥ 400/timeout = falha: grava `{chave}_erro="true"` e roteia pela edge com label `erro` (quando existir); sucesso grava resposta em `chave` + `{chave}_erro="false"` |
 | `subfluxo` | `refFlowId`, `titulo` | embute outro flow (tema reutilizável) |
 | `atribuir` | `chave`, `valor` | grava valor fixo em `dadosColetados` |
 | `encerrar` | `texto` (opcional) | envia dados à DPERJ + mensagem final; `texto` preenchido substitui a despedida padrão, com interpolação `{{chave}}` e a variável `{{protocolo}}` (vazia se o envio falhou — sem placeholder cru); vazio = mensagem padrão com protocolo |
@@ -72,6 +72,11 @@ Editor de grafo (ex: React Flow). O flow é JSON `{ nodes, edges }`:
   necessário pra campos derivados (ex: `resultado_cpf.encontrado`). Pergunta
   com 2+ saídas sem esses labels é ERRO de validação (fan-out: os dois ramos
   executariam).
+- **Rota de erro no nó `api`**: edge com label `erro` recebe falha/timeout/
+  status ≥ 400; a outra saída (sem label ou `*`) é o caminho feliz. Nó `api`
+  com 2+ saídas sem label `erro` é ERRO de validação (fan-out). Sem edge
+  `erro`, falha segue o fluxo normal sem gravar a `chave` (comportamento
+  legado) — dá pra rotear depois com `condicao` sobre `{chave}_erro`.
 - **Skip-gate (automático)**: pergunta cuja `chave` já está preenchida é pulada
   pelo engine — vale exibir isso no canvas (ex: badge "pula se já respondida").
 - `semReescrita: true` = texto fixo, IA não reescreve (usar em LGPD, links,
