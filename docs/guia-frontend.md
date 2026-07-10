@@ -57,7 +57,7 @@ Editor de grafo (ex: React Flow). O flow é JSON `{ nodes, edges }`:
 | `api` | `url`, `metodo` (GET/POST), `chave` (onde grava resposta) | chama API; url relativa resolve no próprio server |
 | `subfluxo` | `refFlowId`, `titulo` | embute outro flow (tema reutilizável) |
 | `atribuir` | `chave`, `valor` | grava valor fixo em `dadosColetados` |
-| `encerrar` | — | envia dados à DPERJ + mensagem final com protocolo |
+| `encerrar` | `texto` (opcional) | envia dados à DPERJ + mensagem final; `texto` preenchido substitui a despedida padrão, com interpolação `{{chave}}` e a variável `{{protocolo}}` (vazia se o envio falhou — sem placeholder cru); vazio = mensagem padrão com protocolo |
 
 `tipoPergunta`: `texto` \| `sim_nao` \| `opcoes` \| `cpf` \| `telefone` \| `cep` \| `data`
 
