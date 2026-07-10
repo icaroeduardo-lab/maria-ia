@@ -24,6 +24,17 @@ const mascararNomeMae = (v?: string | null): string => {
   return p.length > 1 ? `${p[0]} •••` : v ?? "";
 };
 
+// nome completo → inicial de cada parte + reticências ("Maria Costa" → "M••• C•••").
+// Nome + data de nascimento identificam a pessoa, então também são PII (LGPD).
+export const mascararNome = (v?: string | null): string => {
+  const p = (v ?? "").trim().split(/\s+/).filter(Boolean);
+  return p.map((parte) => `${parte[0]}•••`).join(" ");
+};
+
+// data de nascimento → máscara fixa quando preenchida (não revela dia/mês/ano).
+export const mascararDataNascimento = (v?: string | null): string =>
+  v?.trim() ? "••/••/••••" : v ?? "";
+
 // aplica máscara nos campos sensíveis de um objeto de assistido (cópia rasa)
 export function mascararAssistido<T extends Record<string, unknown>>(a: T): T {
   if (!a) return a;
@@ -32,5 +43,7 @@ export function mascararAssistido<T extends Record<string, unknown>>(a: T): T {
   if ("telefone" in m) m.telefone = mascararTelefone(m.telefone as string);
   if ("email" in m) m.email = mascararEmail(m.email as string);
   if ("nomeMae" in m) m.nomeMae = mascararNomeMae(m.nomeMae as string);
+  if ("nome" in m) m.nome = mascararNome(m.nome as string);
+  if ("dataNascimento" in m) m.dataNascimento = mascararDataNascimento(m.dataNascimento as string);
   return m as T;
 }
