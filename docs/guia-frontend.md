@@ -65,9 +65,13 @@ Editor de grafo (ex: React Flow). O flow é JSON `{ nodes, edges }`:
 - Edges saindo de `condicao`/`classificar` usam `label` como valor esperado;
   `"*"` (ou sem label) = rota default.
 - **Convenção sim/não**: valores normalizam para `"true"`/`"false"` (ids dos
-  botões do WhatsApp) — labels das edges de uma condição sobre pergunta
-  `sim_nao` devem ser `true`/`false`, não "sim"/"não". O builder deve sugerir
-  isso automaticamente.
+  botões do WhatsApp) — labels das edges devem ser `true`/`false`, não
+  "sim"/"não". O builder deve sugerir isso automaticamente.
+- **Roteamento direto na pergunta `sim_nao`**: edges rotuladas `true`/`false`
+  saindo da própria pergunta roteiam pela resposta — o nó `condicao` só é
+  necessário pra campos derivados (ex: `resultado_cpf.encontrado`). Pergunta
+  com 2+ saídas sem esses labels é ERRO de validação (fan-out: os dois ramos
+  executariam).
 - **Skip-gate (automático)**: pergunta cuja `chave` já está preenchida é pulada
   pelo engine — vale exibir isso no canvas (ex: badge "pula se já respondida").
 - `semReescrita: true` = texto fixo, IA não reescreve (usar em LGPD, links,

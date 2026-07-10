@@ -67,3 +67,66 @@ test("mensagem sem texto e sem imagem → aviso", () => {
   const r = validarFlow([N("m", "mensagem", {})], []);
   assert.ok(r.avisos.some((e) => e.includes("mensagem") && e.includes("sem texto")));
 });
+
+test("pergunta com múltiplas saídas sem roteamento → erro (fan-out)", () => {
+  const r = validarFlow(
+    [
+      { id: "p", type: "pergunta", data: { chave: "x", texto: "?", tipoPergunta: "sim_nao" } },
+      { id: "a", type: "mensagem", data: { texto: "a" } },
+      { id: "b", type: "mensagem", data: { texto: "b" } },
+    ] as never,
+    [
+      { id: "e1", source: "p", target: "a" },
+      { id: "e2", source: "p", target: "b" },
+    ] as never
+  );
+  assert.equal(r.ok, false);
+  assert.ok(r.erros.some((e) => e.includes("sem labels true/false")));
+});
+
+test("pergunta sim_nao com labels sim/não → erro orientando true/false", () => {
+  const r = validarFlow(
+    [
+      { id: "p", type: "pergunta", data: { chave: "x", texto: "?", tipoPergunta: "sim_nao" } },
+      { id: "a", type: "mensagem", data: { texto: "a" } },
+      { id: "b", type: "mensagem", data: { texto: "b" } },
+    ] as never,
+    [
+      { id: "e1", source: "p", target: "a", label: "sim" },
+      { id: "e2", source: "p", target: "b", label: "não" },
+    ] as never
+  );
+  assert.equal(r.ok, false);
+  assert.ok(r.erros.some((e) => e.includes('use "true"/"false"')));
+});
+
+test("pergunta texto com 2 saídas → erro orientando nó condição", () => {
+  const r = validarFlow(
+    [
+      { id: "p", type: "pergunta", data: { chave: "x", texto: "?", tipoPergunta: "texto" } },
+      { id: "a", type: "mensagem", data: { texto: "a" } },
+      { id: "b", type: "mensagem", data: { texto: "b" } },
+    ] as never,
+    [
+      { id: "e1", source: "p", target: "a", label: "true" },
+      { id: "e2", source: "p", target: "b", label: "false" },
+    ] as never
+  );
+  assert.equal(r.ok, false);
+  assert.ok(r.erros.some((e) => e.includes("nó condição")));
+});
+
+test("pergunta sim_nao com labels true/false corretos → ok", () => {
+  const r = validarFlow(
+    [
+      { id: "p", type: "pergunta", data: { chave: "x", texto: "?", tipoPergunta: "sim_nao" } },
+      { id: "a", type: "mensagem", data: { texto: "a" } },
+      { id: "b", type: "mensagem", data: { texto: "b" } },
+    ] as never,
+    [
+      { id: "e1", source: "p", target: "a", label: "true" },
+      { id: "e2", source: "p", target: "b", label: "false" },
+    ] as never
+  );
+  assert.equal(r.ok, true, r.erros.join("; "));
+});

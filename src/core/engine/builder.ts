@@ -409,19 +409,41 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
 
     if (node.type === "pergunta") {
       const k = node.data.chave ?? node.id;
+      // pergunta sim_nao com saídas rotuladas true/false roteia DIRETO pela
+      // resposta — dispensa o nó condição no caso comum (Coilab #20260113).
+      const roteiaPorLabel =
+        node.data.tipoPergunta === "sim_nao" && saidas.some((e) => e.label);
+      const rotaPorResposta = (state: GraphState) => {
+        const valor = resolverCampoCondicao(state.dadosColetados, k);
+        const match = saidas.find((e) => (e.label ?? "").toLowerCase().trim() === valor);
+        const fallback = saidas.find((e) => !e.label || e.label === "*");
+        const alvo = (match ?? fallback ?? saidas[0])?.target;
+        return alvo ? entrada(alvo) : END;
+      };
+      const destinosRotulados = Object.fromEntries(
+        saidas.map((e) => [entrada(e.target), entrada(e.target)])
+      );
+
       const proximo = saidas[0]?.target;
       const destinoSkip = proximo ? entrada(proximo) : END;
-      // gate: já respondida → pula direto pro próximo; senão → faz a pergunta
+      // gate: já respondida → pula (roteando pela resposta preenchida quando
+      // as saídas são rotuladas); senão → faz a pergunta
       builder.addConditionalEdges(
         `gate_${node.id}`,
         (state: GraphState) => {
           const v = resolverCampo(state.dadosColetados, k);
-          return v != null && String(v).trim() !== "" ? "PULAR" : "PERGUNTAR";
+          if (v == null || String(v).trim() === "") return "PERGUNTAR";
+          return roteiaPorLabel ? rotaPorResposta(state) : "PULAR";
         },
-        { PULAR: destinoSkip, PERGUNTAR: node.id }
+        { PULAR: destinoSkip, PERGUNTAR: node.id, ...destinosRotulados, [END]: END }
       );
       builder.addEdge(node.id, `cap_${node.id}`); // [INT] após perguntar
       if (!saidas.length) builder.addEdge(`cap_${node.id}`, END);
+      else if (roteiaPorLabel)
+        builder.addConditionalEdges(`cap_${node.id}`, rotaPorResposta, {
+          ...destinosRotulados,
+          [END]: END,
+        });
       else for (const e of saidas) builder.addEdge(`cap_${node.id}`, entrada(e.target));
       continue;
     }
