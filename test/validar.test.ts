@@ -130,3 +130,65 @@ test("pergunta sim_nao com labels true/false corretos → ok", () => {
   );
   assert.equal(r.ok, true, r.erros.join("; "));
 });
+
+test("api externa sem camposCorpo → aviso de corpo vazio", () => {
+  const r = validarFlow(
+    [{ id: "a", type: "api", data: { url: "https://ex.com/x", chave: "r" } }] as never,
+    [] as never
+  );
+  assert.equal(r.ok, true, r.erros.join("; "));
+  assert.ok(r.avisos.some((a) => a.includes("camposCorpo")));
+});
+
+test("api interna sem camposCorpo → sem aviso (payload interno permitido)", () => {
+  const r = validarFlow(
+    [{ id: "a", type: "api", data: { url: "/api/consulta-cpf", chave: "r" } }] as never,
+    [] as never
+  );
+  assert.ok(!r.avisos.some((a) => a.includes("camposCorpo")));
+});
+
+test("api com header de credencial em texto puro → aviso {{secret:NOME}}", () => {
+  const r = validarFlow(
+    [
+      {
+        id: "a",
+        type: "api",
+        data: { url: "https://ex.com/x", chave: "r", camposCorpo: [], headers: { "x-api-key": "abc123def456" } },
+      },
+    ] as never,
+    [] as never
+  );
+  assert.ok(r.avisos.some((a) => a.includes("{{secret:")));
+});
+
+test("api com 2 saídas sem label erro → erro de fan-out", () => {
+  const r = validarFlow(
+    [
+      { id: "a", type: "api", data: { url: "/x", chave: "r" } },
+      { id: "m1", type: "mensagem", data: { texto: "1" } },
+      { id: "m2", type: "mensagem", data: { texto: "2" } },
+    ] as never,
+    [
+      { id: "e1", source: "a", target: "m1" },
+      { id: "e2", source: "a", target: "m2" },
+    ] as never
+  );
+  assert.equal(r.ok, false);
+  assert.ok(r.erros.some((e) => e.includes('"erro"')));
+});
+
+test("api com saídas erro + default → ok", () => {
+  const r = validarFlow(
+    [
+      { id: "a", type: "api", data: { url: "/x", chave: "r" } },
+      { id: "m1", type: "mensagem", data: { texto: "1" } },
+      { id: "m2", type: "mensagem", data: { texto: "2" } },
+    ] as never,
+    [
+      { id: "e1", source: "a", target: "m1" },
+      { id: "e2", source: "a", target: "m2", label: "erro" },
+    ] as never
+  );
+  assert.equal(r.ok, true, r.erros.join("; "));
+});

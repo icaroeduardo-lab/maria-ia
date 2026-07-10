@@ -91,10 +91,38 @@ export function validarFlow(nodes: FlowNode[], edges: FlowEdge[]): ResultadoVali
         }
         break;
       }
-      case "api":
+      case "api": {
         if (!d.url) erros.push(`api "${n.id}" sem data.url`);
         if (!d.chave) avisos.push(`api "${n.id}" sem data.chave (resultado não é gravado)`);
+        const urlApi = String(d.url ?? "");
+        const externa = /^https?:\/\//i.test(urlApi);
+        // LGPD: pra fora, PII só com seleção explícita — sem camposCorpo o corpo vai VAZIO
+        if (externa && !Array.isArray(d.camposCorpo))
+          avisos.push(
+            `api "${n.id}": URL externa sem data.camposCorpo — o corpo será enviado VAZIO; selecione as chaves a enviar`
+          );
+        // header com cara de credencial crua persistiria o segredo no banco
+        for (const [nome, valor] of Object.entries((d.headers ?? {}) as Record<string, string>))
+          if (/(key|token|auth|secret)/i.test(nome) && !/\{\{secret:\w+\}\}/.test(String(valor)))
+            avisos.push(
+              `api "${n.id}": header "${nome}" parece credencial em texto puro — use {{secret:NOME}} (resolvido do ambiente)`
+            );
+        // múltiplas saídas só roteiam com uma edge rotulada "erro"
+        const saidasApi = edges.filter((e) => e.source === n.id);
+        if (saidasApi.length > 1) {
+          const labels = saidasApi.map((e) => (e.label ?? "").toLowerCase().trim());
+          if (!labels.includes("erro"))
+            erros.push(
+              `api "${n.id}" tem ${saidasApi.length} saídas sem label "erro" — todos os ramos executariam juntos; rotule a saída de falha com "erro"`
+            );
+          const invalidos = labels.filter((l) => !["erro", "*", ""].includes(l));
+          if (invalidos.length)
+            erros.push(
+              `api "${n.id}": labels ${invalidos.map((l) => `"${l}"`).join(", ")} não roteiam — só "erro" (falha) e sem label/"*" (sucesso)`
+            );
+        }
         break;
+      }
       case "subfluxo":
         if (!d.refFlowId) erros.push(`subfluxo "${n.id}" sem data.refFlowId`);
         break;

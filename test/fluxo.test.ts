@@ -241,3 +241,141 @@ test("encerrar sem texto mantém a mensagem padrão (regressão)", async () => {
   assert.ok(r.protocolo);
   assert.match(textos(r), /protocolo \*/i); // texto padrão do encerramento cita o protocolo
 });
+
+// ── nó api genérico (Coilab #20260115): rota erro, corpo seletivo, secrets ────
+
+import { createServer, type Server } from "node:http";
+
+async function servidorDeTeste(handler: Parameters<typeof createServer>[1]): Promise<{ url: string; srv: Server; corpos: unknown[] }> {
+  const corpos: unknown[] = [];
+  const srv = createServer((req, res) => {
+    let bruto = "";
+    req.on("data", (c) => (bruto += c));
+    req.on("end", () => {
+      corpos.push({ body: bruto ? JSON.parse(bruto) : null, headers: req.headers });
+      handler!(req, res);
+    });
+  });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+  const porta = (srv.address() as { port: number }).port;
+  return { url: `http://127.0.0.1:${porta}`, srv, corpos };
+}
+
+test("api externa: corpo só com camposCorpo, header com {{secret:X}}, sem _sessao", async () => {
+  process.env.CHAVE_TESTE_API = "segredo-123";
+  const { url, srv, corpos } = await servidorDeTeste((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: true }));
+  });
+  try {
+    const flow: FlowJSON = {
+      id: "t-api-seletivo",
+      nodes: [
+        { id: "s1", type: "atribuir", data: { chave: "cep", valor: "20000-000" } },
+        { id: "s2", type: "atribuir", data: { chave: "cpf", valor: "111.222.333-44" } },
+        {
+          id: "chamada", type: "api",
+          data: { url: `${url}/consulta`, chave: "resultado", camposCorpo: ["cep"], headers: { "x-api-key": "{{secret:CHAVE_TESTE_API}}" } },
+        },
+        { id: "fim", type: "encerrar", data: {} },
+      ],
+      edges: [
+        { id: "e0", source: "s1", target: "s2" },
+        { id: "e1", source: "s2", target: "chamada" },
+        { id: "e2", source: "chamada", target: "fim" },
+      ],
+    };
+    const graph = buildGraphFromFlow(flow);
+    const r = await graph.invoke({}, config());
+    const recebido = corpos[0] as { body: Record<string, unknown>; headers: Record<string, string> };
+    assert.deepEqual(recebido.body, { cep: "20000-000" }); // cpf NÃO vaza; _sessao/_canal não vão pra fora
+    assert.equal(recebido.headers["x-api-key"], "segredo-123");
+    assert.equal(r.dadosColetados.resultado_erro, "false");
+    assert.match(String(r.dadosColetados.resultado), /"ok":true/);
+  } finally {
+    srv.close();
+    delete process.env.CHAVE_TESTE_API;
+  }
+});
+
+test("api com edge 'erro': status 500 roteia pro ramo de falha sem gravar o corpo", async () => {
+  const { url, srv } = await servidorDeTeste((_req, res) => {
+    res.writeHead(500);
+    res.end("explodiu");
+  });
+  try {
+    const flow: FlowJSON = {
+      id: "t-api-erro",
+      nodes: [
+        { id: "chamada", type: "api", data: { url: `${url}/x`, chave: "resultado", camposCorpo: [] } },
+        { id: "m_ok", type: "mensagem", data: { texto: "Deu certo" } },
+        { id: "m_erro", type: "mensagem", data: { texto: "Tivemos um problema" } },
+        { id: "fim", type: "encerrar", data: {} },
+      ],
+      edges: [
+        { id: "e1", source: "chamada", target: "m_ok" },
+        { id: "e2", source: "chamada", target: "m_erro", label: "erro" },
+        { id: "e3", source: "m_ok", target: "fim" },
+        { id: "e4", source: "m_erro", target: "fim" },
+      ],
+    };
+    const graph = buildGraphFromFlow(flow);
+    const r = await graph.invoke({}, config());
+    assert.match(textos(r), /Tivemos um problema/);
+    assert.doesNotMatch(textos(r), /Deu certo/);
+    assert.equal(r.dadosColetados.resultado, undefined); // corpo do 500 não vira resultado
+    assert.equal(r.dadosColetados.resultado_erro, "true");
+  } finally {
+    srv.close();
+  }
+});
+
+test("api com edge 'erro': sucesso segue o caminho feliz", async () => {
+  const { url, srv } = await servidorDeTeste((_req, res) => {
+    res.writeHead(200);
+    res.end("{}");
+  });
+  try {
+    const flow: FlowJSON = {
+      id: "t-api-feliz",
+      nodes: [
+        { id: "chamada", type: "api", data: { url: `${url}/x`, chave: "resultado", camposCorpo: [] } },
+        { id: "m_ok", type: "mensagem", data: { texto: "Deu certo" } },
+        { id: "m_erro", type: "mensagem", data: { texto: "Tivemos um problema" } },
+        { id: "fim", type: "encerrar", data: {} },
+      ],
+      edges: [
+        { id: "e1", source: "chamada", target: "m_ok" },
+        { id: "e2", source: "chamada", target: "m_erro", label: "erro" },
+        { id: "e3", source: "m_ok", target: "fim" },
+        { id: "e4", source: "m_erro", target: "fim" },
+      ],
+    };
+    const graph = buildGraphFromFlow(flow);
+    const r = await graph.invoke({}, config());
+    assert.match(textos(r), /Deu certo/);
+    assert.doesNotMatch(textos(r), /Tivemos um problema/);
+  } finally {
+    srv.close();
+  }
+});
+
+test("api sem edge 'erro' mantém comportamento atual em falha (segue sem o dado)", async () => {
+  const flow: FlowJSON = {
+    id: "t-api-regressao",
+    nodes: [
+      // porta 1 fecha a conexão na hora — falha rápida e determinística
+      { id: "chamada", type: "api", data: { url: "http://127.0.0.1:1/x", chave: "resultado" } },
+      { id: "m_seguiu", type: "mensagem", data: { texto: "Seguiu o fluxo" } },
+      { id: "fim", type: "encerrar", data: {} },
+    ],
+    edges: [
+      { id: "e1", source: "chamada", target: "m_seguiu" },
+      { id: "e2", source: "m_seguiu", target: "fim" },
+    ],
+  };
+  const graph = buildGraphFromFlow(flow);
+  const r = await graph.invoke({}, config());
+  assert.match(textos(r), /Seguiu o fluxo/);
+  assert.equal(r.dadosColetados.resultado, undefined);
+});
