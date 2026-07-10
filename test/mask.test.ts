@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mascararCpf, mascararTelefone, mascararEmail, mascararAssistido } from "../src/core/mask.js";
+import {
+  mascararCpf,
+  mascararTelefone,
+  mascararEmail,
+  mascararNome,
+  mascararDataNascimento,
+  mascararAssistido,
+} from "../src/core/mask.js";
 
 test("mascararCpf mostra só o 9º dígito", () => {
   assert.equal(mascararCpf("11144477735"), "•••.•••.••7-••");
@@ -35,24 +42,47 @@ test("mascararEmail devolve cru se não for email", () => {
   assert.equal(mascararEmail(""), "");
 });
 
-test("mascararAssistido mascara cpf/telefone/email/nomeMae e preserva o resto", () => {
+test("mascararNome mostra só a inicial de cada parte", () => {
+  assert.equal(mascararNome("Maria Costa"), "M••• C•••");
+  assert.equal(mascararNome("João da Silva"), "J••• d••• S•••");
+  assert.equal(mascararNome("Ana"), "A•••");
+});
+
+test("mascararNome trata vazio e nulo", () => {
+  assert.equal(mascararNome(""), "");
+  assert.equal(mascararNome("   "), "");
+  assert.equal(mascararNome(null), "");
+  assert.equal(mascararNome(undefined), "");
+});
+
+test("mascararDataNascimento usa máscara fixa quando preenchida", () => {
+  assert.equal(mascararDataNascimento("1985-03-10"), "••/••/••••");
+  assert.equal(mascararDataNascimento("10/03/1985"), "••/••/••••");
+  assert.equal(mascararDataNascimento(""), "");
+  assert.equal(mascararDataNascimento(null), "");
+  assert.equal(mascararDataNascimento(undefined), "");
+});
+
+test("mascararAssistido mascara cpf/telefone/email/nomeMae/nome/dataNascimento e preserva o resto", () => {
   const m = mascararAssistido({
     nome: "João da Silva",
+    dataNascimento: "1985-03-10",
     cpf: "11144477735",
     telefone: "21988887777",
     email: "joao@x.com",
     nomeMae: "Maria Aparecida Silva",
     municipio: "Rio de Janeiro",
   });
-  assert.equal(m.nome, "João da Silva");
   assert.equal(m.municipio, "Rio de Janeiro");
   assert.equal(m.cpf, "•••.•••.••7-••");
   assert.equal(m.telefone, "••••••77");
   assert.equal(m.email, "jo•••@•••.com");
   assert.equal(m.nomeMae, "Maria •••");
+  assert.equal(m.nome, "J••• d••• S•••");
+  assert.equal(m.dataNascimento, "••/••/••••");
 });
 
 test("mascararAssistido não inventa campos ausentes", () => {
-  const m = mascararAssistido({ nome: "Ana" });
-  assert.deepEqual(m, { nome: "Ana" });
+  const m = mascararAssistido({ municipio: "Niterói" });
+  assert.deepEqual(m, { municipio: "Niterói" });
 });
