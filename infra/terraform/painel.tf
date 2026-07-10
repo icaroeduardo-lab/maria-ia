@@ -55,6 +55,19 @@ resource "aws_cloudfront_distribution" "painel" {
     origin_access_control_id = aws_cloudfront_origin_access_control.painel.id
   }
 
+  # API via a MESMA distribution (proxy → ALB): evita mixed content (painel
+  # HTTPS × ALB HTTP) e CORS enquanto não há domínio próprio com ACM.
+  origin {
+    domain_name = aws_lb.main.dns_name
+    origin_id   = "alb-api"
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
   default_cache_behavior {
     target_origin_id       = "s3-painel"
     viewer_protocol_policy = "redirect-to-https"
@@ -63,6 +76,22 @@ resource "aws_cloudfront_distribution" "painel" {
     compress               = true
     # managed policy CachingOptimized
     cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+  }
+
+  # rotas da API passam direto pro ALB, sem cache (JWT no header)
+  dynamic "ordered_cache_behavior" {
+    for_each = ["/auth/*", "/admin/*"]
+    content {
+      path_pattern           = ordered_cache_behavior.value
+      target_origin_id       = "alb-api"
+      viewer_protocol_policy = "redirect-to-https"
+      allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+      cached_methods         = ["GET", "HEAD"]
+      compress               = true
+      # managed: CachingDisabled + AllViewer (repassa headers/query/cookies)
+      cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+      origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
+    }
   }
 
   # SPA: rota desconhecida cai no index.html (roteamento client-side)
