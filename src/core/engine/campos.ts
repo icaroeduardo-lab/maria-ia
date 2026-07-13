@@ -1,6 +1,14 @@
 // Resolução de campos de dadosColetados (com notação de ponto + JSON aninhado)
 // e interpolação de {{chave}} em textos. Puro, sem dependências de runtime.
 
+import {
+  mascararCpf,
+  mascararTelefone,
+  mascararEmail,
+  mascararNome,
+  mascararDataNascimento,
+} from "../mask.js";
+
 // Ex: "resultado_cpf.encontrado" → parseia resultado_cpf como JSON e retorna .encontrado
 export function resolverCampo(dados: Record<string, unknown>, caminho: string): string {
   const partes = caminho.split(".");
@@ -29,7 +37,31 @@ export function resolverCampoCondicao(dados: Record<string, unknown>, caminho: s
   return v;
 }
 
+// aplica máscara de PII (LGPD) com base no nome do último segmento do caminho
+// (ex: "resultado_cpf.dados.email" → mascararEmail). Ver src/core/mask.ts.
+function aplicarMascara(caminho: string, valor: string): string {
+  switch (caminho.split(".").pop()) {
+    case "cpf":
+      return mascararCpf(valor);
+    case "telefone":
+      return mascararTelefone(valor);
+    case "email":
+      return mascararEmail(valor);
+    case "nome":
+    case "nomeMae":
+      return mascararNome(valor);
+    case "dataNascimento":
+      return mascararDataNascimento(valor);
+    default:
+      return valor;
+  }
+}
+
 // interpola {{chave}} / {{chave.sub}} com dadosColetados — ex: "CPF: {{cpf}}"
+// prefixo "mask:" aplica máscara de PII no valor — ex: "{{mask:resultado_cpf.dados.email}}"
 export function interpolar(txt: string, dados: Record<string, unknown>): string {
-  return txt.replace(/\{\{([\w.]+)\}\}/g, (_, k) => resolverCampo(dados, k));
+  return txt.replace(/\{\{(mask:)?([\w.]+)\}\}/g, (_, prefixoMask, caminho) => {
+    const valor = resolverCampo(dados, caminho);
+    return prefixoMask ? aplicarMascara(caminho, valor) : valor;
+  });
 }
