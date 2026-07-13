@@ -173,6 +173,21 @@ components:
       required: [cpf]
       properties:
         cpf: { type: string }
+    CasoDetalheReq:
+      type: object
+      properties:
+        caso_sel: { type: string, description: "identificador completo ou índice (1,2,...)" }
+        casos: { type: string, description: "JSON da consulta anterior (para mapear índice)" }
+    CasoDetalheResp:
+      type: object
+      required: [encontrado]
+      properties:
+        encontrado: { type: boolean }
+        identificador: { type: string }
+        tipo: { type: string }
+        status: { type: string }
+        criadoEm: { type: string, format: date-time }
+        assistido: { type: string }
     ConfigIA:
       type: object
       description: Configuração global da IA (singleton id=default)
@@ -696,6 +711,13 @@ paths:
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CpfReq' } } } }
       responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/CasosConsultaResp' } } } } }
+  /api/casos/detalhe:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Detalhe de 1 caso (por identificador ou índice da lista anterior)
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CasoDetalheReq' } } } }
+      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/CasoDetalheResp' } } } } }
   /api/processos/consultar:
     post:
       tags: [Interno (fluxo)]

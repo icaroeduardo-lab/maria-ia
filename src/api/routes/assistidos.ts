@@ -88,6 +88,36 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     return { tem_casos: casos.length > 0, casos: enxutos, lista };
   });
 
+  // POST /api/casos/detalhe — { caso_sel, casos? } → detalhe de 1 caso
+  // caso_sel pode ser o identificador completo OU o índice (1, 2, ...) da lista
+  // retornada por /api/casos/consultar (mesmo padrão do /api/processos/resumo).
+  app.post("/api/casos/detalhe", async (req) => {
+    const body = (req.body ?? {}) as { caso_sel?: string; casos?: string };
+    const sel = String(body.caso_sel ?? "").trim();
+
+    let identificador = sel;
+    try {
+      const lista = JSON.parse(body.casos ?? "{}")?.casos as { identificador: string }[] | undefined;
+      const idx = /^\d{1,2}$/.exec(sel);
+      if (idx && lista?.[Number(sel) - 1]) identificador = lista[Number(sel) - 1].identificador;
+    } catch { /* segue com sel */ }
+
+    const caso = await db.caso.findFirst({ where: { identificador }, include: { assistido: true } });
+    if (!caso) {
+      console.log(`[casos] detalhe: "${sel}" não encontrado`);
+      return { encontrado: false };
+    }
+    console.log(`[casos] detalhe: ${caso.identificador} (${caso.tipo})`);
+    return {
+      encontrado: true,
+      identificador: caso.identificador,
+      tipo: caso.tipo,
+      status: caso.status,
+      criadoEm: caso.criadoEm.toISOString(),
+      assistido: caso.assistido.nome,
+    };
+  });
+
   // POST /api/assistidos/atualizar — { cpf, ...campos } → { sucesso, dados }
   app.post("/api/assistidos/atualizar", async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
