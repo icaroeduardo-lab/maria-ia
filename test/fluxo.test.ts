@@ -227,6 +227,25 @@ test("encerrar com texto customizado interpola {{protocolo}} e {{chave}}", async
   assert.doesNotMatch(textos(r), /\{\{/);
 });
 
+test("atribuir interpola {{chave}} no valor (copiar/renomear campo)", async () => {
+  const flow: FlowJSON = {
+    id: "t-atribuir-interpola",
+    nodes: [
+      { id: "seta1", type: "atribuir", data: { chave: "resultado", valor: '{"a":1}' } },
+      { id: "seta2", type: "atribuir", data: { chave: "copia", valor: "{{resultado}}" } },
+      { id: "fim", type: "encerrar", data: { texto: "Valor: {{copia}}" } },
+    ],
+    edges: [
+      { id: "e1", source: "seta1", target: "seta2" },
+      { id: "e2", source: "seta2", target: "fim" },
+    ],
+  };
+  const graph = buildGraphFromFlow(flow);
+  const r = await graph.invoke({}, config());
+  assert.equal(r.dadosColetados.copia, '{"a":1}');
+  assert.match(textos(r), /Valor: \{"a":1\}/);
+});
+
 test("encerrar sem texto mantém a mensagem padrão (regressão)", async () => {
   const flow: FlowJSON = {
     id: "t-encerrar-padrao",
