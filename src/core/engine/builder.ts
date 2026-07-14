@@ -233,8 +233,10 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
     }
 
     case "atribuir":
-      return async (_state: GraphState) =>
-        node.data.chave ? { dadosColetados: { [node.data.chave]: node.data.valor ?? "" } } : {};
+      return async (state: GraphState) =>
+        node.data.chave
+          ? { dadosColetados: { [node.data.chave]: interpolar(String(node.data.valor ?? ""), state.dadosColetados) } }
+          : {};
 
     case "subgrafo": {
       // pergunta o próximo item pendente do serviço referenciado (loop é montado nas edges)
