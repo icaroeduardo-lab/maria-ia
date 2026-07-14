@@ -1,7 +1,7 @@
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
 import { graph as graphEstatico, checkpointer } from "./graph.js";
-import { graphDoFlow, subfluxosReferenciados } from "./engine/builder.js";
+import { graphDoFlow, subfluxosReferenciados, type FlowRow } from "./engine/builder.js";
 import { prisma } from "./db.js";
 import { montarMetadados, gerarResumoTexto } from "./resumo.js";
 import { env } from "./env.js";
@@ -43,6 +43,27 @@ async function invokeComRetry(
   throw ultimoErro;
 }
 
+// Carrega os sub-flows referenciados por um flow, e os sub-flows QUE ESSES
+// sub-flows referenciam, recursivamente (subfluxo dentro de subfluxo — ex:
+// um "Orquestrador" reutilizável que embute Divórcio/Trabalhista/...).
+// Sem isso, só o 1º nível carrega e o nó subfluxo aninhado vira pass-through
+// sem saída (perguntas/extração do tema nunca rodam).
+export async function carregarSubflowsRecursivo(nodesIniciais: unknown): Promise<FlowRow[]> {
+  if (!prisma) return [];
+  const vistos = new Set<string>();
+  const resultado: FlowRow[] = [];
+  let pendentes = subfluxosReferenciados(nodesIniciais);
+  while (pendentes.length) {
+    const novos = pendentes.filter((id) => !vistos.has(id));
+    if (!novos.length) break;
+    for (const id of novos) vistos.add(id);
+    const flows = await prisma.flow.findMany({ where: { id: { in: novos } } });
+    resultado.push(...flows);
+    pendentes = flows.flatMap((f) => subfluxosReferenciados(f.nodes));
+  }
+  return resultado;
+}
+
 // Grafo a usar: flow ativo (compilado dinamicamente, com cache) ou o grafo
 // estático padrão. Troca de flow ativo afeta conversas novas.
 async function obterGraph(): Promise<{ graph: typeof graphEstatico; flowId: string | null }> {
@@ -50,8 +71,7 @@ async function obterGraph(): Promise<{ graph: typeof graphEstatico; flowId: stri
   try {
     const ativo = await prisma.flow.findFirst({ where: { active: true } });
     if (!ativo) return { graph: graphEstatico, flowId: null };
-    const refs = subfluxosReferenciados(ativo.nodes);
-    const subflows = refs.length ? await prisma.flow.findMany({ where: { id: { in: refs } } }) : [];
+    const subflows = await carregarSubflowsRecursivo(ativo.nodes);
     return { graph: graphDoFlow(ativo, subflows) as typeof graphEstatico, flowId: ativo.id };
   } catch (err) {
     console.error("[engine] falha ao carregar flow ativo, usando grafo estático:", err);

@@ -322,47 +322,57 @@ function entradaDe(nodes: FlowNode[], edges: FlowEdge[]): FlowNode {
 
 // Substitui cada nó "subfluxo" pelos nós/edges do flow referenciado (ids prefixados).
 // Entradas do nó → entrada do sub-flow; terminais do sub-flow → saídas do nó.
+// Roda em passadas até não sobrar nó "subfluxo" — suporta aninhamento (subfluxo
+// dentro de subfluxo, ex: um "Orquestrador" reutilizável que embute outros
+// temas). Limite de profundidade evita loop em referência circular (A embute
+// B que embute A). O caller (chat.ts/admin.ts) precisa ter carregado TODOS os
+// sub-flows aninhados em `subflows` — ver carregarSubflowsRecursivo.
 function expandirSubfluxos(nodes: FlowNode[], edges: FlowEdge[], subflows: SubflowMap): { nodes: FlowNode[]; edges: FlowEdge[] } {
   let N = [...nodes];
   let E = [...edges];
-  for (const node of nodes) {
-    if (node.type !== "subfluxo") continue;
-    const sub = node.data.refFlowId ? subflows[node.data.refFlowId] : undefined;
-    const entradasNode = edges.filter((e) => e.target === node.id);
-    const saidasNode = edges.filter((e) => e.source === node.id);
-    // remove o nó subfluxo e suas edges
-    N = N.filter((n) => n.id !== node.id);
-    E = E.filter((e) => e.source !== node.id && e.target !== node.id);
 
-    if (!sub?.nodes?.length) {
-      // sem ref válida → vira pass-through: liga entradas direto às saídas
-      for (const ent of entradasNode) for (const sai of saidasNode)
-        E.push({ id: `pt_${ent.source}_${sai.target}`, source: ent.source, target: sai.target, label: ent.label });
-      continue;
-    }
+  for (let profundidade = 0; profundidade < 10; profundidade++) {
+    const pendentes = N.filter((n) => n.type === "subfluxo");
+    if (!pendentes.length) break;
 
-    const pfx = `sf_${node.id}_`;
-    const subNodes = sub.nodes.map((n) => ({ ...n, id: pfx + n.id }));
-    const subEdges = sub.edges.map((e) => ({ ...e, id: pfx + e.id, source: pfx + e.source, target: pfx + e.target }));
-    const entrada = pfx + entradaDe(sub.nodes, sub.edges).id;
-    const comSaida = new Set(sub.edges.map((e) => e.source));
-    const terminais = sub.nodes.filter((n) => !comSaida.has(n.id)); // nós-folha do sub-flow
+    for (const node of pendentes) {
+      const sub = node.data.refFlowId ? subflows[node.data.refFlowId] : undefined;
+      const entradasNode = E.filter((e) => e.target === node.id);
+      const saidasNode = E.filter((e) => e.source === node.id);
+      // remove o nó subfluxo e suas edges
+      N = N.filter((n) => n.id !== node.id);
+      E = E.filter((e) => e.source !== node.id && e.target !== node.id);
 
-    N = N.concat(subNodes);
-    E = E.concat(subEdges);
-    // entradas do nó subfluxo → entrada do sub-flow (preserva label da condição)
-    for (const ent of entradasNode)
-      E.push({ id: `in_${ent.source}_${entrada}`, source: ent.source, target: entrada, label: ent.label });
+      if (!sub?.nodes?.length) {
+        // sem ref válida → vira pass-through: liga entradas direto às saídas
+        for (const ent of entradasNode) for (const sai of saidasNode)
+          E.push({ id: `pt_${ent.source}_${sai.target}`, source: ent.source, target: sai.target, label: ent.label });
+        continue;
+      }
 
-    // saídas: cada terminal do sub-flow liga às saídas do nó subfluxo.
-    // Saída nomeada: terminal com data.saida casa com a seta de mesmo label.
-    const semLabel = saidasNode.filter((s) => !s.label);
-    for (const term of terminais) {
-      const nome = (term.data.saida ?? "").toLowerCase().trim();
-      const casados = nome ? saidasNode.filter((s) => (s.label ?? "").toLowerCase().trim() === nome) : [];
-      const alvos = casados.length ? casados : (semLabel.length ? semLabel : saidasNode);
-      for (const sai of alvos)
-        E.push({ id: `out_${pfx}${term.id}_${sai.target}`, source: pfx + term.id, target: sai.target, label: sai.label });
+      const pfx = `sf_${node.id}_`;
+      const subNodes = sub.nodes.map((n) => ({ ...n, id: pfx + n.id }));
+      const subEdges = sub.edges.map((e) => ({ ...e, id: pfx + e.id, source: pfx + e.source, target: pfx + e.target }));
+      const entrada = pfx + entradaDe(sub.nodes, sub.edges).id;
+      const comSaida = new Set(sub.edges.map((e) => e.source));
+      const terminais = sub.nodes.filter((n) => !comSaida.has(n.id)); // nós-folha do sub-flow
+
+      N = N.concat(subNodes);
+      E = E.concat(subEdges);
+      // entradas do nó subfluxo → entrada do sub-flow (preserva label da condição)
+      for (const ent of entradasNode)
+        E.push({ id: `in_${ent.source}_${entrada}`, source: ent.source, target: entrada, label: ent.label });
+
+      // saídas: cada terminal do sub-flow liga às saídas do nó subfluxo.
+      // Saída nomeada: terminal com data.saida casa com a seta de mesmo label.
+      const semLabel = saidasNode.filter((s) => !s.label);
+      for (const term of terminais) {
+        const nome = (term.data.saida ?? "").toLowerCase().trim();
+        const casados = nome ? saidasNode.filter((s) => (s.label ?? "").toLowerCase().trim() === nome) : [];
+        const alvos = casados.length ? casados : (semLabel.length ? semLabel : saidasNode);
+        for (const sai of alvos)
+          E.push({ id: `out_${pfx}${term.id}_${sai.target}`, source: pfx + term.id, target: sai.target, label: sai.label });
+      }
     }
   }
   return { nodes: N, edges: E };
@@ -554,7 +564,7 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
 
 const cache = new Map<string, { versao: string; graph: ReturnType<typeof buildGraphFromFlow> }>();
 
-type FlowRow = { id: string; updatedAt: Date; nodes: unknown; edges: unknown };
+export type FlowRow = { id: string; updatedAt: Date; nodes: unknown; edges: unknown };
 
 // ids de flows referenciados por nós "subfluxo"
 export function subfluxosReferenciados(nodes: unknown): string[] {
