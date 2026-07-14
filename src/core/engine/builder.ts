@@ -10,6 +10,7 @@ import {
 } from "./ia.js";
 import { avaliarTom } from "./sentimento.js";
 import { registrarVisitaNode } from "../analytics.js";
+import { formatoValido, mensagemErroFormato } from "./validacao-resposta.js";
 import { GraphAnnotation, type GraphState } from "../state.js";
 import { checkpointer, graph as graphEstatico } from "../graph.js";
 import { mensagemPergunta, proxima, type Pergunta, type TipoPergunta } from "../perguntas.js";
@@ -282,6 +283,10 @@ export function interpretarSimNao(fala: string): "sim" | "não" {
   return "não"; // ambíguo → não (seguro para aceites como LGPD)
 }
 
+// tentativas inválidas seguidas antes de desistir de re-perguntar e aceitar o
+// valor bruto (nunca travar o assistido num loop infinito — card #20260120)
+const LIMITE_TENTATIVAS = 3;
+
 // captura a resposta do usuário após o interrupt de um node pergunta.
 // avaliarSentimento: só true p/ perguntas livres de tema (sf_* + tipo texto) —
 // V2 do tom via Comprehend, reavalia por turno com histerese (só escalona).
@@ -290,6 +295,18 @@ function criarCaptura(p: Pergunta, avaliarSentimento = false) {
     const fala = ultimaFalaUsuario(state);
     if (!fala) return {};
     const valor = p.tipo === "sim_nao" ? interpretarSimNao(fala) : fala;
+
+    if (!formatoValido(p.tipo, valor)) {
+      const novoCount = (state.tentativas[p.chave] ?? 0) + 1;
+      if (novoCount <= LIMITE_TENTATIVAS) {
+        return {
+          messages: [new AIMessage(mensagemErroFormato(p.tipo))],
+          tentativas: { [p.chave]: novoCount },
+        };
+      }
+      // limite estourado: segue com o valor bruto mesmo fora do formato
+    }
+
     const dados: Record<string, unknown> = { [p.chave]: valor };
     if (avaliarSentimento) {
       const tom = await avaliarTom(fala, state.dadosColetados.tom as string | undefined);
@@ -517,13 +534,29 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
         { PULAR: destinoSkip, PERGUNTAR: node.id, ...destinosRotulados, [END]: END }
       );
       builder.addEdge(node.id, `cap_${node.id}`); // [INT] após perguntar
+      // tipos com validador de formato (cpf/telefone/cep/data), saída única:
+      // captura inválida (dadosColetados[k] não gravado, ver criarCaptura)
+      // volta pro próprio node.id — re-pergunta com mensagem de erro.
+      const tipoComValidador = ["cpf", "telefone", "cep", "data"].includes(
+        node.data.tipoPergunta ?? "texto"
+      );
       if (!saidas.length) builder.addEdge(`cap_${node.id}`, END);
       else if (roteiaPorLabel)
         builder.addConditionalEdges(`cap_${node.id}`, rotaPorResposta, {
           ...destinosRotulados,
           [END]: END,
         });
-      else for (const e of saidas) builder.addEdge(`cap_${node.id}`, entrada(e.target));
+      else if (tipoComValidador && saidas.length === 1) {
+        const destino = entrada(saidas[0].target);
+        builder.addConditionalEdges(
+          `cap_${node.id}`,
+          (state: GraphState) => {
+            const v = resolverCampo(state.dadosColetados, k);
+            return v == null || String(v).trim() === "" ? node.id : destino;
+          },
+          { [destino]: destino, [node.id]: node.id }
+        );
+      } else for (const e of saidas) builder.addEdge(`cap_${node.id}`, entrada(e.target));
       continue;
     }
 
