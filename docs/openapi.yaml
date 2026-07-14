@@ -107,6 +107,7 @@ components:
         nodes: { type: array, items: { $ref: '#/components/schemas/FlowNode' } }
         edges: { type: array, items: { $ref: '#/components/schemas/FlowEdge' } }
         active: { type: boolean }
+        isTemplate: { type: boolean, description: "catálogo de templates — card #20260127" }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     FlowVersionResumo:
@@ -448,6 +449,7 @@ paths:
                     id: { type: string }
                     name: { type: string }
                     active: { type: boolean }
+                    isTemplate: { type: boolean }
                     createdAt: { type: string, format: date-time }
                     updatedAt: { type: string, format: date-time }
     post:
@@ -557,6 +559,22 @@ paths:
       summary: Desativa fluxo (admin)
       parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
       responses: { "200": { description: OK } }
+  /admin/flows/{id}/marcar-template:
+    post:
+      tags: [Admin — Flows]
+      summary: Marca fluxo como template do catálogo (admin) — metadado, não versiona
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Flow' } } } }
+        "404": { description: Não encontrado }
+  /admin/flows/{id}/desmarcar-template:
+    post:
+      tags: [Admin — Flows]
+      summary: Desmarca fluxo como template do catálogo (admin)
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Flow' } } } }
+        "404": { description: Não encontrado }
 
   # ── Admin: Conversations ───────────────────────────────────
   /admin/conversations:

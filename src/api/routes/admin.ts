@@ -85,7 +85,7 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get("/flows", async () =>
     db.flow.findMany({
       orderBy: { updatedAt: "desc" },
-      select: { id: true, name: true, active: true, createdAt: true, updatedAt: true },
+      select: { id: true, name: true, active: true, isTemplate: true, createdAt: true, updatedAt: true },
     })
   );
 
@@ -245,6 +245,22 @@ export async function adminRoutes(app: FastifyInstance) {
     const existe = await db.flow.findUnique({ where: { id } });
     if (!existe) return reply.code(404).send({ erro: "fluxo não encontrado" });
     return db.flow.update({ where: { id }, data: { active: false } });
+  });
+
+  // catálogo de templates (card #20260127) — metadado, não cria FlowVersion
+  // (não é uma mudança de conteúdo, é só uma flag de catalogação)
+  app.post("/flows/:id/marcar-template", { preHandler: [exigirAdmin] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const existe = await db.flow.findUnique({ where: { id } });
+    if (!existe) return reply.code(404).send({ erro: "fluxo não encontrado" });
+    return db.flow.update({ where: { id }, data: { isTemplate: true } });
+  });
+
+  app.post("/flows/:id/desmarcar-template", { preHandler: [exigirAdmin] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const existe = await db.flow.findUnique({ where: { id } });
+    if (!existe) return reply.code(404).send({ erro: "fluxo não encontrado" });
+    return db.flow.update({ where: { id }, data: { isTemplate: false } });
   });
 
   // ── Conversas ─────────────────────────────────────────────────────────────
