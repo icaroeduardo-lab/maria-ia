@@ -155,7 +155,10 @@ AWS_REGION=us-east-1
 BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
 BEDROCK_KB_ID=LF04FDVIYP
 BEDROCK_KB_DS_ID=V6AOSMT9CQ
+# Tracing LangSmith (opcional) — ver seção "Observabilidade"
+LANGCHAIN_TRACING_V2=
 LANGSMITH_API_KEY=
+LANGCHAIN_PROJECT=
 # Fase 3 — vazio = modo mock (protocolo local):
 DPERJ_API_URL=
 DPERJ_API_KEY=
