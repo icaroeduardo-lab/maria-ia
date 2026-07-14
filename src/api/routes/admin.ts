@@ -10,6 +10,8 @@ import { prisma } from "../../core/db.js";
 import { env } from "../../core/env.js";
 import { autenticar, exigirAdmin } from "./auth.js";
 import { graphDoFlow, graphEstatico, subfluxosReferenciados, type FlowNode, type FlowEdge } from "../../core/engine/builder.js";
+import { checkpointer } from "../../core/graph.js";
+import { COMANDO_REINICIAR } from "../../core/chat.js";
 import { validarFlow } from "../../core/engine/validar.js";
 import { ESTILO_DEFAULT, invalidarEstilo } from "../../core/config.js";
 import { montarMetadados, gerarResumoTexto, type Metadados } from "../../core/resumo.js";
@@ -478,6 +480,23 @@ export async function adminRoutes(app: FastifyInstance) {
     };
     if (!sessionId) return reply.code(400).send({ erro: "sessionId obrigatório" });
 
+    // prefixo "test:" isola sessões de teste dos checkpoints reais
+    const threadId = `test:${flowId ?? "static"}:${sessionId}`;
+    const config = { configurable: { thread_id: threadId } };
+
+    // mesmo comando de reinício do chat real (src/core/chat.ts) — sem isso,
+    // #sair vira só mais uma resposta pro nó de pergunta atual no teste.
+    if (message && message.trim().toLowerCase() === COMANDO_REINICIAR) {
+      await checkpointer.deleteThread(threadId).catch((err) =>
+        console.error("[test-chat] falha ao reiniciar thread de teste:", err)
+      );
+      return {
+        messages: [{ role: "ai", content: "Conversa reiniciada. 🔄 Quando quiser, é só mandar uma mensagem que começamos de novo." }],
+        done: true,
+        dadosColetados: {},
+      };
+    }
+
     // carrega o flow específico (ou o estático se omitido)
     let graph = graphEstatico as ReturnType<typeof graphDoFlow>;
     if (flowId) {
@@ -491,10 +510,6 @@ export async function adminRoutes(app: FastifyInstance) {
         return reply.code(422).send({ erro: `flow inválido: ${String(err)}` });
       }
     }
-
-    // prefixo "test:" isola sessões de teste dos checkpoints reais
-    const threadId = `test:${flowId ?? "static"}:${sessionId}`;
-    const config = { configurable: { thread_id: threadId } };
 
     const prevState = await graph.getState(config);
     const prevLen = (prevState.values?.messages as unknown[])?.length ?? 0;

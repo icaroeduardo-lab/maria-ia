@@ -6,8 +6,9 @@ import { prisma } from "./db.js";
 import { montarMetadados, gerarResumoTexto } from "./resumo.js";
 import { env } from "./env.js";
 
-// Comando do usuário para reiniciar a conversa do zero (qualquer canal).
-const COMANDO_REINICIAR = "#sair";
+// Comando do usuário para reiniciar a conversa do zero (qualquer canal,
+// inclusive o chat de teste do painel — ver /admin/test-chat).
+export const COMANDO_REINICIAR = "#sair";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
