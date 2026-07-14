@@ -49,12 +49,15 @@ model NodeVisita {
 }
 
 // Fila de retry de envios à DPERJ que falharam (antes em SQLite local efêmero).
+// bloqueadoAte: claim atômico entre réplicas da API (issue #68) — evita que
+// duas instâncias peguem o mesmo item pendente e reenviem duplicado.
 model DperjFila {
-  id         String   @id @default(cuid())
-  payload    Json
-  tentativas Int      @default(0)
-  ultimoErro String?
-  criadoEm   DateTime @default(now())
+  id           String    @id @default(cuid())
+  payload      Json
+  tentativas   Int       @default(0)
+  ultimoErro   String?
+  criadoEm     DateTime  @default(now())
+  bloqueadoAte DateTime?
 
   @@index([criadoEm])
 }
