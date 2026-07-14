@@ -20,6 +20,13 @@ export const GraphAnnotation = Annotation.Root({
   // setado pelo nó transferir_humano — sinaliza pra rastrearConversa() que a
   // conversa deve entrar em handoff (não é "completed" nem segue automática)
   handoff:          Annotation<string>({ value: (_, b) => b, default: () => "" }),
+  // tentativas inválidas por chave de pergunta (captura dinâmica) — reseta
+  // implicitamente quando a chave é respondida com sucesso (some do objeto
+  // junto com o fim do loop de retry; ver criarCaptura em engine/builder.ts)
+  tentativas: Annotation<Record<string, number>>({
+    value: (a, b) => ({ ...a, ...b }),
+    default: () => ({}),
+  }),
 });
 
 export type GraphState = typeof GraphAnnotation.State;
