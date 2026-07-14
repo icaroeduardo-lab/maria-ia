@@ -103,5 +103,48 @@ for (const f of flows) {
   });
 }
 
-console.log(`Seed ok — admin ${email}; ${flows.length} fluxos; assistidos: 00000000000 (2 casos), 11144477735 (Maria, s/ casos), 52998224725 (Carlos, 1 caso)`);
+// Catálogo de templates (card #20260127) — ids fixos, upsert idempotente.
+// isTemplate:true → aparecem no catálogo "+ De template" do painel; nunca
+// ativados nem usados como fluxo de atendimento real.
+const TEMPLATES: FlowSeed[] = [
+  {
+    id: "template-coleta-dados-pessoais",
+    name: "Template: Coleta de dados pessoais",
+    active: false,
+    nodes: [
+      { id: "t_nome", type: "pergunta", data: { chave: "nome", texto: "Qual o seu nome completo?", semReescrita: true, tipoPergunta: "texto" }, position: { x: 0, y: 0 } },
+      { id: "t_cpf", type: "pergunta", data: { chave: "cpf", texto: "Qual o seu CPF (somente números)?", semReescrita: true, tipoPergunta: "cpf" }, position: { x: 300, y: 0 } },
+      { id: "t_telefone", type: "pergunta", data: { chave: "telefone", texto: "Qual o seu telefone com DDD?", semReescrita: true, tipoPergunta: "telefone" }, position: { x: 600, y: 0 } },
+      { id: "t_fim", type: "encerrar", data: {}, position: { x: 900, y: 0 } },
+    ],
+    edges: [
+      { id: "te1", source: "t_nome", target: "t_cpf" },
+      { id: "te2", source: "t_cpf", target: "t_telefone" },
+      { id: "te3", source: "t_telefone", target: "t_fim" },
+    ],
+  },
+  {
+    id: "template-confirmacao-sim-nao",
+    name: "Template: Confirmação sim/não com 2 saídas",
+    active: false,
+    nodes: [
+      { id: "t_confirma", type: "pergunta", data: { chave: "confirma", texto: "Você confirma?", semReescrita: true, tipoPergunta: "sim_nao" }, position: { x: 0, y: 0 } },
+      { id: "t_sim", type: "mensagem", data: { texto: "Confirmado! Vamos seguir." }, position: { x: 300, y: -80 } },
+      { id: "t_nao", type: "mensagem", data: { texto: "Tudo bem, sem problemas." }, position: { x: 300, y: 80 } },
+    ],
+    edges: [
+      { id: "tc1", source: "t_confirma", target: "t_sim", label: "true" },
+      { id: "tc2", source: "t_confirma", target: "t_nao", label: "false" },
+    ],
+  },
+];
+for (const t of TEMPLATES) {
+  await prisma.flow.upsert({
+    where: { id: t.id },
+    update: { name: t.name, nodes: t.nodes, edges: t.edges, isTemplate: true },
+    create: { id: t.id, name: t.name, active: false, isTemplate: true, nodes: t.nodes, edges: t.edges },
+  });
+}
+
+console.log(`Seed ok — admin ${email}; ${flows.length} fluxos; ${TEMPLATES.length} templates; assistidos: 00000000000 (2 casos), 11144477735 (Maria, s/ casos), 52998224725 (Carlos, 1 caso)`);
 await prisma.$disconnect();
