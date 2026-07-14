@@ -296,6 +296,65 @@ export async function adminRoutes(app: FastifyInstance) {
     return { assistido: md?.assistido ?? null };
   });
 
+  // ── Handoff pra atendente humano (card #20260117) ─────────────────────────
+
+  // fila de conversas em handoff — sem status = todas (aguardando + em_atendimento)
+  app.get("/handoff", async (req) => {
+    const { status } = req.query as { status?: string };
+    const where = status ? { handoffStatus: status } : { handoffStatus: { not: null } };
+    const itens = await db.conversation.findMany({
+      where,
+      orderBy: { handoffDesde: "asc" },
+      select: {
+        id: true, sessionId: true, channel: true, categoria: true,
+        handoffStatus: true, handoffOperador: true, handoffDesde: true,
+      },
+    });
+    return { itens };
+  });
+
+  // operador assume a conversa — bot já está pausado (processarMensagem);
+  // aqui só registra quem assumiu
+  app.post("/handoff/:sessionId/assumir", async (req, reply) => {
+    const { sessionId } = req.params as { sessionId: string };
+    const conv = await db.conversation.findUnique({ where: { sessionId } });
+    if (!conv) return reply.code(404).send({ erro: "conversa não encontrada" });
+    if (conv.handoffStatus !== "aguardando")
+      return reply.code(409).send({ erro: "conversa não está aguardando atendente" });
+    await db.conversation.update({
+      where: { sessionId },
+      data: { handoffStatus: "em_atendimento", handoffOperador: req.user.email, handoffDesde: new Date() },
+    });
+    return { ok: true };
+  });
+
+  // libera de volta pro bot: reseta o campo `handoff` no checkpoint do
+  // LangGraph (senão fica "sticky" e reabre o handoff no próximo invoke — ver
+  // core/chat.ts rastrearConversa) e limpa o status. Próxima mensagem do
+  // assistido já retoma o grafo no próximo nó normalmente.
+  app.post("/handoff/:sessionId/liberar", async (req, reply) => {
+    const { sessionId } = req.params as { sessionId: string };
+    const conv = await db.conversation.findUnique({ where: { sessionId } });
+    if (!conv) return reply.code(404).send({ erro: "conversa não encontrada" });
+    if (!conv.handoffStatus) return reply.code(409).send({ erro: "conversa não está em handoff" });
+
+    let graph = graphEstatico as ReturnType<typeof graphDoFlow>;
+    if (conv.flowId) {
+      const flow = await db.flow.findUnique({ where: { id: conv.flowId } });
+      if (flow) {
+        const subflows = await carregarSubflowsRecursivo(flow.nodes);
+        graph = graphDoFlow(flow, subflows) as typeof graph;
+      }
+    }
+    await graph.updateState({ configurable: { thread_id: sessionId } }, { handoff: "" });
+
+    await db.conversation.update({
+      where: { sessionId },
+      data: { handoffStatus: null, handoffOperador: null, handoffDesde: null },
+    });
+    return { ok: true };
+  });
+
   // log de auditoria (admin) — quem revelou PII
   app.get("/audit", { preHandler: [exigirAdmin] }, async (req) => {
     const page = Math.max(1, Number((req.query as { page?: string }).page ?? 1));

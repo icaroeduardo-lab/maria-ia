@@ -261,6 +261,46 @@ test("encerrar sem texto mantém a mensagem padrão (regressão)", async () => {
   assert.match(textos(r), /protocolo \*/i); // texto padrão do encerramento cita o protocolo
 });
 
+test("transferir_humano pausa o grafo e sinaliza handoff (card #20260117)", async () => {
+  const flow: FlowJSON = {
+    id: "t-handoff",
+    nodes: [
+      { id: "p1", type: "pergunta", data: { texto: "Qual seu problema?", chave: "problema", semReescrita: true } },
+      { id: "th", type: "transferir_humano", data: { texto: "Transferindo pra um atendente!" } },
+      { id: "fim", type: "encerrar", data: {} },
+    ],
+    edges: [
+      { id: "e1", source: "p1", target: "th" },
+      { id: "e2", source: "th", target: "fim" },
+    ],
+  };
+  const graph = buildGraphFromFlow(flow);
+  const cfg = config();
+
+  const r1 = await graph.invoke({}, cfg);
+  assert.match(textos(r1), /Qual seu problema\?/);
+
+  const r2 = await responder(graph, cfg, "não sei resolver sozinho");
+  assert.match(textos(r2), /Transferindo pra um atendente!/);
+  assert.equal(r2.handoff, "aguardando");
+  // pausou ANTES do encerrar — não gerou protocolo nem terminou o grafo
+  assert.equal(r2.protocolo, "");
+  const state = await graph.getState(cfg);
+  assert.ok((state.next?.length ?? 0) > 0, "deve ficar pausado (next não-vazio), não terminar");
+});
+
+test("transferir_humano sem texto usa mensagem padrão", async () => {
+  const flow: FlowJSON = {
+    id: "t-handoff-padrao",
+    nodes: [{ id: "th", type: "transferir_humano", data: {} }],
+    edges: [],
+  };
+  const graph = buildGraphFromFlow(flow);
+  const r = await graph.invoke({}, config());
+  assert.match(textos(r), /atendente humano/i);
+  assert.equal(r.handoff, "aguardando");
+});
+
 test("subfluxo aninhado (subfluxo dentro de subfluxo) expande e roda até o fim", async () => {
   // top-level → subfluxo "orq" → subfluxo "tema" (2 níveis de aninhamento,
   // ex real: Treino → Orquestrador → Divórcio)

@@ -45,6 +45,10 @@ export const env = {
   // Timers / limites
   conversaTtlDias: () => num(process.env.CONVERSA_TTL_DIAS, 30),
   retomadaMin: () => num(process.env.RETOMADA_MIN, 60),
+
+  // Handoff pra atendente humano — webhook (POST) disparado quando uma
+  // conversa entra em "aguardando". Vazio = notificação desligada.
+  handoffWebhookUrl: () => process.env.HANDOFF_WEBHOOK_URL ?? "",
 } as const;
 
 // Schema leniente: valida FORMATO do que está setado (não exige nada — o app
@@ -59,6 +63,7 @@ const envSchema = z.object({
   PUBLIC_URL: z.string().url().optional().or(z.literal("")),
   SQS_QUEUE_URL: z.string().url().optional().or(z.literal("")),
   PDPJ_API_URL: z.string().url().optional().or(z.literal("")),
+  HANDOFF_WEBHOOK_URL: z.string().url().optional().or(z.literal("")),
 });
 
 // Chamar no boot dos entrypoints (server/worker/jobs). Falha rápido em valor
