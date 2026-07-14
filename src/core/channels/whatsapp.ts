@@ -5,6 +5,7 @@ import { processarMensagem } from "../chat.js";
 import { transcreverAudioWA } from "../transcribe.js";
 import { filaConfigurada, enfileirar } from "../queue.js";
 import { env } from "../env.js";
+import { cacheIncr, cacheGet, cacheSet } from "../cache.js";
 import { toWhatsAppPayloads, } from "./payloads.js";
 
 export { toWhatsAppPayloads } from "./payloads.js";
@@ -165,6 +166,29 @@ function jaProcessado(id: string): boolean {
   return false;
 }
 
+// Rate limit por número (card #20260122) — janela fixa de 60s, via cacheIncr
+// (Redis com fallback em memória; NUNCA bloqueia por falha do limiter).
+// Roda DEPOIS do dedupe por message.id, ANTES de enfileirar/processar.
+function mascararNumero(numero: string): string {
+  return numero.length > 4 ? `***${numero.slice(-4)}` : "***";
+}
+
+async function dentroDoLimite(numero: string): Promise<boolean> {
+  const n = await cacheIncr(`wa:ratelimit:${numero}`, 60);
+  return n <= env.waRateLimitMsgsMin();
+}
+
+// avisa só 1x por janela — senão o próprio aviso vira flood de resposta
+async function avisarLimiteExcedido(numero: string): Promise<void> {
+  const chaveAviso = `wa:ratelimit:aviso:${numero}`;
+  if (await cacheGet<boolean>(chaveAviso)) return;
+  await cacheSet(chaveAviso, true, 60);
+  console.warn(`[whatsapp] rate limit excedido — número ${mascararNumero(numero)}`);
+  await enviarWhatsApp(numero, [
+    new AIMessage("Recebi muitas mensagens suas bem rapidinho! 🙏 Me dá um instante e manda de novo em instantes."),
+  ]).catch((err) => console.error("[whatsapp] falha ao avisar rate limit:", err));
+}
+
 // Processa UMA mensagem do WhatsApp: transcreve (se áudio), roda o grafo e
 // responde via Graph API. Usado pelo worker (consumindo a fila) e, em dev sem
 // fila, direto no webhook.
@@ -212,6 +236,10 @@ export async function whatsappRoutes(app: FastifyInstance) {
     (async () => {
       for (const msg of extrairMensagens(req.body)) {
         if (jaProcessado(msg.id)) continue;
+        if (!(await dentroDoLimite(msg.from))) {
+          await avisarLimiteExcedido(msg.from);
+          continue;
+        }
         // com fila (produção): a api só enfileira; o worker processa.
         // sem fila (dev): processa inline aqui mesmo.
         if (filaConfigurada()) {
