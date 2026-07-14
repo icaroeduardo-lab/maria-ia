@@ -26,12 +26,12 @@ const TEMAS_SENSIVEIS = ["violencia", "violência", "penal", "saude", "saúde", 
 
 export interface FlowNode {
   id: string;
-  type: "mensagem" | "pergunta" | "condicao" | "ia" | "classificar" | "api" | "subgrafo" | "subfluxo" | "atribuir" | "encerrar";
+  type: "mensagem" | "pergunta" | "condicao" | "ia" | "classificar" | "api" | "subgrafo" | "subfluxo" | "atribuir" | "encerrar" | "transferir_humano";
   position?: { x: number; y: number }; // layout do builder visual (ignorado pelo engine)
   data: {
     label?: string;
     titulo?: string;           // identificação no canvas (api | condicao | classificar | subfluxo)
-    texto?: string;            // mensagem | pergunta | encerrar (despedida opcional; {{protocolo}} disponível)
+    texto?: string;            // mensagem | pergunta | encerrar | transferir_humano (texto opcional antes de pausar)
     imagem?: string;           // mensagem (url)
     textoAntes?: boolean;      // mensagem: emite texto antes da imagem (padrão: imagem primeiro)
     chave?: string;            // pergunta | api | atribuir | classificar (campo onde grava a categoria)
@@ -251,6 +251,17 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
     case "encerrar":
       return enviarDados;
 
+    // pausa o atendimento automático e sinaliza handoff pro rastrearConversa()
+    // gravar Conversation.handoffStatus="aguardando" (ver core/chat.ts). O nó
+    // entra em `interrupts` (como pergunta) — graph.invoke() para aqui.
+    case "transferir_humano":
+      return async (state: GraphState) => {
+        const texto = node.data.texto
+          ? interpolar(String(node.data.texto), state.dadosColetados)
+          : "Vou te conectar com um atendente humano. Só um momento, já já alguém te responde por aqui mesmo. 🙏";
+        return { messages: [new AIMessage(texto)], handoff: "aguardando" };
+      };
+
     case "condicao":
       return async (_state: GraphState) => ({}); // decisão acontece na conditional edge
 
@@ -439,6 +450,13 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
     }
     if (node.type === "subgrafo") {
       builder.addNode(`cap_${node.id}`, extrator); // extrator completo (contexto + validações)
+      interrupts.push(node.id);
+    }
+    // pausa aqui — sem nó de captura (não processa a próxima mensagem
+    // automaticamente; processarMensagem() filtra enquanto handoffStatus
+    // estiver ativo). Sem edge de saída configurada → segue pro END quando
+    // liberado; com edge → continua o fluxo normalmente.
+    if (node.type === "transferir_humano") {
       interrupts.push(node.id);
     }
     if (node.type === "encerrar") {

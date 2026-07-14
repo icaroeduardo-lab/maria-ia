@@ -102,6 +102,25 @@ export async function processarMensagem(
     return { result: null, newMessages: [aviso] };
   }
 
+  // handoff pra atendente humano: bot fica em silêncio (nada de resposta
+  // automática) enquanto aguardando ou em atendimento. A mensagem do
+  // assistido ainda é persistida no checkpoint (updateState, sem invoke) pra
+  // aparecer no histórico da conversa que o operador vê no painel.
+  if (prisma) {
+    const conversa = await prisma.conversation.findUnique({
+      where: { sessionId },
+      select: { handoffStatus: true },
+    });
+    if (conversa?.handoffStatus === "aguardando" || conversa?.handoffStatus === "em_atendimento") {
+      if (message) {
+        await graph.updateState(config, { messages: [new HumanMessage(message)] }).catch((err) =>
+          console.error("[chat] falha ao registrar mensagem durante handoff:", err)
+        );
+      }
+      return { result: null, newMessages: [] };
+    }
+  }
+
   const prevState = await graph.getState(config);
   let prevLen = (prevState.values?.messages as unknown[])?.length ?? 0;
 
@@ -178,10 +197,16 @@ async function rastrearConversa(
   const emAndamento = (atual.next?.length ?? 0) > 0;
   const coletados = (v.dadosColetados as Record<string, unknown>) ?? {};
 
+  // nó transferir_humano acabou de rodar nesse invoke: entra em handoff em
+  // vez de completar normalmente. O campo `handoff` no state é resetado pelo
+  // endpoint /admin/handoff/{sessionId}/liberar (senão ficaria "sticky" no
+  // checkpoint e reabriria o handoff no próximo invoke depois de liberado).
+  const emHandoff = v.handoff === "aguardando";
+
   // no fim do atendimento: gera resumo + metadados limpos (envio/registro à DPERJ)
   let resumo: string | null = null;
   let metadados: object | null = null;
-  if (!emAndamento) {
+  if (!emAndamento && !emHandoff) {
     const m = montarMetadados(coletados);
     metadados = m as object;
     resumo = await gerarResumoTexto(m).catch(() => null);
@@ -190,12 +215,13 @@ async function rastrearConversa(
   const dados = {
     channel: canal,
     flowId,
-    status: emAndamento ? "active" : "completed",
+    status: emAndamento || emHandoff ? "active" : "completed",
     categoria: (v.categoria as string) || null,
-    ultimaEtapa: emAndamento ? atual.next[0] : "fim",
+    ultimaEtapa: emAndamento ? atual.next[0] : emHandoff ? "transferir_humano" : "fim",
     dadosColetados: coletados as object,
     protocoloDperj: (v.protocolo as string) || null,
-    completedAt: emAndamento ? null : new Date(),
+    completedAt: emAndamento || emHandoff ? null : new Date(),
+    ...(emHandoff && { handoffStatus: "aguardando", handoffDesde: new Date() }),
     ...(resumo !== null && { resumo }),
     ...(metadados !== null && { metadados }),
   };
@@ -205,4 +231,18 @@ async function rastrearConversa(
     update: dados,
     create: { sessionId, ...dados },
   });
+
+  // notificação best-effort — nunca bloqueia o atendimento por falha de rede
+  if (emHandoff) notificarHandoff(sessionId, canal, (v.categoria as string) || null);
+}
+
+function notificarHandoff(sessionId: string, canal: string, categoria: string | null) {
+  const url = env.handoffWebhookUrl();
+  if (!url) return;
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId, canal, categoria, em: new Date().toISOString() }),
+    signal: AbortSignal.timeout(5_000),
+  }).catch((err) => console.warn("[handoff] notificação falhou:", String(err).slice(0, 120)));
 }

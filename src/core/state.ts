@@ -17,6 +17,9 @@ export const GraphAnnotation = Annotation.Root({
   canal:            Annotation<string>({ value: (_, b) => b, default: () => "web" }),
   iniciadoEm:       Annotation<string>({ value: (_, b) => b, default: () => "" }),
   protocolo:        Annotation<string>({ value: (_, b) => b, default: () => "" }),
+  // setado pelo nó transferir_humano — sinaliza pra rastrearConversa() que a
+  // conversa deve entrar em handoff (não é "completed" nem segue automática)
+  handoff:          Annotation<string>({ value: (_, b) => b, default: () => "" }),
 });
 
 export type GraphState = typeof GraphAnnotation.State;

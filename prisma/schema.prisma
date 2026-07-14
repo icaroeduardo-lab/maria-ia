@@ -61,7 +61,15 @@ model Conversation {
   updatedAt      DateTime  @updatedAt
   completedAt    DateTime?
 
+  // Handoff pra atendente humano (nó transferir_humano) — null = fluxo normal.
+  // "aguardando" = bot pausado, ninguém assumiu ainda; "em_atendimento" = um
+  // operador assumiu e responde diretamente; liberar volta a null.
+  handoffStatus   String? // "aguardando" | "em_atendimento"
+  handoffOperador String? // email/nome do operador que assumiu
+  handoffDesde    DateTime?
+
   @@index([startedAt])
+  @@index([handoffStatus])
 }
 
 model User {
