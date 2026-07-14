@@ -49,6 +49,12 @@ export const env = {
   // Handoff pra atendente humano — webhook (POST) disparado quando uma
   // conversa entra em "aguardando". Vazio = notificação desligada.
   handoffWebhookUrl: () => process.env.HANDOFF_WEBHOOK_URL ?? "",
+
+  // Tracing LangSmith — lido automaticamente pelo @langchain/core (nenhuma
+  // chamada explícita necessária); expostos aqui só pra log de boot e docs.
+  langchainTracingV2: () => process.env.LANGCHAIN_TRACING_V2 === "true",
+  langsmithApiKey: () => process.env.LANGSMITH_API_KEY ?? "",
+  langchainProject: () => process.env.LANGCHAIN_PROJECT ?? "",
 } as const;
 
 // Schema leniente: valida FORMATO do que está setado (não exige nada — o app
@@ -64,6 +70,7 @@ const envSchema = z.object({
   SQS_QUEUE_URL: z.string().url().optional().or(z.literal("")),
   PDPJ_API_URL: z.string().url().optional().or(z.literal("")),
   HANDOFF_WEBHOOK_URL: z.string().url().optional().or(z.literal("")),
+  LANGCHAIN_TRACING_V2: z.enum(["true", "false"]).optional(),
 });
 
 // Chamar no boot dos entrypoints (server/worker/jobs). Falha rápido em valor
@@ -84,5 +91,5 @@ export function validarEnv(): void {
     const faltando = rec.filter(([, v]) => !v).map(([k]) => k);
     if (faltando.length) console.warn(`[env] recomendados ausentes em produção: ${faltando.join(", ")}`);
   }
-  console.log(`[env] region=${env.awsRegion()} db=${env.databaseUrl() ? "ok" : "off"} fila=${env.sqsQueueUrl() ? "ok" : "off"}`);
+  console.log(`[env] region=${env.awsRegion()} db=${env.databaseUrl() ? "ok" : "off"} fila=${env.sqsQueueUrl() ? "ok" : "off"} tracing=${env.langchainTracingV2() && env.langsmithApiKey() ? `ok(${env.langchainProject() || "default"})` : "off"}`);
 }

@@ -155,7 +155,10 @@ AWS_REGION=us-east-1
 BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
 BEDROCK_KB_ID=LF04FDVIYP
 BEDROCK_KB_DS_ID=V6AOSMT9CQ
+# Tracing LangSmith (opcional) — ver seção "Observabilidade"
+LANGCHAIN_TRACING_V2=
 LANGSMITH_API_KEY=
+LANGCHAIN_PROJECT=
 # Fase 3 — vazio = modo mock (protocolo local):
 DPERJ_API_URL=
 DPERJ_API_KEY=
@@ -233,6 +236,33 @@ Content blocks suportados além de `text`:
 No WhatsApp: `boolean` → `interactive/button`, `image_url` → `image`, `options` → `interactive/list`.
 
 ---
+
+## Observabilidade — Tracing LangSmith
+
+`@langchain/core` lê `LANGCHAIN_TRACING_V2`/`LANGSMITH_API_KEY`/`LANGCHAIN_PROJECT`
+direto do `process.env` — nenhuma chamada de código precisa mudar. `env.ts`
+só expõe getters (`langchainTracingV2()`, `langsmithApiKey()`, `langchainProject()`)
+pra log de boot (`[env] ... tracing=ok(<projeto>)` ou `tracing=off`).
+
+- **Ligar em dev**: no `.env`, setar `LANGCHAIN_TRACING_V2=true` e
+  `LANGCHAIN_PROJECT=maria-ia-dev` (a `LANGSMITH_API_KEY` já existe no `.env`
+  de referência). Reiniciar o server.
+- **Acessar**: [smith.langchain.com](https://smith.langchain.com) → projeto
+  `maria-ia-dev` (ou `maria-ia-staging`/`maria-ia-prod`, um por ambiente —
+  nunca misturar). Cada run é uma chamada ao Bedrock (`ChatBedrockConverse`)
+  ou um node do grafo (`chain`); abrir o run mostra prompt exato enviado,
+  resposta bruta do modelo e o parent trace (a mensagem do usuário que
+  disparou aquele turno).
+- **Interpretar um erro de classificação**: no projeto, filtrar por
+  `name: ChatBedrockConverse` — o input do run mostra o `SystemMessage` com
+  as categorias oferecidas e o `HumanMessage` com o relato; o output mostra
+  a resposta crua do modelo antes do parsing em `classificarTexto()`. Útil
+  pra ver se o modelo respondeu fora da lista de categorias (fallback por
+  palavra-chave assume) ou se o prompt precisa de ajuste.
+- **Produção**: chave e projeto (`maria-ia-prod`) entram via Secrets Manager,
+  nunca em texto puro no Terraform (issue separada — infra, `apply` manual).
+- Sem `LANGSMITH_API_KEY`/`LANGCHAIN_TRACING_V2` setados, tracing fica
+  desligado e a aplicação funciona normalmente (opt-in, nunca bloqueante).
 
 ## RAG — Atualizar Knowledge Base
 
