@@ -9,6 +9,7 @@ import {
   classificarTexto, extrairDoRelato, reescreverPergunta,
 } from "./ia.js";
 import { avaliarTom } from "./sentimento.js";
+import { registrarVisitaNode } from "../analytics.js";
 import { GraphAnnotation, type GraphState } from "../state.js";
 import { checkpointer, graph as graphEstatico } from "../graph.js";
 import { mensagemPergunta, proxima, type Pergunta, type TipoPergunta } from "../perguntas.js";
@@ -440,7 +441,11 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
       }
       ctx = { perguntas: todasPerguntas, perguntasPorCategoria: porCat };
     }
-    builder.addNode(node.id, criarNode(node, ctx));
+    const fnNode = criarNode(node, ctx);
+    builder.addNode(node.id, async (state: GraphState) => {
+      registrarVisitaNode(flow.id, node.id);
+      return fnNode(state);
+    });
     if (node.type === "pergunta") {
       builder.addNode(`gate_${node.id}`, async () => ({})); // no-op; decisão na conditional edge
       // pergunta livre de tema (dentro de subfluxo expandido, texto aberto) → V2 do tom
