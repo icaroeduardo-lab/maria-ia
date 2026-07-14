@@ -261,6 +261,48 @@ test("encerrar sem texto mantém a mensagem padrão (regressão)", async () => {
   assert.match(textos(r), /protocolo \*/i); // texto padrão do encerramento cita o protocolo
 });
 
+test("subfluxo aninhado (subfluxo dentro de subfluxo) expande e roda até o fim", async () => {
+  // top-level → subfluxo "orq" → subfluxo "tema" (2 níveis de aninhamento,
+  // ex real: Treino → Orquestrador → Divórcio)
+  const top: FlowJSON = {
+    id: "t-top",
+    nodes: [
+      { id: "p_nome", type: "pergunta", data: { texto: "Seu nome?", chave: "nome", semReescrita: true } },
+      { id: "sf_orq", type: "subfluxo", data: { refFlowId: "orq" } },
+      { id: "fim", type: "encerrar", data: {} },
+    ],
+    edges: [
+      { id: "e1", source: "p_nome", target: "sf_orq" },
+      { id: "e2", source: "sf_orq", target: "fim" },
+    ],
+  };
+  const orq = {
+    nodes: [{ id: "sf_tema", type: "subfluxo" as const, data: { refFlowId: "tema" } }],
+    edges: [],
+  };
+  const tema = {
+    nodes: [
+      { id: "p_detalhe", type: "pergunta" as const, data: { texto: "Qual detalhe?", chave: "detalhe", semReescrita: true } },
+      { id: "m_confirma", type: "mensagem" as const, data: { texto: "Detalhe: {{detalhe}}" } },
+    ],
+    edges: [{ id: "e1", source: "p_detalhe", target: "m_confirma" }],
+  };
+
+  const graph = buildGraphFromFlow(top, { orq, tema });
+  const cfg = config();
+
+  const r1 = await graph.invoke({}, cfg);
+  assert.match(textos(r1), /Seu nome\?/);
+
+  const r2 = await responder(graph, cfg, "Maria");
+  assert.match(textos(r2), /Qual detalhe\?/, "deve alcançar a pergunta DENTRO do subfluxo aninhado (2º nível)");
+
+  const r3 = await responder(graph, cfg, "urgente");
+  assert.equal(r3.dadosColetados.detalhe, "urgente");
+  assert.match(textos(r3), /Detalhe: urgente/);
+  assert.ok(r3.protocolo, "deve sair do aninhamento e chegar no encerrar do flow top-level");
+});
+
 // ── nó api genérico (Coilab #20260115): rota erro, corpo seletivo, secrets ────
 
 import { createServer, type Server } from "node:http";

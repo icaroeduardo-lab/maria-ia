@@ -11,7 +11,7 @@ import { env } from "../../core/env.js";
 import { autenticar, exigirAdmin } from "./auth.js";
 import { graphDoFlow, graphEstatico, subfluxosReferenciados, type FlowNode, type FlowEdge } from "../../core/engine/builder.js";
 import { checkpointer } from "../../core/graph.js";
-import { COMANDO_REINICIAR } from "../../core/chat.js";
+import { COMANDO_REINICIAR, carregarSubflowsRecursivo } from "../../core/chat.js";
 import { validarFlow } from "../../core/engine/validar.js";
 import { ESTILO_DEFAULT, invalidarEstilo } from "../../core/config.js";
 import { montarMetadados, gerarResumoTexto, type Metadados } from "../../core/resumo.js";
@@ -104,12 +104,11 @@ export async function adminRoutes(app: FastifyInstance) {
     const edges = (flow.edges ?? []) as unknown as FlowEdge[];
     const r = validarFlow(nodes, edges);
 
-    // subfluxos referenciados precisam existir
+    // subfluxos referenciados (recursivo — inclui subfluxo dentro de subfluxo) precisam existir
     const refs = subfluxosReferenciados(nodes);
+    const subflows = await carregarSubflowsRecursivo(nodes);
     if (refs.length) {
-      const existentes = new Set(
-        (await db.flow.findMany({ where: { id: { in: refs } }, select: { id: true } })).map((f) => f.id)
-      );
+      const existentes = new Set(subflows.map((f) => f.id));
       for (const ref of refs) {
         if (!existentes.has(ref)) { r.erros.push(`subfluxo referenciado não existe: ${ref}`); r.ok = false; }
       }
@@ -117,7 +116,6 @@ export async function adminRoutes(app: FastifyInstance) {
 
     // tentativa real de compilar (pega erros que a checagem estrutural não vê)
     try {
-      const subflows = refs.length ? await db.flow.findMany({ where: { id: { in: refs } } }) : [];
       graphDoFlow(flow, subflows);
     } catch (err) {
       r.erros.push(`falha ao compilar: ${String(err).slice(0, 200)}`);
@@ -502,8 +500,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (flowId) {
       const flow = await db.flow.findUnique({ where: { id: flowId } });
       if (!flow) return reply.code(404).send({ erro: "fluxo não encontrado" });
-      const refs = subfluxosReferenciados(flow.nodes);
-      const subflows = refs.length ? await db.flow.findMany({ where: { id: { in: refs } } }) : [];
+      const subflows = await carregarSubflowsRecursivo(flow.nodes);
       try {
         graph = graphDoFlow(flow, subflows) as typeof graph;
       } catch (err) {
