@@ -259,8 +259,12 @@ pra log de boot (`[env] ... tracing=ok(<projeto>)` ou `tracing=off`).
   a resposta crua do modelo antes do parsing em `classificarTexto()`. Útil
   pra ver se o modelo respondeu fora da lista de categorias (fallback por
   palavra-chave assume) ou se o prompt precisa de ajuste.
-- **Produção**: chave e projeto (`maria-ia-prod`) entram via Secrets Manager,
-  nunca em texto puro no Terraform (issue separada — infra, `apply` manual).
+- **Produção**: `LANGSMITH_API_KEY` vive no secret `maria-chat-<env>/app`
+  (Secrets Manager, chave `LANGSMITH_API_KEY` — preencher com
+  `aws secretsmanager put-secret-value`, nunca via Terraform/CI). O projeto
+  é `maria-ia-${var.environment}` (`maria-ia-prod`/`maria-ia-staging`),
+  já fixado em `infra/terraform/ecs.tf` (`common_env`) — isola traces por
+  ambiente automaticamente. `terraform apply` continua sempre manual.
 - Sem `LANGSMITH_API_KEY`/`LANGCHAIN_TRACING_V2` setados, tracing fica
   desligado e a aplicação funciona normalmente (opt-in, nunca bloqueante).
 

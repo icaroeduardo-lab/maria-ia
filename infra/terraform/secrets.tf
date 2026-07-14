@@ -45,6 +45,7 @@ resource "aws_secretsmanager_secret_version" "app" {
     PDPJ_API_URL            = "https://api-processo.stg.data-lake.pdpj.jus.br/processo-api/api/v1"
     DPERJ_API_URL           = "" # vazio = modo mock (protocolo local)
     DPERJ_API_KEY           = ""
+    LANGSMITH_API_KEY       = "PREENCHER" # tracing — ver CLAUDE.md "Observabilidade"
   })
 
   lifecycle {

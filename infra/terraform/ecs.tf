@@ -50,6 +50,7 @@ locals {
     "DATABASE_URL", "JWT_SECRET",
     "WA_ACCESS_TOKEN", "WA_PHONE_NUMBER_ID", "WA_WEBHOOK_VERIFY_TOKEN",
     "PDPJ_API_TOKEN", "PDPJ_API_URL", "DPERJ_API_URL", "DPERJ_API_KEY",
+    "LANGSMITH_API_KEY",
   ]
   app_secret_env = [
     for k in local.app_secret_keys :
@@ -64,6 +65,10 @@ locals {
     { name = "BEDROCK_KB_DS_ID", value = var.bedrock_kb_ds_id },
     { name = "PUBLIC_URL", value = var.public_url },
     { name = "REDIS_URL", value = "redis://${aws_elasticache_replication_group.main.primary_endpoint_address}:6379" },
+    # tracing LangSmith — chave vem do secret app; projeto isolado por ambiente
+    # (evita misturar traces de prod/staging). Ver CLAUDE.md "Observabilidade".
+    { name = "LANGCHAIN_TRACING_V2", value = "true" },
+    { name = "LANGCHAIN_PROJECT", value = "maria-ia-${var.environment}" },
   ]
 }
 
