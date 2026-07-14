@@ -317,6 +317,13 @@ components:
           type: array
           description: "últimos 30 dias"
           items: { type: object, required: [dia, total, concluidas], properties: { dia: { type: string }, total: { type: integer }, concluidas: { type: integer } } }
+    FunilPorNo:
+      type: object
+      required: [nodes]
+      properties:
+        nodes:
+          type: array
+          items: { type: object, required: [nodeId, total], properties: { nodeId: { type: string }, total: { type: integer } } }
     AuditLogItem:
       type: object
       required: [id, userId, userEmail, acao, alvoTipo, alvoId, criadoEm]
@@ -733,6 +740,16 @@ paths:
         "200":
           description: Resumo analítico (30 dias na série diária)
           content: { application/json: { schema: { $ref: '#/components/schemas/AnalyticsSummary' } } }
+  /admin/analytics/funil/{flowId}:
+    get:
+      tags: [Admin — Config/Users/Analytics/Audit]
+      summary: Passagens acumuladas por nó de um fluxo (funil/drop-off)
+      parameters: [{ in: path, name: flowId, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: Contagem por nó (front calcula % de abandono usando os edges do fluxo)
+          content: { application/json: { schema: { $ref: '#/components/schemas/FunilPorNo' } } }
+        "404": { description: Fluxo não encontrado }
   /admin/audit:
     get:
       tags: [Admin — Config/Users/Analytics/Audit]

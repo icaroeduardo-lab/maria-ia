@@ -454,6 +454,21 @@ export async function adminRoutes(app: FastifyInstance) {
     };
   });
 
+  // Funil por nó — passagens acumuladas por nó DESTE fluxo (card #20260119).
+  // Front calcula % de abandono relativo usando os edges do próprio Flow.
+  app.get("/analytics/funil/:flowId", async (req, reply) => {
+    const { flowId } = req.params as { flowId: string };
+    const flow = await db.flow.findUnique({ where: { id: flowId }, select: { id: true } });
+    if (!flow) return reply.code(404).send({ erro: "fluxo não encontrado" });
+
+    const visitas = await db.nodeVisita.findMany({
+      where: { flowId },
+      select: { nodeId: true, total: true },
+      orderBy: { total: "desc" },
+    });
+    return { nodes: visitas };
+  });
+
   // ── Usuários (operadores do painel) ─────────────────────────────────────────
   app.get("/users", { preHandler: [exigirAdmin] }, async () =>
     db.user.findMany({ select: { id: true, email: true, nome: true, role: true } })

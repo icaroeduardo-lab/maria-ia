@@ -34,6 +34,20 @@ model FlowVersion {
   @@index([flowId, criadoEm])
 }
 
+// Contagem de passagens por nó, por fluxo — funil/drop-off (card #20260119).
+// Incrementado a cada execução real do node (não é histórico, só contador
+// acumulado); usado por GET /admin/analytics/funil/{flowId}.
+model NodeVisita {
+  id        String   @id @default(cuid())
+  flowId    String
+  nodeId    String
+  total     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([flowId, nodeId])
+  @@index([flowId])
+}
+
 // Fila de retry de envios à DPERJ que falharam (antes em SQLite local efêmero).
 model DperjFila {
   id         String   @id @default(cuid())
