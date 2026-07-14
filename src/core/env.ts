@@ -28,6 +28,8 @@ export const env = {
   waWebhookVerifyToken: () => process.env.WA_WEBHOOK_VERIFY_TOKEN,
   waGraphUrl: () => process.env.WA_GRAPH_URL ?? "https://graph.facebook.com",
   waApiVersion: () => process.env.WA_API_VERSION ?? "v23.0",
+  // rate limit do webhook — mensagens/min por número (card #20260122)
+  waRateLimitMsgsMin: () => num(process.env.WA_RATE_LIMIT_MSGS_MIN, 20),
 
   // PDPJ (processos)
   pdpjApiUrl: () => semBarra(process.env.PDPJ_API_URL ?? ""),
