@@ -74,12 +74,35 @@ export async function enviarParaDPERJ(payload: PayloadDPERJ): Promise<string | n
   }
 }
 
-// Reprocessa a fila de envios pendentes (chamado periodicamente pelo server).
+interface ItemFilaClaimado {
+  id: string;
+  payload: unknown;
+  tentativas: number;
+}
+
+// Reprocessa a fila de envios pendentes (chamado periodicamente pelo server,
+// em CADA réplica da API — produção roda api_min=2+). O claim abaixo é uma
+// única query atômica (UPDATE...FOR UPDATE SKIP LOCKED...RETURNING): duas
+// réplicas rodando ao mesmo tempo nunca pegam o mesmo item (issue #68).
+// O POST à DPERJ roda DEPOIS, fora de transação — não pode segurar lock de
+// linha durante uma chamada HTTP externa (timeout de até 10s).
 export async function processarFila(): Promise<void> {
   if (!env.dperjApiUrl() || !prisma) return;
-  const pendentes = await prisma.dperjFila.findMany({ orderBy: { criadoEm: "asc" }, take: 20 });
 
-  for (const item of pendentes) {
+  const claimados = await prisma.$queryRaw<ItemFilaClaimado[]>`
+    UPDATE "DperjFila"
+    SET "bloqueadoAte" = now() + interval '2 minutes'
+    WHERE id IN (
+      SELECT id FROM "DperjFila"
+      WHERE "bloqueadoAte" IS NULL OR "bloqueadoAte" < now()
+      ORDER BY "criadoEm" ASC
+      LIMIT 20
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id, payload, tentativas
+  `;
+
+  for (const item of claimados) {
     try {
       const protocolo = await postDPERJ(item.payload as unknown as PayloadDPERJ);
       await prisma.dperjFila.delete({ where: { id: item.id } });
@@ -87,7 +110,7 @@ export async function processarFila(): Promise<void> {
     } catch (err) {
       await prisma.dperjFila.update({
         where: { id: item.id },
-        data: { tentativas: item.tentativas + 1, ultimoErro: String(err) },
+        data: { tentativas: item.tentativas + 1, ultimoErro: String(err), bloqueadoAte: null },
       });
     }
   }
