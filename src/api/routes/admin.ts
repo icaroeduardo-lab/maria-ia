@@ -5,7 +5,8 @@ import fastifyMultipart from "@fastify/multipart";
 import sharp from "sharp";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import type { BaseMessage } from "@langchain/core/messages";
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, AIMessage } from "@langchain/core/messages";
+import { enviarWhatsApp } from "../../core/channels/whatsapp.js";
 import { prisma } from "../../core/db.js";
 import { env } from "../../core/env.js";
 import { autenticar, exigirAdmin } from "./auth.js";
@@ -328,6 +329,20 @@ export async function adminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // grafo usado pela conversa (flow salvo nela, ou estático) — usado por
+  // /liberar e /responder pra chamar graph.updateState no thread certo
+  async function grafoDaConversa(flowId: string | null): Promise<ReturnType<typeof graphDoFlow>> {
+    let graph = graphEstatico as ReturnType<typeof graphDoFlow>;
+    if (flowId) {
+      const flow = await db.flow.findUnique({ where: { id: flowId } });
+      if (flow) {
+        const subflows = await carregarSubflowsRecursivo(flow.nodes);
+        graph = graphDoFlow(flow, subflows) as typeof graph;
+      }
+    }
+    return graph;
+  }
+
   // libera de volta pro bot: reseta o campo `handoff` no checkpoint do
   // LangGraph (senão fica "sticky" e reabre o handoff no próximo invoke — ver
   // core/chat.ts rastrearConversa) e limpa o status. Próxima mensagem do
@@ -338,20 +353,39 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!conv) return reply.code(404).send({ erro: "conversa não encontrada" });
     if (!conv.handoffStatus) return reply.code(409).send({ erro: "conversa não está em handoff" });
 
-    let graph = graphEstatico as ReturnType<typeof graphDoFlow>;
-    if (conv.flowId) {
-      const flow = await db.flow.findUnique({ where: { id: conv.flowId } });
-      if (flow) {
-        const subflows = await carregarSubflowsRecursivo(flow.nodes);
-        graph = graphDoFlow(flow, subflows) as typeof graph;
-      }
-    }
+    const graph = await grafoDaConversa(conv.flowId);
     await graph.updateState({ configurable: { thread_id: sessionId } }, { handoff: "" });
 
     await db.conversation.update({
       where: { sessionId },
       data: { handoffStatus: null, handoffOperador: null, handoffDesde: null },
     });
+    return { ok: true };
+  });
+
+  // operador responde diretamente (fora do fluxo automático) — grava a
+  // resposta no checkpoint (aparece no histórico) e envia de verdade pro
+  // canal (WhatsApp real; web é lido via /historico, sem push separado)
+  app.post("/handoff/:sessionId/responder", async (req, reply) => {
+    const { sessionId } = req.params as { sessionId: string };
+    const { message } = (req.body ?? {}) as { message?: string };
+    if (!message?.trim()) return reply.code(400).send({ erro: "message obrigatório" });
+
+    const conv = await db.conversation.findUnique({ where: { sessionId } });
+    if (!conv) return reply.code(404).send({ erro: "conversa não encontrada" });
+    if (conv.handoffStatus !== "em_atendimento")
+      return reply.code(409).send({ erro: "conversa não está em atendimento (assuma primeiro)" });
+
+    const resposta = new AIMessage(message.trim());
+    const graph = await grafoDaConversa(conv.flowId);
+    await graph.updateState({ configurable: { thread_id: sessionId } }, { messages: [resposta] });
+
+    if (conv.channel === "whatsapp") {
+      const numero = sessionId.replace(/^wa:/, "");
+      await enviarWhatsApp(numero, [resposta]).catch((err) =>
+        console.error("[handoff] falha ao enviar resposta via WhatsApp:", err)
+      );
+    }
     return { ok: true };
   });
 
