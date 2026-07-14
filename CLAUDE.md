@@ -234,6 +234,37 @@ No WhatsApp: `boolean` → `interactive/button`, `image_url` → `image`, `optio
 
 ---
 
+## Observabilidade — Tracing LangSmith
+
+`@langchain/core` lê `LANGCHAIN_TRACING_V2`/`LANGSMITH_API_KEY`/`LANGCHAIN_PROJECT`
+direto do `process.env` — nenhuma chamada de código precisa mudar. `env.ts`
+só expõe getters (`langchainTracingV2()`, `langsmithApiKey()`, `langchainProject()`)
+pra log de boot (`[env] ... tracing=ok(<projeto>)` ou `tracing=off`).
+
+- **Ligar em dev**: no `.env`, setar `LANGCHAIN_TRACING_V2=true` e
+  `LANGCHAIN_PROJECT=maria-ia-dev` (a `LANGSMITH_API_KEY` já existe no `.env`
+  de referência). Reiniciar o server.
+- **Acessar**: [smith.langchain.com](https://smith.langchain.com) → projeto
+  `maria-ia-dev` (ou `maria-ia-staging`/`maria-ia-prod`, um por ambiente —
+  nunca misturar). Cada run é uma chamada ao Bedrock (`ChatBedrockConverse`)
+  ou um node do grafo (`chain`); abrir o run mostra prompt exato enviado,
+  resposta bruta do modelo e o parent trace (a mensagem do usuário que
+  disparou aquele turno).
+- **Interpretar um erro de classificação**: no projeto, filtrar por
+  `name: ChatBedrockConverse` — o input do run mostra o `SystemMessage` com
+  as categorias oferecidas e o `HumanMessage` com o relato; o output mostra
+  a resposta crua do modelo antes do parsing em `classificarTexto()`. Útil
+  pra ver se o modelo respondeu fora da lista de categorias (fallback por
+  palavra-chave assume) ou se o prompt precisa de ajuste.
+- **Produção**: `LANGSMITH_API_KEY` vive no secret `maria-chat-<env>/app`
+  (Secrets Manager, chave `LANGSMITH_API_KEY` — preencher com
+  `aws secretsmanager put-secret-value`, nunca via Terraform/CI). O projeto
+  é `maria-ia-${var.environment}` (`maria-ia-prod`/`maria-ia-staging`),
+  já fixado em `infra/terraform/ecs.tf` (`common_env`) — isola traces por
+  ambiente automaticamente. `terraform apply` continua sempre manual.
+- Sem `LANGSMITH_API_KEY`/`LANGCHAIN_TRACING_V2` setados, tracing fica
+  desligado e a aplicação funciona normalmente (opt-in, nunca bloqueante).
+
 ## RAG — Atualizar Knowledge Base
 
 Após editar `docs/servicos.md` ou `docs/guia-linguagem.md`:
