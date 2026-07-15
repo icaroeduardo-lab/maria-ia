@@ -439,7 +439,17 @@ export async function adminRoutes(app: FastifyInstance) {
       data: { status: "abandoned" },
     });
 
-    const [total, porStatus, porCategoria, porCanal, abandonoPorEtapa, serieDiaria] = await Promise.all([
+    const [
+      total,
+      porStatus,
+      porCategoria,
+      porCanal,
+      abandonoPorEtapa,
+      serieDiaria,
+      mediaCsatAgg,
+      csatPorCategoria,
+      csatPorFluxo,
+    ] = await Promise.all([
       db.conversation.count(),
       db.conversation.groupBy({ by: ["status"], _count: { _all: true } }),
       db.conversation.groupBy({ by: ["categoria"], _count: { _all: true } }),
@@ -456,6 +466,19 @@ export async function adminRoutes(app: FastifyInstance) {
         FROM "Conversation"
         WHERE "startedAt" > now() - interval '30 days'
         GROUP BY 1 ORDER BY 1`,
+      // csat (card #20260128): conversas sem nota (csat: null) são excluídas
+      // da média via where — nunca contam como 0.
+      db.conversation.aggregate({ _avg: { csat: true }, where: { csat: { not: null } } }),
+      db.conversation.groupBy({
+        by: ["categoria"],
+        _avg: { csat: true },
+        where: { csat: { not: null } },
+      }),
+      db.conversation.groupBy({
+        by: ["flowId"],
+        _avg: { csat: true },
+        where: { csat: { not: null } },
+      }),
     ]);
 
     const concluidas = porStatus.find((s) => s.status === "completed")?._count._all ?? 0;
@@ -467,6 +490,15 @@ export async function adminRoutes(app: FastifyInstance) {
       porCanal: porCanal.map((c) => ({ canal: c.channel, total: c._count._all })),
       abandonoPorEtapa: abandonoPorEtapa.map((e) => ({ etapa: e.ultimaEtapa ?? "(sem)", total: e._count._all })),
       serieDiaria,
+      mediaCsat: mediaCsatAgg._avg.csat ?? null,
+      csatPorCategoria: csatPorCategoria.map((c) => ({
+        categoria: c.categoria ?? "(sem)",
+        media: c._avg.csat ?? 0,
+      })),
+      csatPorFluxo: csatPorFluxo.map((f) => ({
+        flowId: f.flowId ?? "(estático)",
+        media: f._avg.csat ?? 0,
+      })),
     };
   });
 

@@ -73,6 +73,9 @@ model Conversation {
   categoria      String?
   ultimaEtapa    String? // último node executado (análise de abandono)
   dadosColetados Json      @default("{}")
+  // nota de satisfação 1-5 (card #20260128) — promovida de dadosColetados.csat
+  // em rastrearConversa() só quando inteiro 1..5; null = ainda sem nota
+  csat           Int?
   resumo         String?   // resumo do caso (gerado no fim do atendimento)
   metadados      Json?     // metadados limpos: identidade + caso + encaminhamento
   protocoloDperj String?

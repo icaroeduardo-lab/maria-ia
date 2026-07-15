@@ -182,6 +182,17 @@ export async function processarMensagem(
   return { result, newMessages };
 }
 
+// Nota de satisfação (csat, card #20260128): dadosColetados.csat vem de uma
+// pergunta de chave "csat" no fluxo — string ou number, sem garantia de
+// formato. Só promove pra Conversation.csat quando é um inteiro 1..5; "9",
+// "0", "banana" ou decimais (ex: "3.5") são rejeitados sem quebrar o turno.
+export function csatValido(bruto: unknown): number | null {
+  if (bruto === undefined || bruto === null || bruto === "") return null;
+  const n = typeof bruto === "number" ? bruto : Number(bruto);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1 || n > 5) return null;
+  return n;
+}
+
 // Espelha o estado da conversa no Postgres para o painel admin/analytics.
 // Sem DATABASE_URL é no-op — o atendimento nunca depende do tracking.
 async function rastrearConversa(
@@ -212,6 +223,13 @@ async function rastrearConversa(
     resumo = await gerarResumoTexto(m).catch(() => null);
   }
 
+  // csat: promove só quando válido (1..5); fora do range/não numérico fica de
+  // fora do update — a coluna simplesmente não é tocada, turno segue normal.
+  const csat = csatValido(coletados.csat);
+  if (coletados.csat !== undefined && csat === null) {
+    console.warn("[tracking] csat inválido/fora do range 1-5, ignorado:", String(coletados.csat).slice(0, 20));
+  }
+
   const dados = {
     channel: canal,
     flowId,
@@ -224,6 +242,7 @@ async function rastrearConversa(
     ...(emHandoff && { handoffStatus: "aguardando", handoffDesde: new Date() }),
     ...(resumo !== null && { resumo }),
     ...(metadados !== null && { metadados }),
+    ...(csat !== null && { csat }),
   };
 
   await prisma.conversation.upsert({
