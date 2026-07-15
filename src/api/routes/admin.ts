@@ -605,21 +605,78 @@ export async function adminRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // ── Configuração: preâmbulo de estilo da IA ─────────────────────────────────
+  // ── Configuração: preâmbulo de estilo da IA + horário de funcionamento ──────
   app.get("/config", async () => {
     const c = await db.config.findUnique({ where: { id: "default" } });
-    return { estiloPrompt: c?.estiloPrompt ?? "", conversacional: c?.conversacional ?? true, padrao: ESTILO_DEFAULT };
+    return {
+      estiloPrompt: c?.estiloPrompt ?? "",
+      conversacional: c?.conversacional ?? true,
+      padrao: ESTILO_DEFAULT,
+      horarioAtivo: c?.horarioAtivo ?? false,
+      diasSemana: c?.diasSemana?.length ? c.diasSemana : [1, 2, 3, 4, 5],
+      horaInicio: c?.horaInicio ?? "09:00",
+      horaFim: c?.horaFim ?? "18:00",
+    };
   });
 
-  app.put("/config", { preHandler: [exigirAdmin] }, async (req) => {
-    const { estiloPrompt, conversacional } = (req.body ?? {}) as { estiloPrompt?: string; conversacional?: boolean };
+  const REGEX_HORA_HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+  app.put("/config", { preHandler: [exigirAdmin] }, async (req, reply) => {
+    const { estiloPrompt, conversacional, horarioAtivo, diasSemana, horaInicio, horaFim } = (req.body ?? {}) as {
+      estiloPrompt?: string;
+      conversacional?: boolean;
+      horarioAtivo?: boolean;
+      diasSemana?: number[];
+      horaInicio?: string;
+      horaFim?: string;
+    };
+
+    // Validação COMPLETA antes de qualquer escrita (issue #79) — payload
+    // inválido não persiste nada, nem os campos válidos do mesmo request.
+    if (horaInicio !== undefined && !REGEX_HORA_HHMM.test(horaInicio)) {
+      return reply.code(400).send({ erro: "horaInicio inválido — formato esperado HH:mm" });
+    }
+    if (horaFim !== undefined && !REGEX_HORA_HHMM.test(horaFim)) {
+      return reply.code(400).send({ erro: "horaFim inválido — formato esperado HH:mm" });
+    }
+    if (diasSemana !== undefined) {
+      const valido =
+        Array.isArray(diasSemana) &&
+        diasSemana.every((d) => Number.isInteger(d) && d >= 0 && d <= 6) &&
+        new Set(diasSemana).size === diasSemana.length;
+      if (!valido) {
+        return reply.code(400).send({ erro: "diasSemana inválido — inteiros 0-6 sem duplicata" });
+      }
+    }
+    if (horaInicio !== undefined || horaFim !== undefined) {
+      // compara contra o estado final (novo valor enviado ou já persistido)
+      const atual = await db.config.findUnique({ where: { id: "default" } });
+      const inicioFinal = horaInicio ?? atual?.horaInicio ?? "09:00";
+      const fimFinal = horaFim ?? atual?.horaFim ?? "18:00";
+      if (fimFinal <= inicioFinal) {
+        return reply.code(400).send({ erro: "horaFim precisa ser maior que horaInicio (janela overnight não é suportada)" });
+      }
+    }
+
     const c = await db.config.upsert({
       where: { id: "default" },
       update: {
         ...(estiloPrompt !== undefined && { estiloPrompt }),
         ...(conversacional !== undefined && { conversacional }),
+        ...(horarioAtivo !== undefined && { horarioAtivo }),
+        ...(diasSemana !== undefined && { diasSemana }),
+        ...(horaInicio !== undefined && { horaInicio }),
+        ...(horaFim !== undefined && { horaFim }),
       },
-      create: { id: "default", estiloPrompt: estiloPrompt ?? "", conversacional: conversacional ?? true },
+      create: {
+        id: "default",
+        estiloPrompt: estiloPrompt ?? "",
+        conversacional: conversacional ?? true,
+        horarioAtivo: horarioAtivo ?? false,
+        diasSemana: diasSemana ?? [1, 2, 3, 4, 5],
+        horaInicio: horaInicio ?? "09:00",
+        horaFim: horaFim ?? "18:00",
+      },
     });
     invalidarEstilo();
     return c;

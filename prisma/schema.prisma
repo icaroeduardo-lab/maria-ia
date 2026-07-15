@@ -121,6 +121,13 @@ model Config {
   id            String   @id @default("default")
   estiloPrompt  String   @default("")
   conversacional Boolean @default(true) // IA reescreve perguntas de forma acolhedora
+  // Horário de funcionamento (issue #79): aviso automático na saudação quando
+  // a conversa começa fora do expediente configurado. horarioAtivo=false
+  // nunca dispara o aviso, mesmo com os outros campos preenchidos.
+  horarioAtivo  Boolean  @default(false)
+  diasSemana    Int[]    @default([1, 2, 3, 4, 5]) // 0=domingo...6=sábado
+  horaInicio    String   @default("09:00") // HH:mm, timezone America/Sao_Paulo
+  horaFim       String   @default("18:00") // HH:mm, exclusive; sem overnight (fora de escopo)
   updatedAt     DateTime @updatedAt
 }
 

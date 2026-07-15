@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Config" ADD COLUMN     "diasSemana" INTEGER[] DEFAULT ARRAY[1, 2, 3, 4, 5]::INTEGER[],
+ADD COLUMN     "horaFim" TEXT NOT NULL DEFAULT '18:00',
+ADD COLUMN     "horaInicio" TEXT NOT NULL DEFAULT '09:00',
+ADD COLUMN     "horarioAtivo" BOOLEAN NOT NULL DEFAULT false;
