@@ -70,6 +70,11 @@ data "aws_iam_policy_document" "task" {
     actions   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
     resources = ["arn:aws:s3:::${var.s3_bucket}/*"]
   }
+  # S3 (documentos do assistido — bucket privado, issue #74)
+  statement {
+    actions   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.documentos.arn}/*"]
+  }
   # SQS (api envia, worker consome)
   statement {
     actions = [

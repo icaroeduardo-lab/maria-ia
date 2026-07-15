@@ -165,6 +165,12 @@ variable "s3_bucket" {
   description = "Bucket S3 de fichas/áudios (efêmeros)."
 }
 
+variable "documentos_retencao_dias" {
+  type        = number
+  default     = 7
+  description = "Dias até expirar documentos enviados pelo assistido (bucket privado, issue #74)."
+}
+
 variable "elasticache_node_type" {
   type        = string
   default     = "cache.t4g.micro"

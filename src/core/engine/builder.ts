@@ -10,7 +10,7 @@ import {
 } from "./ia.js";
 import { avaliarTom } from "./sentimento.js";
 import { registrarVisitaNode } from "../analytics.js";
-import { formatoValido, mensagemErroFormato } from "./validacao-resposta.js";
+import { formatoValido, mensagemErroFormato, temValidadorDeFormato } from "./validacao-resposta.js";
 import { GraphAnnotation, type GraphState } from "../state.js";
 import { checkpointer, graph as graphEstatico } from "../graph.js";
 import { mensagemPergunta, proxima, type Pergunta, type TipoPergunta } from "../perguntas.js";
@@ -407,6 +407,20 @@ function expandirSubfluxos(nodes: FlowNode[], edges: FlowEdge[], subflows: Subfl
   return { nodes: N, edges: E };
 }
 
+// Nós do flow (principal + sub-flows) APÓS expandirSubfluxos — mesmos ids
+// prefixados (sf_<nodeSubfluxo>_<idOriginal>) que o grafo compilado usa em
+// ultimaPergunta/dadosColetados. Usado por chat.ts (tipoPerguntaPendente)
+// pra resolver o tipoPergunta de uma chave sem reprocessar mensagem — usar a
+// lista CRUA de flow.nodes ali causava mismatch pra pergunta de subfluxo sem
+// data.chave explícita (id vira prefixado só depois da expansão).
+export function nosExpandidos(flow: FlowRow, subflowRows: FlowRow[] = []): FlowNode[] {
+  const subflows: SubflowMap = {};
+  for (const s of subflowRows) subflows[s.id] = { nodes: s.nodes as FlowNode[], edges: s.edges as FlowEdge[] };
+  const nodes = (flow.nodes as FlowNode[]) ?? [];
+  const edges = (flow.edges as FlowEdge[]) ?? [];
+  return expandirSubfluxos(nodes, edges, subflows).nodes;
+}
+
 export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
   const expandido = expandirSubfluxos(flow.nodes ?? [], flow.edges ?? [], subflows);
   const nodes = expandido.nodes;
@@ -534,12 +548,15 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
         { PULAR: destinoSkip, PERGUNTAR: node.id, ...destinosRotulados, [END]: END }
       );
       builder.addEdge(node.id, `cap_${node.id}`); // [INT] após perguntar
-      // tipos com validador de formato (cpf/telefone/cep/data), saída única:
-      // captura inválida (dadosColetados[k] não gravado, ver criarCaptura)
-      // volta pro próprio node.id — re-pergunta com mensagem de erro.
-      const tipoComValidador = ["cpf", "telefone", "cep", "data"].includes(
-        node.data.tipoPergunta ?? "texto"
-      );
+      // tipos com validador de formato (derivado de VALIDADORES em
+      // validacao-resposta.ts — nunca listar aqui à mão, senão um tipo novo
+      // com validador fica sem esse fio e a captura inválida avança em
+      // silêncio), saída única: captura inválida (dadosColetados[k] não
+      // gravado, ver criarCaptura) volta pro próprio node.id — re-pergunta
+      // com mensagem de erro. "documento" segue o mesmo LIMITE_TENTATIVAS dos
+      // demais: após 3 falhas o valor bruto (texto não-JSON) fica em
+      // dadosColetados[k] — edge case raro aceito.
+      const tipoComValidador = temValidadorDeFormato(node.data.tipoPergunta ?? "texto");
       if (!saidas.length) builder.addEdge(`cap_${node.id}`, END);
       else if (roteiaPorLabel)
         builder.addConditionalEdges(`cap_${node.id}`, rotaPorResposta, {

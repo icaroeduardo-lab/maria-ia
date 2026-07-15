@@ -16,12 +16,18 @@ const QUEUE_URL = () => env.sqsQueueUrl();
 
 const client = new SQSClient({ region: env.awsRegion() });
 
-// Payload que trafega na fila (uma mensagem recebida do WhatsApp).
+// Payload que trafega na fila (uma mensagem recebida do WhatsApp) — mesmo
+// shape de MensagemRecebida (channels/whatsapp.ts); mantido espelhado aqui
+// porque o worker desserializa via JSON.parse(...) as MsgFila (sem import
+// direto do tipo, para não acoplar queue.ts ao canal).
 export interface MsgFila {
   id: string;
   from: string;
   texto?: string;
   audioId?: string;
+  mediaId?: string;
+  mediaMimeType?: string;
+  mediaNomeOriginal?: string;
 }
 
 export function filaConfigurada(): boolean {

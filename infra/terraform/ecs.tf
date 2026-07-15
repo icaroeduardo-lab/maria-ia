@@ -59,6 +59,7 @@ locals {
   common_env = [
     { name = "AWS_REGION", value = var.aws_region },
     { name = "S3_BUCKET", value = var.s3_bucket },
+    { name = "S3_BUCKET_DOCUMENTOS", value = aws_s3_bucket.documentos.bucket },
     { name = "SQS_QUEUE_URL", value = aws_sqs_queue.msgs.url },
     { name = "BEDROCK_MODEL_ID", value = var.bedrock_model_id },
     { name = "BEDROCK_KB_ID", value = var.bedrock_kb_id },
