@@ -9,7 +9,9 @@ import { env } from "./env.js";
 
 // Transcreve áudio do WhatsApp (mensagem de voz) com AWS Transcribe (pt-BR).
 // Fluxo: baixa a mídia da Meta → S3 → job do Transcribe → texto.
-// Áudios em audios/ expiram por lifecycle do bucket (são PII efêmera).
+// Áudios em audios/ expiram por lifecycle do bucket (são PII efêmera) —
+// regra real em infra/terraform/s3-audios.tf (issue #75; antes desse
+// arquivo o comentário aqui era só uma intenção, sem lifecycle de verdade).
 
 const BUCKET = env.s3Bucket();
 const GRAPH_URL = () => env.waGraphUrl();
