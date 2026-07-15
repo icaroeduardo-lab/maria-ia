@@ -203,6 +203,21 @@ components:
         padrao:
           type: string
           description: Texto padrão do estilo (só no GET — alimenta o "restaurar padrão")
+        horarioAtivo:
+          type: boolean
+          description: Liga/desliga o aviso automático de fora do expediente (issue #79)
+        diasSemana:
+          type: array
+          description: Dias de expediente — 0=domingo...6=sábado
+          items: { type: integer, minimum: 0, maximum: 6 }
+        horaInicio:
+          type: string
+          description: Início do expediente, formato HH:mm (America/Sao_Paulo)
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+        horaFim:
+          type: string
+          description: Fim do expediente (exclusive), formato HH:mm — precisa ser maior que horaInicio (sem overnight)
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
         id: { type: string }
         updatedAt: { type: string, format: date-time }
     ConversaResumo:
@@ -747,10 +762,19 @@ paths:
               properties:
                 estiloPrompt: { type: string }
                 conversacional: { type: boolean }
+                horarioAtivo: { type: boolean }
+                diasSemana:
+                  type: array
+                  items: { type: integer, minimum: 0, maximum: 6 }
+                horaInicio: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
+                horaFim: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$' }
       responses:
         "200":
           description: Config persistida
           content: { application/json: { schema: { $ref: '#/components/schemas/ConfigIA' } } }
+        "400":
+          description: horaInicio/horaFim malformado, janela invertida (horaFim <= horaInicio) ou diasSemana inválido — nada é persistido
+          content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } }
   /admin/users:
     get:
       tags: [Admin — Config/Users/Analytics/Audit]
