@@ -1,7 +1,7 @@
 import { AIMessage } from "@langchain/core/messages";
 import type { GraphState } from "./state.js";
 
-export type TipoPergunta = "texto" | "sim_nao" | "opcoes" | "cpf" | "telefone" | "cep" | "data";
+export type TipoPergunta = "texto" | "sim_nao" | "opcoes" | "cpf" | "telefone" | "cep" | "data" | "documento";
 
 export interface Pergunta {
   chave: string;            // key em dadosColetados

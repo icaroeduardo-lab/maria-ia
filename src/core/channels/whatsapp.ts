@@ -1,11 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import type { BaseMessage } from "@langchain/core/messages";
 import { AIMessage } from "@langchain/core/messages";
-import { processarMensagem } from "../chat.js";
+import { processarMensagem, tipoPerguntaPendente } from "../chat.js";
 import { transcreverAudioWA } from "../transcribe.js";
+import { baixarMidia } from "../graphMedia.js";
 import { filaConfigurada, enfileirar } from "../queue.js";
 import { env } from "../env.js";
 import { cacheIncr, cacheGet, cacheSet } from "../cache.js";
+import { MIME_ACEITOS, TAMANHO_MAX_BYTES, salvarDocumento, mimeReal, type MimeAceito } from "../documentos.js";
 import { toWhatsAppPayloads, } from "./payloads.js";
 
 export { toWhatsAppPayloads } from "./payloads.js";
@@ -26,6 +28,12 @@ export interface MensagemRecebida {
   from: string;   // wa_id, ex: "5521999990000"
   texto?: string;
   audioId?: string; // mensagem de voz → transcrita via AWS Transcribe
+  // imagem/documento (issue #74) — mirror de audioId: só guarda o id aqui,
+  // download é adiado pro processarMensagemWhatsApp (depende do contexto da
+  // pergunta pendente, ver tipoPerguntaPendente em core/chat.ts)
+  mediaId?: string;
+  mediaMimeType?: string;
+  mediaNomeOriginal?: string;
 }
 
 // Extrai mensagens de um body de webhook da Meta (entry[].changes[].value.messages[])
@@ -41,6 +49,22 @@ export function extrairMensagens(body: unknown): MensagemRecebida[] {
         if (msg.type === "audio") {
           const audioId = (msg.audio as { id?: string })?.id;
           if (audioId) out.push({ id: String(msg.id), from: String(msg.from), audioId });
+          continue;
+        }
+        // imagem/documento (comprovante, identidade etc — issue #74): guarda
+        // id/mime/nome; download só acontece se a pergunta pendente esperar
+        // documento (ver processarMensagemWhatsApp)
+        if (msg.type === "image" || msg.type === "document") {
+          const media = (msg[msg.type] as { id?: string; mime_type?: string; filename?: string }) ?? {};
+          if (media.id) {
+            out.push({
+              id: String(msg.id),
+              from: String(msg.from),
+              mediaId: media.id,
+              mediaMimeType: media.mime_type,
+              mediaNomeOriginal: media.filename,
+            });
+          }
           continue;
         }
         const texto = textoDaMensagem(msg);
@@ -203,9 +227,73 @@ export async function processarMensagemWhatsApp(msg: MensagemRecebida): Promise<
       return;
     }
   }
+
+  // imagem/documento (issue #74): SÓ baixa mídia se a pergunta pendente desta
+  // sessão for tipoPergunta "documento" — evita custo de download/S3 e uma
+  // mensagem de erro sem sentido (tipo "CPF inválido") pra quem mandou foto
+  // fora de contexto (BDD: WhatsApp checa contexto ANTES de baixar mídia).
+  if (msg.mediaId) {
+    const sessionId = `wa:${msg.from}`;
+    const tipoPendente = await tipoPerguntaPendente(sessionId).catch((err) => {
+      console.error("[whatsapp] falha ao checar pergunta pendente:", err);
+      return null;
+    });
+    if (tipoPendente !== "documento") {
+      await enviarWhatsApp(msg.from, [
+        new AIMessage("Não estou esperando um documento agora. Se precisar, é só me contar o que você precisa. 🙂"),
+      ]);
+      return;
+    }
+
+    texto = (await processarDocumentoWA(sessionId, msg)) ?? undefined;
+    if (texto == null) return; // erro já respondido dentro de processarDocumentoWA
+  }
+
   if (texto == null) return;
   const { newMessages } = await processarMensagem(`wa:${msg.from}`, texto, "whatsapp");
   await enviarWhatsApp(msg.from, newMessages);
+}
+
+// Baixa/valida/salva a mídia recebida (contexto já confirmado pelo chamador)
+// e devolve o metadado (JSON) que vira `texto` pro processarMensagem — mesmo
+// shape de POST /api/upload-documento (validacao-resposta.ts VALIDADORES.documento).
+// Retorna null em qualquer falha (já respondeu uma mensagem amigável ao
+// assistido); nunca deixa a exceção vazar/travar o webhook.
+async function processarDocumentoWA(sessionId: string, msg: MensagemRecebida): Promise<string | null> {
+  const erroAmigavel = async (texto: string) => {
+    await enviarWhatsApp(msg.from, [new AIMessage(texto)]);
+    return null;
+  };
+
+  const token = env.waAccessToken();
+  if (!token) {
+    // modo dev (sem WA_ACCESS_TOKEN): mesmo guard do áudio — não tenta baixar
+    console.warn("[whatsapp] sem WA_ACCESS_TOKEN — não dá pra baixar o documento");
+    return erroAmigavel("No momento não consigo receber arquivos por aqui. Pode tentar de novo mais tarde?");
+  }
+
+  const mimeDeclarado = (msg.mediaMimeType ?? "").split(";")[0].trim();
+  if (!MIME_ACEITOS.includes(mimeDeclarado as MimeAceito)) {
+    return erroAmigavel("Esse tipo de arquivo não é aceito. Envie uma foto (jpeg/png) ou PDF, até 10MB. 📎");
+  }
+
+  try {
+    const buffer = await baixarMidia(msg.mediaId!, token);
+    if (buffer.length > TAMANHO_MAX_BYTES) {
+      return erroAmigavel("O arquivo é grande demais (máx 10MB). Pode enviar uma versão menor?");
+    }
+    // magic bytes como fonte de verdade (mesma checagem do endpoint HTTP) —
+    // mime_type da Meta é só um pré-filtro barato antes do download.
+    const tipoReal = mimeReal(buffer);
+    if (!tipoReal) {
+      return erroAmigavel("Esse arquivo não parece uma foto ou PDF válido. Pode tentar de novo?");
+    }
+    const meta = await salvarDocumento(sessionId, buffer, tipoReal, msg.mediaNomeOriginal ?? "documento");
+    return JSON.stringify(meta);
+  } catch (err) {
+    console.error("[whatsapp] falha ao processar documento:", err);
+    return erroAmigavel("Não consegui processar seu arquivo agora. Pode tentar de novo?");
+  }
 }
 
 export async function whatsappRoutes(app: FastifyInstance) {

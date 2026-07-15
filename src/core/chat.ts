@@ -1,10 +1,12 @@
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
 import { graph as graphEstatico, checkpointer } from "./graph.js";
-import { graphDoFlow, subfluxosReferenciados, type FlowRow } from "./engine/builder.js";
+import { graphDoFlow, subfluxosReferenciados, nosExpandidos, type FlowRow, type FlowNode } from "./engine/builder.js";
 import { prisma } from "./db.js";
 import { montarMetadados, gerarResumoTexto } from "./resumo.js";
 import { env } from "./env.js";
+import { PERGUNTAS_POR_CHAVE } from "./registro-perguntas.js";
+import type { TipoPergunta } from "./perguntas.js";
 
 // Comando do usuário para reiniciar a conversa do zero (qualquer canal,
 // inclusive o chat de teste do painel — ver /admin/test-chat).
@@ -66,17 +68,43 @@ export async function carregarSubflowsRecursivo(nodesIniciais: unknown): Promise
 
 // Grafo a usar: flow ativo (compilado dinamicamente, com cache) ou o grafo
 // estático padrão. Troca de flow ativo afeta conversas novas.
-async function obterGraph(): Promise<{ graph: typeof graphEstatico; flowId: string | null }> {
-  if (!prisma) return { graph: graphEstatico, flowId: null };
+// flowNodes: nós (principal + sub-flows carregados) do flow ativo, usados por
+// tipoPerguntaPendente() abaixo para resolver o tipoPergunta de uma chave —
+// null quando é o grafo estático (usa o registro PERGUNTAS_POR_CHAVE).
+async function obterGraph(): Promise<{ graph: typeof graphEstatico; flowId: string | null; flowNodes: FlowNode[] | null }> {
+  if (!prisma) return { graph: graphEstatico, flowId: null, flowNodes: null };
   try {
     const ativo = await prisma.flow.findFirst({ where: { active: true } });
-    if (!ativo) return { graph: graphEstatico, flowId: null };
+    if (!ativo) return { graph: graphEstatico, flowId: null, flowNodes: null };
     const subflows = await carregarSubflowsRecursivo(ativo.nodes);
-    return { graph: graphDoFlow(ativo, subflows) as typeof graphEstatico, flowId: ativo.id };
+    // nosExpandidos() roda a MESMA expansão de subfluxos que graphDoFlow usa
+    // pra compilar o grafo — garante que os ids batam com ultimaPergunta
+    // (ver comentário em nosExpandidos, builder.ts).
+    const flowNodes = nosExpandidos(ativo, subflows);
+    return { graph: graphDoFlow(ativo, subflows) as typeof graphEstatico, flowId: ativo.id, flowNodes };
   } catch (err) {
     console.error("[engine] falha ao carregar flow ativo, usando grafo estático:", err);
-    return { graph: graphEstatico, flowId: null };
+    return { graph: graphEstatico, flowId: null, flowNodes: null };
   }
+}
+
+// Descobre o tipoPergunta da pergunta PENDENTE de uma sessão, sem reprocessar
+// mensagem — só lê o checkpoint (graph.getState) e resolve `ultimaPergunta`
+// (chave) contra o flow ativo (builder dinâmico) ou o registro estático
+// (registro-perguntas.ts). Usado pelo WhatsApp para decidir se vale a pena
+// baixar mídia recebida (ver processarMensagemWhatsApp em channels/whatsapp.ts)
+// — evita custo de download/S3 e mensagem de erro sem sentido fora de contexto.
+export async function tipoPerguntaPendente(sessionId: string): Promise<TipoPergunta | null> {
+  const { graph, flowNodes } = await obterGraph();
+  const config = { configurable: { thread_id: sessionId } };
+  const state = await graph.getState(config).catch(() => null);
+  const chave = (state?.values as { ultimaPergunta?: string } | undefined)?.ultimaPergunta;
+  if (!chave) return null;
+  if (flowNodes) {
+    const node = flowNodes.find((n) => n.type === "pergunta" && (n.data.chave ?? n.id) === chave);
+    if (node) return node.data.tipoPergunta ?? "texto";
+  }
+  return PERGUNTAS_POR_CHAVE.get(chave)?.tipo ?? null;
 }
 
 // Processa uma mensagem de qualquer canal (web ou whatsapp), preservando o

@@ -889,6 +889,30 @@ paths:
       summary: Status do KYC
       security: []
       responses: { "200": { description: OK } }
+  /api/upload-documento:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Upload de documento/comprovante pelo assistido (bucket privado) — avança a conversa
+      description: >
+        Sem JWT: autenticação é por posse do sessionId (thread_id da conversa).
+        Magic bytes decidem o mimetype real (Content-Type declarado nunca é
+        confiável) — jpeg/png/PDF até 10MB. Nunca retorna URL/key do S3 (LGPD).
+      security: []
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [sessionId, file]
+              properties:
+                sessionId: { type: string, description: "sessionId/thread_id da conversa (web ou wa:<numero>)" }
+                file: { type: string, format: binary, description: "jpeg/png/PDF, máx 10MB" }
+      responses:
+        "200": { description: "{ nome, tamanho, mimeType, messages } — conversa avançada" }
+        "404": { description: "sessionId inexistente ou conversa não ativa" }
+        "413": { description: Arquivo grande demais }
+        "415": { description: "Tipo de arquivo não aceito (magic bytes)" }
+        "429": { description: Rate limit de uploads excedido }
 
   # ── Mock (teste) ───────────────────────────────────────────
   /mock/verificar-cpf:

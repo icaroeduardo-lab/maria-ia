@@ -42,6 +42,7 @@ export const env = {
   // Fila + storage + cache
   sqsQueueUrl: () => process.env.SQS_QUEUE_URL ?? "",
   s3Bucket: () => process.env.S3_BUCKET ?? "maria-ia",
+  s3BucketDocumentos: () => process.env.S3_BUCKET_DOCUMENTOS ?? "maria-ia-documentos",
   redisUrl: () => process.env.REDIS_URL ?? "",
 
   // Timers / limites

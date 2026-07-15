@@ -17,6 +17,7 @@ import { assistidosFlowRoutes } from "./routes/assistidos.js";
 import { fichaRoutes } from "./routes/ficha.js";
 import { kycRoutes } from "./routes/kyc.js";
 import { processosRoutes } from "./routes/processos.js";
+import { uploadDocumentoRoutes } from "./routes/upload-documento.js";
 import { env } from "../core/env.js";
 
 // Monta a app Fastify com todas as rotas registradas, SEM listen e sem jobs de
@@ -91,6 +92,7 @@ export async function montarApp(opts: MontarAppOpts = {}) {
   await app.register(fichaRoutes);
   await app.register(kycRoutes);
   await app.register(processosRoutes);
+  await app.register(uploadDocumentoRoutes);
 
   return app;
 }
