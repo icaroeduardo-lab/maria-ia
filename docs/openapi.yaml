@@ -815,7 +815,43 @@ paths:
     post:
       tags: [Admin — Config/Users/Analytics/Audit]
       summary: Chat de teste no painel (retorna resumo + metadados)
-      responses: { "200": { description: OK } }
+      description: >
+        Roda o grafo direto num checkpoint LangGraph de teste
+        (thread_id: test:<flowId>:<sessionId>), sem criar Conversation.
+        Resposta inclui tipoPerguntaPendente (cpf/telefone/cep/data/documento/
+        sim_nao/opcoes/texto/null), resolvido contra o flow informado (ou o
+        registro estático se flowId for omitido) — o painel usa esse campo pra
+        decidir o widget de resposta (ex: upload em vez de texto livre).
+      responses:
+        "200": { description: "{ messages, done, dadosColetados, tipoPerguntaPendente, resumo?, metadados? }" }
+        "404": { description: Fluxo não encontrado }
+        "422": { description: Flow inválido (falha ao compilar) }
+  /admin/test-chat/upload:
+    post:
+      tags: [Admin — Config/Users/Analytics/Audit]
+      summary: Upload de documento no chat de teste (issue #82) — equivalente admin de /api/upload-documento
+      description: >
+        Sem Conversation (chat de teste não cria uma) — auth é JWT admin
+        (exigirAdmin), sem rate limit. Magic bytes decidem o mimetype real;
+        avança o mesmo thread do chat de teste (test:<flowId>:<sessionId>) e
+        devolve o mesmo shape de /admin/test-chat.
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [sessionId, file]
+              properties:
+                sessionId: { type: string, description: "sessionId da sessão de teste" }
+                flowId: { type: string, description: "flow de teste (opcional — omitido usa o grafo estático)" }
+                file: { type: string, format: binary, description: "jpeg/png/PDF, máx 10MB" }
+      responses:
+        "200": { description: "{ messages, done, dadosColetados, tipoPerguntaPendente }" }
+        "400": { description: sessionId ou arquivo ausente }
+        "404": { description: Fluxo não encontrado }
+        "413": { description: Arquivo grande demais }
+        "415": { description: "Tipo de arquivo não aceito (magic bytes)" }
+        "422": { description: Flow inválido (falha ao compilar) }
 
   # ── Interno (fluxo) — chamado pelo engine ──────────────────
   /api/assistidos/consultar:

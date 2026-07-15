@@ -10,13 +10,14 @@ import { enviarWhatsApp } from "../../core/channels/whatsapp.js";
 import { prisma } from "../../core/db.js";
 import { env } from "../../core/env.js";
 import { autenticar, exigirAdmin } from "./auth.js";
-import { graphDoFlow, graphEstatico, subfluxosReferenciados, type FlowNode, type FlowEdge } from "../../core/engine/builder.js";
+import { graphDoFlow, graphEstatico, subfluxosReferenciados, nosExpandidos, type FlowNode, type FlowEdge } from "../../core/engine/builder.js";
 import { checkpointer } from "../../core/graph.js";
-import { COMANDO_REINICIAR, carregarSubflowsRecursivo } from "../../core/chat.js";
+import { COMANDO_REINICIAR, carregarSubflowsRecursivo, resolverTipoPergunta } from "../../core/chat.js";
 import { validarFlow } from "../../core/engine/validar.js";
 import { ESTILO_DEFAULT, invalidarEstilo } from "../../core/config.js";
 import { montarMetadados, gerarResumoTexto, type Metadados } from "../../core/resumo.js";
 import { mascararAssistido } from "../../core/mask.js";
+import { MIME_ACEITOS, TAMANHO_MAX_BYTES, mimeReal, salvarDocumento } from "../../core/documentos.js";
 
 // API do painel admin (registrada com prefix /admin). Tudo exige JWT;
 // mutações exigem role admin. Exige DATABASE_URL (Postgres).
@@ -683,6 +684,63 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   // ── Chat de teste (não conta nas analytics) ─────────────────────────────────
+
+  // Carrega o grafo usado pelo chat de teste: flow específico (compilado +
+  // flowNodes expandidos, pra resolver tipoPergunta) ou o estático se
+  // flowId for omitido. Compartilhado por /test-chat e /test-chat/upload —
+  // MESMO comportamento nos dois (404 flow inexistente, 422 flow inválido).
+  type GrafoDeTeste =
+    | { ok: true; graph: ReturnType<typeof graphDoFlow>; flowNodes: FlowNode[] | null }
+    | { ok: false; status: 404 | 422; erro: string };
+
+  async function carregarGrafoDeTeste(flowId: string | undefined): Promise<GrafoDeTeste> {
+    if (!flowId) return { ok: true, graph: graphEstatico as ReturnType<typeof graphDoFlow>, flowNodes: null };
+    const flow = await db.flow.findUnique({ where: { id: flowId } });
+    if (!flow) return { ok: false, status: 404, erro: "fluxo não encontrado" };
+    const subflows = await carregarSubflowsRecursivo(flow.nodes);
+    try {
+      const graph = graphDoFlow(flow, subflows) as ReturnType<typeof graphDoFlow>;
+      const flowNodes = nosExpandidos(flow, subflows);
+      return { ok: true, graph, flowNodes };
+    } catch (err) {
+      return { ok: false, status: 422, erro: `flow inválido: ${String(err)}` };
+    }
+  }
+
+  // Monta a resposta final do chat de teste a partir do estado do grafo após
+  // o invoke — reusada por /test-chat e /test-chat/upload (achado de review
+  // da #74: não duplicar essa lógica entre os dois endpoints).
+  async function montarRespostaTeste(
+    graph: ReturnType<typeof graphDoFlow>,
+    config: { configurable: { thread_id: string } },
+    flowNodes: FlowNode[] | null,
+    newMessages: BaseMessage[]
+  ) {
+    const estadoFinal = await graph.getState(config);
+    const done = (estadoFinal.next?.length ?? 0) === 0;
+    const v = (estadoFinal.values as Record<string, unknown>) ?? {};
+    const coletados = (v.dadosColetados ?? {}) as Record<string, unknown>;
+    const chavePendente = v.ultimaPergunta as string | undefined;
+    const tipoPerguntaPendente = !done && chavePendente ? resolverTipoPergunta(chavePendente, flowNodes) : null;
+
+    // ao encerrar, devolve resumo + metadados limpos (pra visualizar o fechamento)
+    let resumo: string | undefined;
+    let metadados: object | undefined;
+    if (done) {
+      metadados = montarMetadados(coletados);
+      resumo = await gerarResumoTexto(metadados as Metadados).catch(() => undefined);
+    }
+
+    return {
+      messages: newMessages.map((m) => ({ role: m.getType(), content: m.content })),
+      done,
+      dadosColetados: coletados,
+      tipoPerguntaPendente,
+      ...(resumo !== undefined && { resumo }),
+      ...(metadados !== undefined && { metadados }),
+    };
+  }
+
   app.post("/test-chat", async (req, reply) => {
     const { flowId, sessionId, message } = (req.body ?? {}) as {
       flowId?: string;
@@ -705,21 +763,14 @@ export async function adminRoutes(app: FastifyInstance) {
         messages: [{ role: "ai", content: "Conversa reiniciada. 🔄 Quando quiser, é só mandar uma mensagem que começamos de novo." }],
         done: true,
         dadosColetados: {},
+        tipoPerguntaPendente: null,
       };
     }
 
     // carrega o flow específico (ou o estático se omitido)
-    let graph = graphEstatico as ReturnType<typeof graphDoFlow>;
-    if (flowId) {
-      const flow = await db.flow.findUnique({ where: { id: flowId } });
-      if (!flow) return reply.code(404).send({ erro: "fluxo não encontrado" });
-      const subflows = await carregarSubflowsRecursivo(flow.nodes);
-      try {
-        graph = graphDoFlow(flow, subflows) as typeof graph;
-      } catch (err) {
-        return reply.code(422).send({ erro: `flow inválido: ${String(err)}` });
-      }
-    }
+    const carregado = await carregarGrafoDeTeste(flowId);
+    if (!carregado.ok) return reply.code(carregado.status).send({ erro: carregado.erro });
+    const { graph, flowNodes } = carregado;
 
     const prevState = await graph.getState(config);
     const prevLen = (prevState.values?.messages as unknown[])?.length ?? 0;
@@ -735,24 +786,78 @@ export async function adminRoutes(app: FastifyInstance) {
       .slice(prevLen)
       .filter((m) => m.getType() !== "human");
 
-    const estadoFinal = await graph.getState(config);
-    const done = (estadoFinal.next?.length ?? 0) === 0;
-    const coletados = ((estadoFinal.values as Record<string, unknown>)?.dadosColetados ?? {}) as Record<string, unknown>;
+    return montarRespostaTeste(graph, config, flowNodes, newMessages);
+  });
 
-    // ao encerrar, devolve resumo + metadados limpos (pra visualizar o fechamento)
-    let resumo: string | undefined;
-    let metadados: object | undefined;
-    if (done) {
-      metadados = montarMetadados(coletados);
-      resumo = await gerarResumoTexto(metadados as Metadados).catch(() => undefined);
+  // Upload de documento no chat de teste (issue #82) — equivalente ao
+  // POST /api/upload-documento (issue #74), mas pro chat de teste do painel:
+  // não há Conversation (o teste roda direto no checkpoint LangGraph, thread
+  // test:<flowId>:<sessionId>), então a rota pública sempre daria 404 aqui.
+  // Auth é JWT admin (exigirAdmin) — sem rate limit (já não é anônimo).
+  //
+  // Limite de 10MB SEM re-registrar fastifyMultipart: o plugin (linha ~32,
+  // 5MB fixo pra /upload — imagens do builder) usa fastify-plugin por baixo
+  // (decora a instância ROOT, não encapsula) — registrá-lo de novo, mesmo
+  // dentro de um app.register() aninhado, decora a MESMA instância root duas
+  // vezes e derruba o server inteiro com FST_ERR_CTP_ALREADY_PRESENT
+  // (confirmado rodando a suite — não é hipotético). @fastify/multipart
+  // suporta override de limits POR REQUEST via req.parts({ limits }) — é
+  // essa a forma correta de dar 10MB só pra esta rota sem tocar o registro
+  // global de 5MB.
+  app.post("/test-chat/upload", { preHandler: [exigirAdmin] }, async (req, reply) => {
+    let sessionId: string | undefined;
+    let flowId: string | undefined;
+    let arquivo: { filename?: string; buffer: Buffer } | undefined;
+
+    try {
+      for await (const part of req.parts({ limits: { fileSize: TAMANHO_MAX_BYTES, files: 1 } })) {
+        if (part.type === "file") {
+          const buffer = await part.toBuffer();
+          arquivo = { filename: part.filename, buffer };
+        } else if (part.fieldname === "sessionId") {
+          sessionId = String(part.value ?? "");
+        } else if (part.fieldname === "flowId") {
+          flowId = String(part.value ?? "") || undefined;
+        }
+      }
+    } catch (err) {
+      req.log?.warn?.({ err }, "[test-chat/upload] falha ao ler multipart");
+      return reply.code(413).send({ erro: "arquivo grande demais (máx 10MB)" });
     }
 
-    return {
-      messages: newMessages.map((m) => ({ role: m.getType(), content: m.content })),
-      done,
-      dadosColetados: coletados,
-      ...(resumo !== undefined && { resumo }),
-      ...(metadados !== undefined && { metadados }),
-    };
+    if (!sessionId) return reply.code(400).send({ erro: "sessionId obrigatório (campo multipart)" });
+
+    // mesmo padrão de /test-chat: 404 flow inexistente, 422 flow inválido
+    const carregado = await carregarGrafoDeTeste(flowId);
+    if (!carregado.ok) return reply.code(carregado.status).send({ erro: carregado.erro });
+    const { graph, flowNodes } = carregado;
+
+    if (!arquivo) return reply.code(400).send({ erro: "envie um arquivo (multipart, campo 'file')" });
+
+    // magic bytes — ignora Content-Type declarado (spoofável), mesmo padrão da #74
+    const tipoReal = mimeReal(arquivo.buffer);
+    if (!tipoReal || !MIME_ACEITOS.includes(tipoReal)) {
+      return reply.code(415).send({ erro: "arquivo não reconhecido — envie foto (jpeg/png) ou PDF" });
+    }
+
+    // mesma fórmula de thread_id que /test-chat usa
+    const threadId = `test:${flowId ?? "static"}:${sessionId}`;
+    const config = { configurable: { thread_id: threadId } };
+
+    const meta = await salvarDocumento(threadId, arquivo.buffer, tipoReal, arquivo.filename ?? "documento");
+
+    const prevState = await graph.getState(config);
+    const prevLen = (prevState.values?.messages as unknown[])?.length ?? 0;
+
+    // avança o mesmo thread do chat de teste — resume (updateState + invoke(null)),
+    // igual /test-chat já faz quando isResuming (padrão crítico multi-turn)
+    await graph.updateState(config, { messages: [new HumanMessage(JSON.stringify(meta))] });
+    const result = await graph.invoke(null, config);
+
+    const newMessages = (result.messages as BaseMessage[])
+      .slice(prevLen)
+      .filter((m) => m.getType() !== "human");
+
+    return montarRespostaTeste(graph, config, flowNodes, newMessages);
   });
 }

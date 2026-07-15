@@ -88,6 +88,21 @@ async function obterGraph(): Promise<{ graph: typeof graphEstatico; flowId: stri
   }
 }
 
+// Resolve o tipoPergunta de uma chave contra o flow ativo (builder dinâmico —
+// flowNodes já expandido via nosExpandidos()) ou, na ausência de flow
+// dinâmico (flowNodes null, grafo estático), o registro estático
+// (registro-perguntas.ts). Função pura — usada tanto por tipoPerguntaPendente()
+// (sessão real) quanto pelo chat de teste do painel (POST /admin/test-chat*,
+// ver src/api/routes/admin.ts), que resolve contra o mesmo estado sem reler
+// o checkpoint duas vezes.
+export function resolverTipoPergunta(chave: string, flowNodes: FlowNode[] | null): TipoPergunta | null {
+  if (flowNodes) {
+    const node = flowNodes.find((n) => n.type === "pergunta" && (n.data.chave ?? n.id) === chave);
+    if (node) return node.data.tipoPergunta ?? "texto";
+  }
+  return PERGUNTAS_POR_CHAVE.get(chave)?.tipo ?? null;
+}
+
 // Descobre o tipoPergunta da pergunta PENDENTE de uma sessão, sem reprocessar
 // mensagem — só lê o checkpoint (graph.getState) e resolve `ultimaPergunta`
 // (chave) contra o flow ativo (builder dinâmico) ou o registro estático
@@ -100,11 +115,7 @@ export async function tipoPerguntaPendente(sessionId: string): Promise<TipoPergu
   const state = await graph.getState(config).catch(() => null);
   const chave = (state?.values as { ultimaPergunta?: string } | undefined)?.ultimaPergunta;
   if (!chave) return null;
-  if (flowNodes) {
-    const node = flowNodes.find((n) => n.type === "pergunta" && (n.data.chave ?? n.id) === chave);
-    if (node) return node.data.tipoPergunta ?? "texto";
-  }
-  return PERGUNTAS_POR_CHAVE.get(chave)?.tipo ?? null;
+  return resolverTipoPergunta(chave, flowNodes);
 }
 
 // Processa uma mensagem de qualquer canal (web ou whatsapp), preservando o
