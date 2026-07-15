@@ -298,7 +298,7 @@ components:
         itens: { type: array, items: { $ref: '#/components/schemas/Assistido' } }
     AnalyticsSummary:
       type: object
-      required: [total, taxaConclusao, porStatus, porCategoria, porCanal, abandonoPorEtapa, serieDiaria]
+      required: [total, taxaConclusao, porStatus, porCategoria, porCanal, abandonoPorEtapa, serieDiaria, mediaCsat, csatPorCategoria, csatPorFluxo]
       properties:
         total: { type: integer }
         taxaConclusao: { type: number, description: "0..1" }
@@ -318,6 +318,16 @@ components:
           type: array
           description: "últimos 30 dias"
           items: { type: object, required: [dia, total, concluidas], properties: { dia: { type: string }, total: { type: integer }, concluidas: { type: integer } } }
+        mediaCsat:
+          type: number
+          nullable: true
+          description: "média geral da nota de satisfação (1-5); null se nenhuma conversa tem nota ainda"
+        csatPorCategoria:
+          type: array
+          items: { type: object, required: [categoria, media], properties: { categoria: { type: string }, media: { type: number } } }
+        csatPorFluxo:
+          type: array
+          items: { type: object, required: [flowId, media], properties: { flowId: { type: string }, media: { type: number } } }
     FunilPorNo:
       type: object
       required: [nodes]
