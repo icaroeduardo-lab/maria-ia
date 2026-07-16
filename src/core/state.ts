@@ -27,19 +27,6 @@ export const GraphAnnotation = Annotation.Root({
     value: (a, b) => ({ ...a, ...b }),
     default: () => ({}),
   }),
-  // id do Assistido (Prisma) já identificado/cadastrado nesta conversa —
-  // populado por identificar-assistido.ts assim que o cadastro é confirmado
-  // ou criado; "" enquanto não identificado ou sem Postgres (issue #86).
-  assistidoId: Annotation<string>({ value: (_, b) => b, default: () => "" }),
-  // id do Assistido candidato encontrado por CPF, aguardando confirmação de
-  // nome (sim/não) — campo de trabalho interno do sub-fluxo de identificação,
-  // não confundir com assistidoId (só setado após confirmação/cadastro).
-  assistidoCandidatoId: Annotation<string>({ value: (_, b) => b, default: () => "" }),
-  // tipo do Caso "aberto" encontrado para o assistido identificado (ex:
-  // "Pensão alimentícia") — "" quando não há caso em aberto. Usado só para
-  // compor a pergunta de verificar-caso-aberto.ts e mapear a categoria da
-  // triagem quando o assistido confirma que é sobre esse caso.
-  casoAbertoTipo: Annotation<string>({ value: (_, b) => b, default: () => "" }),
 });
 
 export type GraphState = typeof GraphAnnotation.State;
