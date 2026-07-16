@@ -9,6 +9,28 @@ import { saudacao } from "./nodes/onboarding/saudacao.js";
 import { lgpd, lgpdProcessar, lgpdRecusado, lgpdRoute } from "./nodes/onboarding/lgpd.js";
 import { primeiraMensagem } from "./nodes/onboarding/primeira-mensagem.js";
 import {
+  identificarAssistido,
+  identificarAssistidoLookup,
+  identificarAssistidoLookupRoute,
+  identificarAssistidoInvalido,
+  identificarAssistidoConfirmar,
+  identificarAssistidoConfirmarRoute,
+  identificarAssistidoUsarCadastro,
+  identificarAssistidoOferecerCadastro,
+  identificarAssistidoOfertaRoute,
+  identificarAssistidoCadastrarPerguntar,
+  identificarAssistidoCadastrarCapturar,
+  identificarAssistidoCadastrarRoute,
+  identificarAssistidoSalvar,
+} from "./nodes/onboarding/identificar-assistido.js";
+import {
+  verificarCasoAberto,
+  verificarCasoAbertoDispatch,
+  verificarCasoAbertoAguardar,
+  verificarCasoAbertoRoute,
+  casoConfirmado,
+} from "./nodes/onboarding/verificar-caso-aberto.js";
+import {
   triagem,
   triagemConfirmar,
   triagemConfirmarRoute,
@@ -64,6 +86,18 @@ export const graph = new StateGraph(GraphAnnotation)
   .addNode("lgpd",               lgpd)
   .addNode("lgpd_processar",     lgpdProcessar)
   .addNode("lgpd_recusado",      lgpdRecusado)
+  .addNode("identificar_assistido",              identificarAssistido)
+  .addNode("identificar_assistido_lookup",       identificarAssistidoLookup)
+  .addNode("identificar_assistido_invalido",     identificarAssistidoInvalido)
+  .addNode("identificar_assistido_confirmar",    identificarAssistidoConfirmar)
+  .addNode("identificar_assistido_usar_cadastro", identificarAssistidoUsarCadastro)
+  .addNode("identificar_assistido_oferecer_cadastro", identificarAssistidoOferecerCadastro)
+  .addNode("identificar_assistido_cadastrar",    identificarAssistidoCadastrarPerguntar)
+  .addNode("identificar_assistido_cadastrar_capturar", identificarAssistidoCadastrarCapturar)
+  .addNode("identificar_assistido_salvar",       identificarAssistidoSalvar)
+  .addNode("verificar_caso_aberto",          verificarCasoAberto)
+  .addNode("verificar_caso_aberto_aguardar", verificarCasoAbertoAguardar)
+  .addNode("caso_confirmado",                casoConfirmado)
   .addNode("primeira_mensagem",  primeiraMensagem)
   .addNode("triagem",            triagem)
   .addNode("triagem_confirmar",       triagemConfirmar)
@@ -90,10 +124,64 @@ export const graph = new StateGraph(GraphAnnotation)
   // interruptAfter["lgpd"] pausa aqui — aguarda resposta do usuário
   .addEdge("lgpd", "lgpd_processar")
   .addConditionalEdges("lgpd_processar", lgpdRoute, {
-    primeira_mensagem: "primeira_mensagem",
+    // lgpdRoute continua devolvendo a chave "primeira_mensagem" (não mudou);
+    // só o destino real muda — identificação do assistido entra ANTES da
+    // primeira mensagem sobre o caso (issue #86).
+    primeira_mensagem: "identificar_assistido",
     lgpd_recusado:     "lgpd_recusado",
   })
   .addEdge("lgpd_recusado", "encerramento")
+
+  // ── Identificação do assistido (Assistido/Caso reais — issue #86) ───────
+  // interruptAfter["identificar_assistido"] pausa aqui — aguarda o CPF
+  .addEdge("identificar_assistido", "identificar_assistido_lookup")
+  .addConditionalEdges("identificar_assistido_lookup", identificarAssistidoLookupRoute, {
+    encontrado: "identificar_assistido_confirmar",
+    novo:       "identificar_assistido_oferecer_cadastro",
+    invalido:   "identificar_assistido_invalido",
+  })
+  // interruptAfter["identificar_assistido_invalido"] pausa aqui — pede o CPF de novo
+  .addEdge("identificar_assistido_invalido", "identificar_assistido_lookup")
+
+  // interruptAfter["identificar_assistido_confirmar"] pausa aqui — aguarda sim/não
+  .addConditionalEdges("identificar_assistido_confirmar", identificarAssistidoConfirmarRoute, {
+    sim: "identificar_assistido_usar_cadastro",
+    nao: "identificar_assistido_cadastrar", // nome não bateu: recadastra (update)
+  })
+  .addEdge("identificar_assistido_usar_cadastro", "verificar_caso_aberto")
+
+  // interruptAfter["identificar_assistido_oferecer_cadastro"] pausa aqui — aguarda sim/não
+  .addConditionalEdges("identificar_assistido_oferecer_cadastro", identificarAssistidoOfertaRoute, {
+    sim: "identificar_assistido_cadastrar",
+    // "não" (recusa cadastro): segue sem vincular Assistido — dadosColetados
+    // fica vazio e os nodes de coleta tardios perguntam tudo normalmente.
+    nao: "primeira_mensagem",
+  })
+
+  // Cascata de cadastro (nome + endereço + telefone + email) — loop próprio,
+  // não passa pelo extrator/roteador compartilhados (ver comentário no arquivo).
+  // interruptAfter["identificar_assistido_cadastrar"] pausa aqui — aguarda a resposta
+  .addEdge("identificar_assistido_cadastrar", "identificar_assistido_cadastrar_capturar")
+  .addConditionalEdges("identificar_assistido_cadastrar_capturar", identificarAssistidoCadastrarRoute, {
+    proxima:  "identificar_assistido_cadastrar",
+    completo: "identificar_assistido_salvar",
+  })
+  .addEdge("identificar_assistido_salvar", "verificar_caso_aberto")
+
+  // Caso em aberto: verificarCasoAberto decide (sem pausar) se há pergunta a
+  // fazer; só interrompe no node-âncora "aguardar" quando há caso de fato.
+  .addConditionalEdges("verificar_caso_aberto", verificarCasoAbertoDispatch, {
+    aguardar: "verificar_caso_aberto_aguardar",
+    sem_caso: "primeira_mensagem",
+  })
+  // interruptAfter["verificar_caso_aberto_aguardar"] pausa aqui — aguarda sim/não
+  .addConditionalEdges("verificar_caso_aberto_aguardar", verificarCasoAbertoRoute, {
+    confirmado:    "caso_confirmado",
+    outro_assunto: "primeira_mensagem",
+  })
+  // "sim, é sobre esse caso": não repete a triagem — vai direto pra próxima
+  // pergunta pendente do serviço mapeado a partir de Caso.tipo.
+  .addConditionalEdges("caso_confirmado", roteador, DESTINOS_ROTEADOR)
 
   // ── Triagem + confirmação + extração inicial do contexto ────────────────
   // interruptAfter["primeira_mensagem"] pausa aqui — aguarda descrição do caso
@@ -129,6 +217,12 @@ export const graph = new StateGraph(GraphAnnotation)
     checkpointer,
     interruptAfter: [
       "lgpd",
+      "identificar_assistido",
+      "identificar_assistido_invalido",
+      "identificar_assistido_confirmar",
+      "identificar_assistido_oferecer_cadastro",
+      "identificar_assistido_cadastrar",
+      "verificar_caso_aberto_aguardar",
       "primeira_mensagem",
       "triagem_confirmar",
       "triagem_escolher",
