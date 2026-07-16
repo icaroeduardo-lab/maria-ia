@@ -30,13 +30,7 @@ import {
   verificarCasoAbertoRoute,
   casoConfirmado,
 } from "./nodes/onboarding/verificar-caso-aberto.js";
-import {
-  triagem,
-  triagemConfirmar,
-  triagemConfirmarRoute,
-  triagemEscolher,
-  triagemCapturarEscolha,
-} from "./nodes/atendimento/triagem.js";
+import { triagem } from "./nodes/atendimento/triagem.js";
 import { informativo } from "./nodes/atendimento/informativo.js";
 import { extrator } from "./nodes/atendimento/extrator.js";
 import { enviarDados } from "./nodes/atendimento/enviar-dados.js";
@@ -100,9 +94,6 @@ export const graph = new StateGraph(GraphAnnotation)
   .addNode("caso_confirmado",                casoConfirmado)
   .addNode("primeira_mensagem",  primeiraMensagem)
   .addNode("triagem",            triagem)
-  .addNode("triagem_confirmar",       triagemConfirmar)
-  .addNode("triagem_escolher",        triagemEscolher)
-  .addNode("triagem_capturar_escolha", triagemCapturarEscolha)
   .addNode("extrator_inicial",   extrator)
   .addNode("informativo",        informativo)
   .addNode("extrator",           extrator)
@@ -183,18 +174,10 @@ export const graph = new StateGraph(GraphAnnotation)
   // pergunta pendente do serviço mapeado a partir de Caso.tipo.
   .addConditionalEdges("caso_confirmado", roteador, DESTINOS_ROTEADOR)
 
-  // ── Triagem + confirmação + extração inicial do contexto ────────────────
+  // ── Triagem + extração inicial do contexto ─────────────────────────────
   // interruptAfter["primeira_mensagem"] pausa aqui — aguarda descrição do caso
   .addEdge("primeira_mensagem", "triagem")
-  .addEdge("triagem", "triagem_confirmar")
-  // interruptAfter["triagem_confirmar"] pausa aqui — aguarda sim/não
-  .addConditionalEdges("triagem_confirmar", triagemConfirmarRoute, {
-    confirmado: "extrator_inicial",
-    corrigir:   "triagem_escolher",
-  })
-  // interruptAfter["triagem_escolher"] pausa aqui — aguarda escolha da lista
-  .addEdge("triagem_escolher", "triagem_capturar_escolha")
-  .addEdge("triagem_capturar_escolha", "extrator_inicial")
+  .addEdge("triagem", "extrator_inicial")
   .addEdge("extrator_inicial", "informativo")
   .addConditionalEdges("informativo", roteador, DESTINOS_ROTEADOR)
 
@@ -224,8 +207,6 @@ export const graph = new StateGraph(GraphAnnotation)
       "identificar_assistido_cadastrar",
       "verificar_caso_aberto_aguardar",
       "primeira_mensagem",
-      "triagem_confirmar",
-      "triagem_escolher",
       "familia_pensao",
       "trabalhista",
       "inss",
