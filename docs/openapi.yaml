@@ -169,6 +169,51 @@ components:
               identificador: { type: string }
               tipo: { type: string }
         lista: { type: string }
+    PessoaPresaConsultaResp:
+      type: object
+      required: [encontrado, situacao, nome, tipoPreso, regime, idPessoa, idSeap]
+      properties:
+        encontrado: { type: boolean }
+        situacao: { type: string, description: "ATIVO | LIBERTADO | FORAGIDO | EGRESSO | EVADIDO | ... (\"nao_encontrado\" se não achou)" }
+        nome: { type: string }
+        tipoPreso: { type: string, description: "CONDENADO | SENTENCIADO | PROVISORIO | ..." }
+        regime: { type: string }
+        idPessoa: { type: string, description: "usado em GET /api/pessoa-presa/casos?idPessoaPresa=" }
+        idSeap: { type: string, description: "usado em GET /api/pessoa-presa/orgao-responsavel(-liberto)?idSeap=" }
+    PessoaPresaProcessoResp:
+      type: object
+      required: [encontrado, numero, origem, idProcesso]
+      properties:
+        encontrado: { type: boolean }
+        numero: { type: string }
+        origem: { type: string, description: "ex: SEEU" }
+        idProcesso: { type: string }
+    PessoaPresaCasosResp:
+      type: object
+      required: [tem_casos, status, casos, lista]
+      properties:
+        tem_casos: { type: boolean }
+        status: { type: string, description: "\"ABERTO\" (literal, comparado pelo nó condicao) ou \"\" se não há caso aberto" }
+        casos:
+          type: array
+          items:
+            type: object
+            properties:
+              identificador: { type: string }
+              tipo: { type: string }
+        lista: { type: string }
+    PessoaPresaOrgaoResp:
+      type: object
+      required: [status, orgao]
+      properties:
+        status: { type: string, description: "\"encontrado\" (literal, comparado pelo nó condicao) ou \"nao_encontrado\"" }
+        orgao:
+          type: object
+          nullable: true
+          properties:
+            nome: { type: string }
+            telefone: { type: string }
+            endereco: { type: string }
     CpfReq:
       type: object
       required: [cpf]
@@ -907,6 +952,62 @@ paths:
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ResumoReq' } } } }
       responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/ResumoResp' } } } } }
+  /api/pessoa-presa/consultar-rg:
+    get:
+      tags: [Interno (fluxo)]
+      summary: "Dados do apenado por RG (\"API fake\" — SEAP/apenado real ainda não existe)"
+      security: []
+      parameters:
+        - { in: query, name: rg, required: true, schema: { type: string }, description: "somente dígitos" }
+      responses:
+        "200":
+          description: Resposta FLAT (sem aninhar em "dados") — bate com {{dados_apenado.*}} do fluxo
+          content: { application/json: { schema: { $ref: '#/components/schemas/PessoaPresaConsultaResp' } } }
+  /api/pessoa-presa/consultar-processo:
+    get:
+      tags: [Interno (fluxo)]
+      summary: "Origem + id do processo por número (\"API fake\")"
+      security: []
+      parameters:
+        - { in: query, name: numero, required: true, schema: { type: string }, description: "somente dígitos" }
+      responses:
+        "200":
+          description: "{ encontrado, numero, origem, idProcesso }"
+          content: { application/json: { schema: { $ref: '#/components/schemas/PessoaPresaProcessoResp' } } }
+  /api/pessoa-presa/casos:
+    get:
+      tags: [Interno (fluxo)]
+      summary: "Casos abertos da pessoa presa (\"API fake\")"
+      security: []
+      parameters:
+        - { in: query, name: idPessoaPresa, required: true, schema: { type: string }, description: "dados_apenado.idPessoa" }
+      responses:
+        "200":
+          description: "status = \"ABERTO\" (literal) quando há caso aberto — cond_status_caso compara isso"
+          content: { application/json: { schema: { $ref: '#/components/schemas/PessoaPresaCasosResp' } } }
+  /api/pessoa-presa/orgao-responsavel:
+    get:
+      tags: [Interno (fluxo)]
+      summary: "Órgão responsável pelo réu PRESO (\"API fake\")"
+      security: []
+      parameters:
+        - { in: query, name: idSeap, required: true, schema: { type: string }, description: "dados_apenado.idSeap" }
+        - { in: query, name: preferencia, schema: { type: string }, description: "preferência de atendimento (remoto/presencial) — ainda não usada pra escolher órgão" }
+      responses:
+        "200":
+          description: "status = \"encontrado\" (literal) quando há órgão vinculado — cond_tem_orgao compara isso"
+          content: { application/json: { schema: { $ref: '#/components/schemas/PessoaPresaOrgaoResp' } } }
+  /api/pessoa-presa/orgao-responsavel-liberto:
+    get:
+      tags: [Interno (fluxo)]
+      summary: "Órgão responsável pelo réu LIBERTO (\"API fake\")"
+      security: []
+      parameters:
+        - { in: query, name: idSeap, required: true, schema: { type: string }, description: "dados_apenado.idSeap" }
+      responses:
+        "200":
+          description: "status = \"encontrado\" (literal) quando há órgão vinculado — cond_tem_orgao compara isso"
+          content: { application/json: { schema: { $ref: '#/components/schemas/PessoaPresaOrgaoResp' } } }
   /api/ficha:
     post:
       tags: [Interno (fluxo)]

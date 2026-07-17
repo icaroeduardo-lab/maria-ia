@@ -166,3 +166,51 @@ model Caso {
 
   @@index([assistidoId, status])
 }
+
+// PessoaPresa = "API fake" provisória pro subfluxo "Pessoa Presa" — substitui os
+// nós `api` do fluxo que apontavam pra URLs inventadas (sem integração SEAP real
+// ainda). Mesmo papel do model Assistido, mas pro apenado consultado pelo RG.
+// idPessoa/idSeap espelham os identificadores que o sistema de origem (SEAP)
+// devolveria — usados pelo fluxo pra encadear as chamadas seguintes (casos,
+// órgão responsável) sem precisar re-consultar por RG.
+model PessoaPresa {
+  id           String            @id @default(cuid())
+  rg           String            @unique // documento da pessoa presa, somente dígitos — chave de busca do fluxo
+  nome         String
+  situacao     String // ATIVO | LIBERTADO | FORAGIDO | EGRESSO | EVADIDO | EM VPF | EM RESDOM | EM TRABALHO EXTRAMURO | EM BAIXA HOSPITALAR | EM VPL HARMONIZADA | EM ABERTO-DOMICILIO COVID-19
+  tipoPreso    String // CONDENADO | SENTENCIADO | PROVISORIO | ...
+  regime       String? // fechado | semiaberto | aberto
+  idPessoa     String            @unique // id da pessoa no sistema de origem — usado pra consultar casos
+  idSeap       String            @unique // id estável no SEAP — usado pra consultar o órgão responsável
+  orgaoPreso   Json? // { nome, telefone, endereco } do órgão responsável enquanto ainda presa (null = sem órgão vinculado)
+  orgaoLiberto Json? // idem, órgão responsável depois de liberada (réu solto)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  casos        CasoPessoaPresa[]
+}
+
+// Caso jurídico da pessoa presa (equivalente a Caso, mas pro subfluxo Pessoa
+// Presa). status em maiúsculas ("ABERTO") porque é o valor literal comparado
+// pelo nó `condicao` do fluxo (cond_status_caso, campo casos_pessoa_presa.status).
+model CasoPessoaPresa {
+  id            String      @id @default(cuid())
+  identificador String
+  tipo          String
+  status        String      @default("ABERTO") // "ABERTO" | "ENCERRADO"
+  pessoaPresaId String
+  pessoaPresa   PessoaPresa @relation(fields: [pessoaPresaId], references: [id], onDelete: Cascade)
+  criadoEm      DateTime    @default(now())
+
+  @@index([pessoaPresaId, status])
+}
+
+// Processo vinculado à pessoa presa, consultado por número (nó api_processo).
+// Sem relação direta com PessoaPresa — o fluxo consulta o processo ANTES do RG
+// (ver ordem dos nós), então não há como linkar de antemão.
+model ProcessoPessoaPresa {
+  id         String   @id @default(cuid())
+  numero     String   @unique // somente dígitos, como informado pelo assistido
+  origem     String // sistema de origem do processo, ex: "SEEU"
+  idProcesso String
+  createdAt  DateTime @default(now())
+}

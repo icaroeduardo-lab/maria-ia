@@ -14,6 +14,7 @@ import { adminRoutes } from "./routes/admin.js";
 import { verificarDb, verificarTokenWhatsApp } from "../core/health.js";
 import { mockRoutes } from "./routes/mock.js";
 import { assistidosFlowRoutes } from "./routes/assistidos.js";
+import { pessoaPresaFlowRoutes } from "./routes/pessoa-presa.js";
 import { fichaRoutes } from "./routes/ficha.js";
 import { kycRoutes } from "./routes/kyc.js";
 import { processosRoutes } from "./routes/processos.js";
@@ -89,6 +90,7 @@ export async function montarApp(opts: MontarAppOpts = {}) {
   await app.register(adminRoutes, { prefix: "/admin" });
   await app.register(mockRoutes);
   await app.register(assistidosFlowRoutes);
+  await app.register(pessoaPresaFlowRoutes);
   await app.register(fichaRoutes);
   await app.register(kycRoutes);
   await app.register(processosRoutes);
