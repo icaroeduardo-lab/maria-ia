@@ -822,8 +822,14 @@ paths:
         sim_nao/opcoes/texto/null), resolvido contra o flow informado (ou o
         registro estático se flowId for omitido) — o painel usa esse campo pra
         decidir o widget de resposta (ex: upload em vez de texto livre).
+        Também inclui trilha: lista ordenada dos ids de node do flow visitados
+        na sessão (do primeiro até o nó atual/pausado) — atravessa subfluxos
+        embutidos naturalmente (ids prefixados sf_<node>_<idOriginal>). Vazio
+        quando flowId é omitido (grafo estático, sem canvas) ou após reiniciar
+        a sessão (novo sessionId ou #sair). Alimenta o destaque da trajetória
+        no canvas do builder visual.
       responses:
-        "200": { description: "{ messages, done, dadosColetados, tipoPerguntaPendente, resumo?, metadados? }" }
+        "200": { description: "{ messages, done, dadosColetados, tipoPerguntaPendente, trilha, resumo?, metadados? }" }
         "404": { description: Fluxo não encontrado }
         "422": { description: Flow inválido (falha ao compilar) }
   /admin/test-chat/upload:
@@ -834,7 +840,7 @@ paths:
         Sem Conversation (chat de teste não cria uma) — auth é JWT admin
         (exigirAdmin), sem rate limit. Magic bytes decidem o mimetype real;
         avança o mesmo thread do chat de teste (test:<flowId>:<sessionId>) e
-        devolve o mesmo shape de /admin/test-chat.
+        devolve o mesmo shape de /admin/test-chat (incluindo trilha).
       requestBody:
         content:
           multipart/form-data:
@@ -846,7 +852,7 @@ paths:
                 flowId: { type: string, description: "flow de teste (opcional — omitido usa o grafo estático)" }
                 file: { type: string, format: binary, description: "jpeg/png/PDF, máx 10MB" }
       responses:
-        "200": { description: "{ messages, done, dadosColetados, tipoPerguntaPendente }" }
+        "200": { description: "{ messages, done, dadosColetados, tipoPerguntaPendente, trilha }" }
         "400": { description: sessionId ou arquivo ausente }
         "404": { description: Fluxo não encontrado }
         "413": { description: Arquivo grande demais }

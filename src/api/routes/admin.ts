@@ -722,6 +722,10 @@ export async function adminRoutes(app: FastifyInstance) {
     const coletados = (v.dadosColetados ?? {}) as Record<string, unknown>;
     const chavePendente = v.ultimaPergunta as string | undefined;
     const tipoPerguntaPendente = !done && chavePendente ? resolverTipoPergunta(chavePendente, flowNodes) : null;
+    // trilha de execução (issue #93): ids dos nodes do flow visitados, em
+    // ordem — alimenta o destaque da trajetória no canvas do builder (front
+    // #125). Vazio no grafo estático (flowId omitido — sem canvas p/ destacar).
+    const trilha = (v.trilhaExecutada as string[] | undefined) ?? [];
 
     // ao encerrar, devolve resumo + metadados limpos (pra visualizar o fechamento)
     let resumo: string | undefined;
@@ -736,6 +740,7 @@ export async function adminRoutes(app: FastifyInstance) {
       done,
       dadosColetados: coletados,
       tipoPerguntaPendente,
+      trilha,
       ...(resumo !== undefined && { resumo }),
       ...(metadados !== undefined && { metadados }),
     };
@@ -764,6 +769,7 @@ export async function adminRoutes(app: FastifyInstance) {
         done: true,
         dadosColetados: {},
         tipoPerguntaPendente: null,
+        trilha: [],
       };
     }
 

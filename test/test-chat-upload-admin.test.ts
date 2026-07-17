@@ -89,6 +89,21 @@ test("tipoPerguntaPendente entra na resposta de /test-chat via montarRespostaTes
   assert.match(handlerUpload, /montarRespostaTeste\(/, "/test-chat/upload deve reusar o helper");
 });
 
+test("trilha (issue #93) entra na resposta de /test-chat via montarRespostaTeste e é zerada ao reiniciar", () => {
+  const idxHelper = src.indexOf("async function montarRespostaTeste(");
+  const idxFimHelper = src.indexOf("\n  }\n", idxHelper);
+  const helper = src.slice(idxHelper, idxFimHelper);
+  assert.match(helper, /trilhaExecutada/, "helper deve ler trilhaExecutada do estado do grafo (state.ts)");
+  assert.match(helper, /trilha,/, "helper deve incluir trilha no objeto de resposta");
+
+  // comando de reinício (#sair) apaga o checkpoint e devolve trilha vazia —
+  // consistente com o critério de aceitação "nova sessão zera a trajetória"
+  const idxReinicio = src.indexOf("COMANDO_REINICIAR) {");
+  const idxFimReinicio = src.indexOf("\n    }\n", idxReinicio);
+  const blocoReinicio = src.slice(idxReinicio, idxFimReinicio);
+  assert.match(blocoReinicio, /trilha:\s*\[\]/, "resposta do reinício deve zerar a trilha");
+});
+
 test("/test-chat/upload usa magic bytes (mimeReal) ANTES de salvarDocumento — mesmo padrão da #74", () => {
   const idxUpload = src.indexOf('app.post("/test-chat/upload",');
   const idxFimUpload = src.indexOf("\n  });\n", idxUpload);

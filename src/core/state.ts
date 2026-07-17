@@ -27,6 +27,14 @@ export const GraphAnnotation = Annotation.Root({
     value: (a, b) => ({ ...a, ...b }),
     default: () => ({}),
   }),
+  // ids dos nodes do flow (builder visual) visitados, na ordem de execução —
+  // append-only (sem dedupe: um node de loop, ex subgrafo, pode repetir).
+  // Alimenta a trilha do canvas no chat de teste (issue #93); gravado no
+  // wrapper central de builder.addNode em engine/builder.ts, não em cada node.
+  trilhaExecutada: Annotation<string[]>({
+    value: (a, b) => [...a, ...b],
+    default: () => [],
+  }),
 });
 
 export type GraphState = typeof GraphAnnotation.State;
