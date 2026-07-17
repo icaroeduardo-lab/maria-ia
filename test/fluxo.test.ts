@@ -58,11 +58,13 @@ test("fluxo pergunta → captura → encerrar (multi-turn com interrupt)", async
   assert.match(textos(r1), /Olá!/);
   assert.match(textos(r1), /Qual seu nome\?/);
   assert.equal(r1.dadosColetados.nome, undefined);
+  assert.deepEqual(r1.trilhaExecutada, ["boas", "p_nome"], "trilha (issue #93) acumula ids do flow em ordem, sem os auxiliares gate_/cap_");
 
   // 2º turno: resume com a resposta → captura + encerramento com protocolo
   const r2 = await responder(graph, cfg, "Maria da Silva");
   assert.equal(r2.dadosColetados.nome, "Maria da Silva");
   assert.ok(r2.protocolo, "encerramento deve gerar protocolo (modo mock)");
+  assert.deepEqual(r2.trilhaExecutada, ["boas", "p_nome", "fim"], "trilha cresce a cada turno, acumulando sobre o checkpoint");
 });
 
 test("skip-gate: pergunta com chave já preenchida é pulada", async () => {
@@ -88,6 +90,30 @@ test("skip-gate: pergunta com chave já preenchida é pulada", async () => {
   assert.doesNotMatch(textos(r1), /Qual seu nome\?/);
   assert.match(textos(r1), /Qual sua idade\?/);
   assert.equal(r1.dadosColetados.nome, "João");
+  assert.deepEqual(r1.trilhaExecutada, ["seta", "p_idade"], "p_nome pulado pelo gate não entra na trilha (issue #93)");
+});
+
+test("nova sessão (thread_id novo) começa com trilha vazia — reiniciar zera a trajetória", async () => {
+  const flow: FlowJSON = {
+    id: "t2b",
+    nodes: [
+      { id: "p_nome", type: "pergunta", data: { texto: "Qual seu nome?", chave: "nome", semReescrita: true } },
+      { id: "fim", type: "encerrar", data: {} },
+    ],
+    edges: [{ id: "e1", source: "p_nome", target: "fim" }],
+  };
+  const graph = buildGraphFromFlow(flow);
+
+  const cfgA = config();
+  await graph.invoke({}, cfgA);
+  const rA = await responder(graph, cfgA, "Ana");
+  assert.deepEqual(rA.trilhaExecutada, ["p_nome", "fim"]);
+
+  // thread_id diferente (equivalente a novo sessionId em /admin/test-chat) →
+  // checkpoint novo, sem histórico da sessão anterior
+  const cfgB = config();
+  const rB = await graph.invoke({}, cfgB);
+  assert.deepEqual(rB.trilhaExecutada, ["p_nome"], "sessão nova não herda a trilha de outra thread");
 });
 
 test("condicao roteia pelo valor capturado (sim/não)", async () => {
@@ -333,14 +359,26 @@ test("subfluxo aninhado (subfluxo dentro de subfluxo) expande e roda até o fim"
 
   const r1 = await graph.invoke({}, cfg);
   assert.match(textos(r1), /Seu nome\?/);
+  assert.deepEqual(r1.trilhaExecutada, ["p_nome"]);
 
   const r2 = await responder(graph, cfg, "Maria");
   assert.match(textos(r2), /Qual detalhe\?/, "deve alcançar a pergunta DENTRO do subfluxo aninhado (2º nível)");
+  // trilha (issue #93) atravessa o subfluxo naturalmente: o node de pergunta
+  // expandido entra com seu id prefixado (sf_<subfluxoNode>_...), igual ao
+  // que ultimaPergunta/dadosColetados já usam — front resolve contra o
+  // canvas do sub-flow "tema" usando esse mesmo id
+  assert.equal(r2.trilhaExecutada.length, 2);
+  assert.equal(r2.trilhaExecutada[0], "p_nome");
+  assert.match(r2.trilhaExecutada[1], /^sf_.*_p_detalhe$/, "id do node de pergunta do sub-flow aninhado, prefixado");
 
   const r3 = await responder(graph, cfg, "urgente");
   assert.equal(r3.dadosColetados.detalhe, "urgente");
   assert.match(textos(r3), /Detalhe: urgente/);
   assert.ok(r3.protocolo, "deve sair do aninhamento e chegar no encerrar do flow top-level");
+  assert.equal(r3.trilhaExecutada.length, 4, "p_nome, pergunta e mensagem do sub-flow aninhado, encerrar do top-level");
+  assert.equal(r3.trilhaExecutada[0], "p_nome");
+  assert.equal(r3.trilhaExecutada[3], "fim");
+  assert.match(r3.trilhaExecutada[2], /^sf_.*_m_confirma$/, "id do node de mensagem do sub-flow aninhado, prefixado");
 });
 
 // ── nó api genérico (Coilab #20260115): rota erro, corpo seletivo, secrets ────

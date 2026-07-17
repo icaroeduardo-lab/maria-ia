@@ -476,7 +476,11 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
     const fnNode = criarNode(node, ctx);
     builder.addNode(node.id, async (state: GraphState) => {
       registrarVisitaNode(flow.id, node.id);
-      return fnNode(state);
+      const resultado = await fnNode(state);
+      // trilha de execução (issue #93): ponto central único — cobre todos os
+      // tipos de node, incluindo ids prefixados de subfluxo expandido, sem
+      // precisar duplicar em cada case de criarNode()
+      return { ...resultado, trilhaExecutada: [node.id] };
     });
     if (node.type === "pergunta") {
       builder.addNode(`gate_${node.id}`, async () => ({})); // no-op; decisão na conditional edge
