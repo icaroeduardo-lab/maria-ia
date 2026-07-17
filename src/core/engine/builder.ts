@@ -54,6 +54,7 @@ export interface FlowNode {
     valor?: string;            // atribuir
     ctaUrl?: string;           // mensagem: botão que abre link (interpolável, ex: {{kyc.url}})
     ctaTexto?: string;         // mensagem: rótulo do botão cta_url (<=20 chars)
+    nota?: string;             // qualquer tipo: anotação livre do editor — engine ignora em runtime
   };
 }
 

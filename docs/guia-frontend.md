@@ -61,6 +61,8 @@ Editor de grafo (ex: React Flow). O flow é JSON `{ nodes, edges }`:
 
 `tipoPergunta`: `texto` \| `sim_nao` \| `opcoes` \| `cpf` \| `telefone` \| `cep` \| `data`
 
+**Campo comum a todos os tipos**: `nota` (string, opcional) — anotação livre pro editor (ex: "API fake, ajustar quando endpoint real existir"). Engine ignora em runtime, é só metadado. No canvas, nó com `nota` preenchida mostra indicador visual; hover exibe o texto.
+
 **Regras de fiação que o builder DEVE respeitar/exibir:**
 - Edges saindo de `condicao`/`classificar` usam `label` como valor esperado;
   `"*"` (ou sem label) = rota default.
