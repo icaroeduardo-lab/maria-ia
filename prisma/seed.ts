@@ -92,6 +92,93 @@ if ((await prisma.caso.count({ where: { assistidoId: carlos.id } })) === 0) {
   });
 }
 
+// Pessoa Presa (subfluxo "Pessoa Presa") — "API fake" provisória enquanto a
+// integração real com SEAP/apenado não existe. idPessoa/idSeap fixos (não
+// derivados aleatoriamente) pra idempotência entre execuções do seed.
+
+// Pedro — ATIVO (ainda preso), COM órgão responsável cadastrado (réu preso)
+await prisma.pessoaPresa.upsert({
+  where: { rg: "11111111111" },
+  update: {},
+  create: {
+    rg: "11111111111",
+    nome: "Pedro Henrique Souza Lima",
+    situacao: "ATIVO",
+    tipoPreso: "CONDENADO",
+    regime: "fechado",
+    idPessoa: "PES-0001",
+    idSeap: "SEAP-0001",
+    orgaoPreso: {
+      nome: "Defensoria Pública — Núcleo de Execução Penal",
+      telefone: "2121234567",
+      endereco: "Rua da Defensoria, 100 - Rio de Janeiro/RJ",
+    },
+  },
+});
+
+// Marcos — ATIVO (ainda preso), SEM órgão responsável cadastrado (testa "não encontrado")
+await prisma.pessoaPresa.upsert({
+  where: { rg: "22222222222" },
+  update: {},
+  create: {
+    rg: "22222222222",
+    nome: "Marcos Antônio Ferreira",
+    situacao: "ATIVO",
+    tipoPreso: "PROVISORIO",
+    regime: null,
+    idPessoa: "PES-0002",
+    idSeap: "SEAP-0002",
+  },
+});
+
+// Juliana — LIBERTADA, SEM casos em aberto (de propósito — testa o braço "*"
+// do cond_status_caso, que cai em api_orgao_liberto), COM órgão responsável
+await prisma.pessoaPresa.upsert({
+  where: { rg: "33333333333" },
+  update: {},
+  create: {
+    rg: "33333333333",
+    nome: "Juliana Alves Pereira",
+    situacao: "LIBERTADO",
+    tipoPreso: "SENTENCIADO",
+    regime: "aberto",
+    idPessoa: "PES-0003",
+    idSeap: "SEAP-0003",
+    orgaoLiberto: {
+      nome: "Defensoria Pública — Núcleo de Cidadania (egressos)",
+      telefone: "2129876543",
+      endereco: "Av. Presidente Vargas, 500 - Rio de Janeiro/RJ",
+    },
+  },
+});
+
+// Carla — LIBERTADA, COM 1 caso em aberto (testa cond_status_caso === "ABERTO")
+const carla = await prisma.pessoaPresa.upsert({
+  where: { rg: "44444444444" },
+  update: {},
+  create: {
+    rg: "44444444444",
+    nome: "Carla Regina Oliveira Santos",
+    situacao: "LIBERTADO",
+    tipoPreso: "SENTENCIADO",
+    regime: "aberto",
+    idPessoa: "PES-0004",
+    idSeap: "SEAP-0004",
+  },
+});
+if ((await prisma.casoPessoaPresa.count({ where: { pessoaPresaId: carla.id } })) === 0) {
+  await prisma.casoPessoaPresa.create({
+    data: { pessoaPresaId: carla.id, identificador: "0812345-11.2025.8.19.0001", tipo: "Execução penal", status: "ABERTO" },
+  });
+}
+
+// Processo de teste, vinculado à Pedro (numero informado manualmente no fluxo)
+await prisma.processoPessoaPresa.upsert({
+  where: { numero: "08012340020258190001" },
+  update: {},
+  create: { numero: "08012340020258190001", origem: "SEEU", idProcesso: "PROC-0001" },
+});
+
 // Fluxos (exportados em flows.seed.json) — upsert por id preserva refs de subfluxo
 interface FlowSeed { id: string; name: string; active: boolean; nodes: object[]; edges: object[] }
 const flows = JSON.parse(readFileSync(join(__dirname, "flows.seed.json"), "utf-8")) as FlowSeed[];
@@ -146,5 +233,5 @@ for (const t of TEMPLATES) {
   });
 }
 
-console.log(`Seed ok — admin ${email}; ${flows.length} fluxos; ${TEMPLATES.length} templates; assistidos: 00000000000 (2 casos), 11144477735 (Maria, s/ casos), 52998224725 (Carlos, 1 caso)`);
+console.log(`Seed ok — admin ${email}; ${flows.length} fluxos; ${TEMPLATES.length} templates; assistidos: 00000000000 (2 casos), 11144477735 (Maria, s/ casos), 52998224725 (Carlos, 1 caso); pessoas presas: RG 11111111111 (ATIVO, c/ órgão), 22222222222 (ATIVO, s/ órgão), 33333333333 (LIBERTADO, s/ caso), 44444444444 (LIBERTADO, 1 caso)`);
 await prisma.$disconnect();

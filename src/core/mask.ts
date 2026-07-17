@@ -7,6 +7,12 @@ export const mascararCpf = (v?: string | null): string => {
   return `•••.•••.••${d.slice(8, 9)}-••`;
 };
 
+// RG (documento da pessoa presa) — mesmo padrão do CPF: só os 2 últimos dígitos.
+export const mascararRg = (v?: string | null): string => {
+  const d = (v ?? "").replace(/\D/g, "");
+  return d.length >= 2 ? `•••••${d.slice(-2)}` : v ? "•••••" : "";
+};
+
 export const mascararTelefone = (v?: string | null): string => {
   const d = (v ?? "").replace(/\D/g, "");
   return d.length >= 2 ? `••••••${d.slice(-2)}` : v ? "••••" : "";
