@@ -42,6 +42,25 @@ Não têm tabela clara pra mockar ainda (agenda/vaga é mais dinâmico que
 cadastro de pessoa presa — precisaria de um modelo de disponibilidade, não só
 registro fixo). Avaliar quando for a vez de implementar.
 
+## Fluxo: Plantão (reutilizável)
+
+`fluxoId`: ver card Coilab #20260165. Extraído do legado "Violência Doméstica" — a mesma lógica de escala de plantão aparece em `Novo caso.json` e `Falar de um processo_intimação` também, por isso virou subfluxo próprio em vez de embutido.
+
+| Nó | Rota real (fake) | Retorna |
+|---|---|---|
+| `pl_consultar` | `GET /api/plantao/vigente` | `{status, orgao: {nome, telefone, endereco, municipio, tipo}}` |
+
+Simplificação em relação ao legado: lá, `/plantao/vigente` retornava até 4
+plantões concorrentes (idPlantao0..3) e o fluxo fazia cascata de ifs +
+checagem de tipo "MUNICIPAL" (não conta como urgência de plantão de
+verdade). Aqui a rota já resolve isso — retorna o primeiro plantão ativo
+com tipo != MUNICIPAL, se existir. `status: "encontrado"` é o valor literal
+comparado pelo nó `condicao`.
+
+Dados de teste seedados (Prisma `PlantaoVigente`): um REGIONAL ativo (Rio de
+Janeiro) e um MUNICIPAL ativo (Niterói, não deve aparecer na rota já que é
+filtrado).
+
 ## Como substituir (checklist, baseado no que já foi feito)
 
 1. Model Prisma novo (schema + migration) — replicar padrão de `Assistido`/`PessoaPresa`.

@@ -214,6 +214,20 @@ components:
             nome: { type: string }
             telefone: { type: string }
             endereco: { type: string }
+    PlantaoOrgaoResp:
+      type: object
+      required: [status, orgao]
+      properties:
+        status: { type: string, description: "\"encontrado\" (literal, comparado pelo nó condicao) ou \"nao_encontrado\"" }
+        orgao:
+          type: object
+          nullable: true
+          properties:
+            nome: { type: string }
+            telefone: { type: string, nullable: true }
+            endereco: { type: string, nullable: true }
+            municipio: { type: string }
+            tipo: { type: string, description: "REGIONAL | CAPITAL — nunca MUNICIPAL (a rota já filtra)" }
     CpfReq:
       type: object
       required: [cpf]
@@ -1008,6 +1022,15 @@ paths:
         "200":
           description: "status = \"encontrado\" (literal) quando há órgão vinculado — cond_tem_orgao compara isso"
           content: { application/json: { schema: { $ref: '#/components/schemas/PessoaPresaOrgaoResp' } } }
+  /api/plantao/vigente:
+    get:
+      tags: [Interno (fluxo)]
+      summary: "Plantão vigente não-municipal (\"API fake\") — fluxo reutilizável Plantão"
+      security: []
+      responses:
+        "200":
+          description: "status = \"encontrado\" (literal) quando há plantão ativo com tipo != MUNICIPAL"
+          content: { application/json: { schema: { $ref: '#/components/schemas/PlantaoOrgaoResp' } } }
   /api/ficha:
     post:
       tags: [Interno (fluxo)]
