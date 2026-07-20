@@ -85,6 +85,18 @@ plugado aqui depois.
 Config única (liga/desliga manual via `RecessoVigente.ativo`, sem calendário
 forense real ainda) — seed cria desativado por padrão.
 
+## Fluxo: Falar de Processo/Intimação
+
+`fluxoId`: ver card Coilab #20260164. Reaproveita o subfluxo "Recesso" (ver acima).
+
+| Nó | URL fake atual | Método | Deveria fazer |
+|---|---|---|---|
+| `pi_consultar_processo` | `/api/processo/consultar?numero=...` | GET | Consulta processo pelo número — órgão julgador, assunto, última movimentação, origem. Espelha o legado `GET /processo/consultar/{numero}`. |
+| `pi_api_orgao` | `/api/processo/orgao-responsavel?numero=...&preferencia=...&urgencia=...` | GET | Busca o órgão responsável pelo processo, priorizando urgência quando há intimação recente (prazo). Espelha o legado `GET /orgao/atendimento-processual/{idProcesso}`. |
+| `pi_api_encaminhar` | `/api/processo/encaminhar` | POST | Envia o caso pro órgão responsável. Espelha o legado `POST /encaminhamento/encaminhar`. |
+
+**Ajuste de UX em relação ao legado**: a pergunta "tem dúvidas sobre o processo?" foi reescrita pra "quer que a Defensoria dê continuidade nesse processo (agendamento/encaminhamento)?" — no legado essa pergunta prometia tirar dúvida mas nunca capturava/respondia o conteúdo, só decidia se continuava. Se quiser capturar a dúvida de verdade no futuro, dá pra trocar por pergunta livre + nó `ia` (RAG já disponível no engine).
+
 ## Como substituir (checklist, baseado no que já foi feito)
 
 1. Model Prisma novo (schema + migration) — replicar padrão de `Assistido`/`PessoaPresa`.
