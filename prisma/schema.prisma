@@ -234,3 +234,16 @@ model PlantaoVigente {
   ativo     Boolean  @default(true)
   createdAt DateTime @default(now())
 }
+
+// RecessoVigente = "API fake" provisória pro fluxo reutilizável "Recesso"
+// (recesso forense — período em que os tribunais/DPERJ reduzem expediente).
+// Aparece em pelo menos 4 fluxos legados (Falar de processo/intimação, Novo
+// caso, Pessoa presa, Disponibilizar opções) — fluxo próprio no Orquestrador.
+// Config única (linha só, sem chave de busca) — liga/desliga manualmente
+// enquanto não há integração real com o calendário forense.
+model RecessoVigente {
+  id        String   @id @default(cuid())
+  ativo     Boolean  @default(false)
+  mensagem  String? // mostrada ao assistido quando ativo=true
+  updatedAt DateTime @updatedAt
+}

@@ -74,6 +74,17 @@ Endereço da assistida foi deliberadamente deixado de fora desta versão —
 vai virar fluxo próprio ("Informar endereço", ainda não migrado) e será
 plugado aqui depois.
 
+## Fluxo: Recesso (reutilizável)
+
+`fluxoId`: ver card Coilab (a criar). Extraído do legado "Falar de um processo/intimação" — mesma lógica aparece em `Novo caso.json`, `Pessoa presa.json` e `Disponibilizar opções.json`.
+
+| Nó | Rota real (fake) | Retorna |
+|---|---|---|
+| `rc_consultar` | `GET /api/recesso/vigente` | `{status: "SEM_RECESSO_VIGENTE"\|"RECESSO_VIGENTE", mensagem}` |
+
+Config única (liga/desliga manual via `RecessoVigente.ativo`, sem calendário
+forense real ainda) — seed cria desativado por padrão.
+
 ## Como substituir (checklist, baseado no que já foi feito)
 
 1. Model Prisma novo (schema + migration) — replicar padrão de `Assistido`/`PessoaPresa`.

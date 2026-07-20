@@ -16,6 +16,7 @@ import { mockRoutes } from "./routes/mock.js";
 import { assistidosFlowRoutes } from "./routes/assistidos.js";
 import { pessoaPresaFlowRoutes } from "./routes/pessoa-presa.js";
 import { plantaoFlowRoutes } from "./routes/plantao.js";
+import { recessoFlowRoutes } from "./routes/recesso.js";
 import { fichaRoutes } from "./routes/ficha.js";
 import { kycRoutes } from "./routes/kyc.js";
 import { processosRoutes } from "./routes/processos.js";
@@ -93,6 +94,7 @@ export async function montarApp(opts: MontarAppOpts = {}) {
   await app.register(assistidosFlowRoutes);
   await app.register(pessoaPresaFlowRoutes);
   await app.register(plantaoFlowRoutes);
+  await app.register(recessoFlowRoutes);
   await app.register(fichaRoutes);
   await app.register(kycRoutes);
   await app.register(processosRoutes);
