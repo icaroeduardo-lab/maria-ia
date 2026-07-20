@@ -53,8 +53,20 @@ if ((await prisma.caso.count({ where: { assistidoId: joao.id } })) === 0) {
   });
 }
 
-// Maria — cadastrada, SEM casos em aberto (testar o caminho "outro assunto")
-await prisma.assistido.upsert({
+// Agendamentos em aberto de exemplo pro João (só cria se ainda não houver) —
+// junto com os casos acima, cobre a combinação "tem os dois" no fluxo MariaIA.
+if ((await prisma.agendamento.count({ where: { assistidoId: joao.id } })) === 0) {
+  await prisma.agendamento.createMany({
+    data: [
+      { assistidoId: joao.id, tipo: "Atendimento inicial", data: new Date("2026-08-03T14:00:00-03:00"), local: "DPERJ — Núcleo Centro", status: "aberto" },
+      { assistidoId: joao.id, tipo: "Audiência", data: new Date("2026-08-17T10:30:00-03:00"), local: "Fórum Central", status: "aberto" },
+    ],
+  });
+}
+
+// Maria — cadastrada, SEM casos em aberto mas COM 1 agendamento (testa a
+// combinação "só agendamento" no fluxo MariaIA)
+const maria = await prisma.assistido.upsert({
   where: { cpf: "11144477735" },
   update: {},
   create: {
@@ -69,6 +81,11 @@ await prisma.assistido.upsert({
     email: "maria.costa@example.com",
   },
 });
+if ((await prisma.agendamento.count({ where: { assistidoId: maria.id } })) === 0) {
+  await prisma.agendamento.create({
+    data: { assistidoId: maria.id, tipo: "Reunião", data: new Date("2026-08-10T09:00:00-03:00"), local: "DPERJ — Núcleo Niterói", status: "aberto" },
+  });
+}
 
 // Carlos — cadastrado, COM 1 caso em aberto
 const carlos = await prisma.assistido.upsert({
@@ -252,5 +269,5 @@ for (const t of TEMPLATES) {
   });
 }
 
-console.log(`Seed ok — admin ${email}; ${flows.length} fluxos; ${TEMPLATES.length} templates; assistidos: 00000000000 (2 casos), 11144477735 (Maria, s/ casos), 52998224725 (Carlos, 1 caso); pessoas presas: RG 11111111111 (ATIVO, c/ órgão), 22222222222 (ATIVO, s/ órgão), 33333333333 (LIBERTADO, s/ caso), 44444444444 (LIBERTADO, 1 caso)`);
+console.log(`Seed ok — admin ${email}; ${flows.length} fluxos; ${TEMPLATES.length} templates; assistidos: 00000000000 (João, 2 casos + 2 agendamentos), 11144477735 (Maria, s/ casos, 1 agendamento), 52998224725 (Carlos, 1 caso, s/ agendamento); pessoas presas: RG 11111111111 (ATIVO, c/ órgão), 22222222222 (ATIVO, s/ órgão), 33333333333 (LIBERTADO, s/ caso), 44444444444 (LIBERTADO, 1 caso)`);
 await prisma.$disconnect();

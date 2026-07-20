@@ -254,6 +254,36 @@ components:
         status: { type: string }
         criadoEm: { type: string, format: date-time }
         assistido: { type: string }
+    AgendamentosConsultaResp:
+      type: object
+      properties:
+        tem_agendamentos: { type: boolean }
+        agendamentos:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              tipo: { type: string }
+              data: { type: string, format: date-time }
+              local: { type: string, nullable: true }
+        lista: { type: string, description: "texto formatado, 1 linha por agendamento" }
+    AgendamentoDetalheReq:
+      type: object
+      properties:
+        agendamento_sel: { type: string, description: "id completo ou índice (1,2,...)" }
+        agendamentos: { type: string, description: "JSON da consulta anterior (para mapear índice)" }
+    AgendamentoDetalheResp:
+      type: object
+      required: [encontrado]
+      properties:
+        encontrado: { type: boolean }
+        id: { type: string }
+        tipo: { type: string }
+        data: { type: string, format: date-time }
+        local: { type: string, nullable: true }
+        status: { type: string }
+        assistido: { type: string }
     ConfigIA:
       type: object
       description: Configuração global da IA (singleton id=default)
@@ -958,6 +988,20 @@ paths:
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CasoDetalheReq' } } } }
       responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/CasoDetalheResp' } } } } }
+  /api/agendamentos/consultar:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Agendamentos em aberto do assistido (tabela Agendamento)
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CpfReq' } } } }
+      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentosConsultaResp' } } } } }
+  /api/agendamentos/detalhe:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Detalhe de 1 agendamento (por id ou índice da lista anterior)
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDetalheReq' } } } }
+      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDetalheResp' } } } } }
   /api/processos/consultar:
     post:
       tags: [Interno (fluxo)]

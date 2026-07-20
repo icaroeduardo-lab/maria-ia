@@ -151,6 +151,7 @@ model Assistido {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   casos          Caso[]
+  agendamentos   Agendamento[]
 }
 
 // Caso jurídico do assistido (processo/atendimento). Usado para identificar
@@ -163,6 +164,22 @@ model Caso {
   assistidoId   String
   assistido     Assistido @relation(fields: [assistidoId], references: [id], onDelete: Cascade)
   criadoEm      DateTime  @default(now())
+
+  @@index([assistidoId, status])
+}
+
+// Agendamento do assistido (atendimento/audiência já marcado). Usado pra
+// identificar agendamentos em aberto na entrada do fluxo — mesmo papel de
+// Caso, mas pra compromissos marcados em vez de processos.
+model Agendamento {
+  id          String    @id @default(cuid())
+  tipo        String // "Atendimento inicial", "Audiência", "Reunião", ...
+  data        DateTime // data/hora marcada
+  local       String? // unidade/endereço
+  status      String    @default("aberto") // "aberto" | "cancelado" | "concluido"
+  assistidoId String
+  assistido   Assistido @relation(fields: [assistidoId], references: [id], onDelete: Cascade)
+  criadoEm    DateTime  @default(now())
 
   @@index([assistidoId, status])
 }
