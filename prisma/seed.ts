@@ -179,6 +179,17 @@ await prisma.processoPessoaPresa.upsert({
   create: { numero: "08012340020258190001", origem: "SEEU", idProcesso: "PROC-0001" },
 });
 
+// Plantão vigente (fluxo reutilizável "Plantão") — sem chave única natural,
+// então idempotência é por nomeOrgao (findFirst + create se não existir).
+const plantoesTeste = [
+  { tipo: "REGIONAL", municipio: "Rio de Janeiro", nomeOrgao: "Defensoria Pública — Plantão Regional Capital", telefone: "2121230000", endereco: "Av. Marechal Câmara, 314 - Rio de Janeiro/RJ", ativo: true },
+  { tipo: "MUNICIPAL", municipio: "Niterói", nomeOrgao: "Defensoria Pública — Plantão Municipal Niterói", telefone: "2126200000", endereco: "Rua Visc. de Sepetiba, 987 - Niterói/RJ", ativo: true },
+];
+for (const p of plantoesTeste) {
+  const existe = await prisma.plantaoVigente.findFirst({ where: { nomeOrgao: p.nomeOrgao } });
+  if (!existe) await prisma.plantaoVigente.create({ data: p });
+}
+
 // Fluxos (exportados em flows.seed.json) — upsert por id preserva refs de subfluxo
 interface FlowSeed { id: string; name: string; active: boolean; nodes: object[]; edges: object[] }
 const flows = JSON.parse(readFileSync(join(__dirname, "flows.seed.json"), "utf-8")) as FlowSeed[];

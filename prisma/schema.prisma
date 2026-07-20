@@ -214,3 +214,23 @@ model ProcessoPessoaPresa {
   idProcesso String
   createdAt  DateTime @default(now())
 }
+
+// PlantaoVigente = "API fake" provisória pro fluxo reutilizável "Plantão"
+// (escala de sobreaviso/urgência da Defensoria — vários órgãos podem estar de
+// plantão simultaneamente, em comarcas diferentes). Aparece em pelo menos 3
+// famílias de fluxo legado (Violência Doméstica, Novo caso, Falar de
+// processo/intimação) — daqui pra frente é um subfluxo próprio, não embutido.
+// `ativo` = está de plantão agora (no legado isso mudava por data/hora; aqui
+// é só um flag fixo de seed, sem rotação real). tipo "MUNICIPAL" no legado
+// não contava como plantão de urgência de verdade — a rota já filtra isso e
+// só retorna encontrado quando existe um ativo COM tipo != MUNICIPAL.
+model PlantaoVigente {
+  id        String   @id @default(cuid())
+  tipo      String // REGIONAL | MUNICIPAL | CAPITAL
+  municipio String
+  nomeOrgao String
+  telefone  String?
+  endereco  String?
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
