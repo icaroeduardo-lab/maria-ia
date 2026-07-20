@@ -61,6 +61,19 @@ Dados de teste seedados (Prisma `PlantaoVigente`): um REGIONAL ativo (Rio de
 Janeiro) e um MUNICIPAL ativo (Niterói, não deve aparecer na rota já que é
 filtrado).
 
+## Fluxo: Violência Doméstica
+
+`fluxoId`: ver card Coilab #20260164. Embute o subfluxo "Plantão" (ver acima) logo no início — se houver plantão de urgência ativo, encaminha direto; senão segue pro atendimento padrão (RO/processo → órgão → confirmação → notificação).
+
+| Nó | URL fake atual | Método | Deveria fazer |
+|---|---|---|---|
+| `vd_api_orgao` | `/api/violencia-domestica/orgao-responsavel?indicacaoRO=...` | GET | Busca o órgão responsável por violência doméstica, considerando se há RO (registro de ocorrência) e endereço/preferência da assistida. Espelha o legado `GET /orgao/violencia-domestica`. |
+| `vd_api_encaminhar_urgente` / `vd_api_encaminhar` | `/api/violencia-domestica/encaminhar` | POST | Envia o caso pro órgão (urgência via plantão ou padrão). Espelha o legado `POST /encaminhamento/encaminhar`. |
+
+Endereço da assistida foi deliberadamente deixado de fora desta versão —
+vai virar fluxo próprio ("Informar endereço", ainda não migrado) e será
+plugado aqui depois.
+
 ## Como substituir (checklist, baseado no que já foi feito)
 
 1. Model Prisma novo (schema + migration) — replicar padrão de `Assistido`/`PessoaPresa`.
