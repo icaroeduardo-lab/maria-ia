@@ -97,6 +97,25 @@ forense real ainda) — seed cria desativado por padrão.
 
 **Ajuste de UX em relação ao legado**: a pergunta "tem dúvidas sobre o processo?" foi reescrita pra "quer que a Defensoria dê continuidade nesse processo (agendamento/encaminhamento)?" — no legado essa pergunta prometia tirar dúvida mas nunca capturava/respondia o conteúdo, só decidia se continuava. Se quiser capturar a dúvida de verdade no futuro, dá pra trocar por pergunta livre + nó `ia` (RAG já disponível no engine).
 
+## Fluxo: Informar Endereço (reutilizável) — NÃO é fake
+
+`fluxoId`: ver card Coilab #20260164. Diferente dos outros fluxos deste
+documento — não precisou de model/rota nova nenhuma:
+
+- **Busca de CEP**: `https://viacep.com.br/ws/{cep}/json/` — API pública real
+  e gratuita, chamada direto do nó `api` (URL externa). Sem chave/autenticação.
+- **Salvar endereço**: `POST /api/assistidos/atualizar` — rota real já
+  existente (`assistidos.ts`), o model `Assistido` já tinha os campos
+  (cep, bairro, logradouro, numero, municipio, uf). Testado ponta a ponta:
+  persiste de verdade no Postgres de produção.
+- Mantém o limite de 3 tentativas de CEP do legado (sem contador dinâmico —
+  o engine não tem operação de incremento em `atribuir`, então são 3 blocos
+  de pergunta/api/condicao explícitos que convergem no mesmo ponto).
+- Confirmação simplificada pra uma pergunta só (legado confirmava CEP, bairro,
+  logradouro e número separadamente).
+- Campo "complemento" do legado foi removido — o model `Assistido` não tem
+  essa coluna; perguntar e não conseguir salvar seria pior que não perguntar.
+
 ## Como substituir (checklist, baseado no que já foi feito)
 
 1. Model Prisma novo (schema + migration) — replicar padrão de `Assistido`/`PessoaPresa`.
