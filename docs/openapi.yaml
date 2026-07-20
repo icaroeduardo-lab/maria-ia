@@ -228,6 +228,12 @@ components:
             endereco: { type: string, nullable: true }
             municipio: { type: string }
             tipo: { type: string, description: "REGIONAL | CAPITAL — nunca MUNICIPAL (a rota já filtra)" }
+    RecessoResp:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, description: "\"SEM_RECESSO_VIGENTE\" ou \"RECESSO_VIGENTE\" (literais, comparados pelo nó condicao)" }
+        mensagem: { type: string, nullable: true, description: "mensagem pro assistido quando em recesso" }
     CpfReq:
       type: object
       required: [cpf]
@@ -1031,6 +1037,15 @@ paths:
         "200":
           description: "status = \"encontrado\" (literal) quando há plantão ativo com tipo != MUNICIPAL"
           content: { application/json: { schema: { $ref: '#/components/schemas/PlantaoOrgaoResp' } } }
+  /api/recesso/vigente:
+    get:
+      tags: [Interno (fluxo)]
+      summary: "Recesso forense vigente (\"API fake\") — fluxo reutilizável Recesso"
+      security: []
+      responses:
+        "200":
+          description: "status literal SEM_RECESSO_VIGENTE ou RECESSO_VIGENTE"
+          content: { application/json: { schema: { $ref: '#/components/schemas/RecessoResp' } } }
   /api/ficha:
     post:
       tags: [Interno (fluxo)]

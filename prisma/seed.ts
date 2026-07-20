@@ -190,6 +190,14 @@ for (const p of plantoesTeste) {
   if (!existe) await prisma.plantaoVigente.create({ data: p });
 }
 
+// Recesso vigente (fluxo reutilizável "Recesso") — config única, desativada
+// por padrão (a maior parte do ano não é período de recesso forense).
+if ((await prisma.recessoVigente.count()) === 0) {
+  await prisma.recessoVigente.create({
+    data: { ativo: false, mensagem: "Estamos em recesso forense. Atendimentos urgentes continuam disponíveis; os demais retornam ao fim do período." },
+  });
+}
+
 // Fluxos (exportados em flows.seed.json) — upsert por id preserva refs de subfluxo
 interface FlowSeed { id: string; name: string; active: boolean; nodes: object[]; edges: object[] }
 const flows = JSON.parse(readFileSync(join(__dirname, "flows.seed.json"), "utf-8")) as FlowSeed[];
