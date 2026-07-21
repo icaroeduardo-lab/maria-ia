@@ -47,6 +47,7 @@ export interface FlowNode {
     headers?: Record<string, string>; // api: headers extras; valor aceita {{chave}} e {{secret:NOME}} (env)
     camposCorpo?: string[];    // api: chaves de dadosColetados enviadas no corpo (externa sem isso = corpo vazio)
     limiteResposta?: number;   // api: limite de chars da resposta gravada (default 2000)
+    timeoutMs?: number;        // api: timeout da chamada em ms (default 10000) — subir p/ integrações externas lentas
     servico?: string;          // subgrafo: categoria (familia_pensao | trabalhista | ...)
     refFlowId?: string;        // subfluxo: id do Flow embutido (tema editável no painel)
     saida?: string;            // sub-flow: nomeia a saída deste nó-folha (casa com label da seta do subfluxo)
@@ -215,11 +216,12 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
           // sessão/canal permitem retomada assíncrona (ex: KYC) — só pra dentro,
           // identificador de sessão não vaza pra terceiros
           if (interna) Object.assign(corpoEnvio, { _sessao: config?.configurable?.thread_id, _canal: state.canal });
+          const timeoutMs = Number(node.data.timeoutMs) > 0 ? Number(node.data.timeoutMs) : 10_000;
           const res = await fetch(url, {
             method: node.data.metodo ?? "POST",
             headers,
             body: node.data.metodo === "GET" ? undefined : JSON.stringify(corpoEnvio),
-            signal: AbortSignal.timeout(10_000),
+            signal: AbortSignal.timeout(timeoutMs),
           });
           if (!res.ok) throw new Error(`status ${res.status}`);
           const limite = Number(node.data.limiteResposta) > 0 ? Number(node.data.limiteResposta) : 2000;
