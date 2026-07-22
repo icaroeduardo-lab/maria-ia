@@ -1,11 +1,54 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../../core/db.js";
+import { gatewayVerdeGet } from "../../core/gateway-verde.js";
 
 // Rotas de Assistido (cidadão) usadas PELO FLUXO — sem JWT, como os mocks.
 // O nó `api` do builder faz POST com body = dadosColetados (que contém o cpf).
 // Respostas no mesmo formato dos mocks antigos p/ as condições continuarem valendo.
 
 const so_digitos = (s?: string) => (s ?? "").replace(/\D/g, "");
+
+// Shape crua do Gateway Verde (GET /api/assistido/{cpf}) — issue #108.
+interface AssistidoVerdeRaw {
+  dados?: {
+    nome?: string;
+    email?: string;
+    enderecoDetalhado?: {
+      logradouro?: string;
+      numero?: string;
+      bairro?: string;
+      municipio?: string;
+      uf?: string;
+      cep?: string;
+    };
+    telefonesAssistido?: { numeroTelefone?: string }[];
+  };
+}
+
+// Consulta o cadastro real no Verde; mapeia pro mesmo shape do model
+// Assistido local, pra `dadosPublicos()` continuar funcionando igual.
+// null = não encontrado/gateway fora — quem chama cai pro fallback local.
+async function consultarAssistidoVerde(cpf: string): Promise<Record<string, unknown> | null> {
+  const resp = await gatewayVerdeGet<AssistidoVerdeRaw>(`/api/assistido/${cpf}`);
+  const d = resp?.dados;
+  if (!d?.nome) return null;
+  const end = d.enderecoDetalhado ?? {};
+  return {
+    cpf,
+    nome: d.nome,
+    dataNascimento: null,
+    nomeMae: null,
+    situacao: "regular",
+    municipio: end.municipio ?? null,
+    uf: end.uf ?? null,
+    telefone: d.telefonesAssistido?.[0]?.numeroTelefone ?? null,
+    email: d.email ?? null,
+    cep: end.cep ?? null,
+    bairro: end.bairro ?? null,
+    logradouro: end.logradouro ?? null,
+    numero: end.numero ?? null,
+  };
+}
 
 // campos do Assistido que vêm de dadosColetados no cadastro/atualização
 const CAMPOS = [
@@ -38,14 +81,24 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
   const db = prisma!; // preHandler acima garante que handler não roda sem banco
 
   // POST /api/assistidos/consultar — { cpf } → { encontrado, situacao, dados }
+  // Tenta o Gateway Verde (cadastro real) primeiro; cai pro fallback local
+  // (tabela Assistido — dados de teste/seed, ou quem se cadastrou pelo bot
+  // sem constar no Verde) se não encontrar ou o gateway estiver fora (#108).
   app.post("/api/assistidos/consultar", async (req) => {
     const cpf = so_digitos((req.body as { cpf?: string })?.cpf);
     if (cpf.length !== 11) {
       console.log(`[assistidos] consultar: CPF inválido "${cpf}"`);
       return { encontrado: false, situacao: "formato_invalido", dados: null };
     }
+
+    const verde = await consultarAssistidoVerde(cpf);
+    if (verde) {
+      console.log(`[assistidos] consultar: CPF ${cpf} → encontrado (Verde)`);
+      return { encontrado: true, situacao: "regular", dados: verde };
+    }
+
     const a = await db.assistido.findUnique({ where: { cpf } });
-    console.log(`[assistidos] consultar: CPF ${cpf} → ${a ? "encontrado" : "não cadastrado"}`);
+    console.log(`[assistidos] consultar: CPF ${cpf} → ${a ? "encontrado (local)" : "não cadastrado"}`);
     return {
       encontrado: !!a,
       situacao: a ? a.situacao : "nao_cadastrado",

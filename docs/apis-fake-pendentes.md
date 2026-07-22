@@ -116,6 +116,34 @@ documento — não precisou de model/rota nova nenhuma:
 - Campo "complemento" do legado foi removido — o model `Assistido` não tem
   essa coluna; perguntar e não conseguir salvar seria pior que não perguntar.
 
+## Cadastro do assistido + Agendamentos — Gateway Verde (real, com fallback local)
+
+Cards Coilab #20260176 (assistido) / #20260178 (agendamentos), issue maria-ia#108.
+Repo do gateway: `GatewayConsultaApiVerde` (`.NET`, sem auth) —
+`GET /api/assistido/{cpf}`, `GET /api/agendamentos/{cpf}`, `GET /api/processo/{numero}`.
+
+- **`POST /api/assistidos/consultar`** (`assistidos.ts`) — tenta o Verde primeiro
+  (`consultarAssistidoVerde`); se não encontrar (HTTP não-2xx, corpo vazio — o
+  gateway não devolve um 404 limpo) ou o gateway estiver fora, cai pro
+  fallback local (tabela `Assistido`). Mantém os CPFs de teste seedados
+  funcionando (João/Maria/Carlos não existem no Verde de verdade).
+- **`POST /api/agendamentos/consultar`** (`agendamentos.ts`) — mesmo padrão.
+  O Verde não devolve `tem_agendamentos` nem uma lista pré-formatada — o
+  backend monta os dois a partir do array `dados.agendamentos[]` (o engine
+  não tem loop/foreach em template, então isso *tem* que ser feito no
+  backend, não dá pra interpolar direto de uma URL externa no nó do fluxo).
+- **`POST /api/agendamentos/detalhe`** — não bate mais no Prisma pra
+  resolver o item selecionado; resolve direto do JSON `agendamentos` que o
+  fluxo já carrega (mesmo padrão de índice de `casos/detalhe`), já que
+  agendamentos reais (Verde) não têm registro na tabela local.
+- **`GET /api/processo/{numero}`** — já integrado direto no nó do fluxo
+  (`api_processo_real`, cards #20260174/175) — chamado pela URL externa sem
+  passar pelo backend, porque ali é só detalhe de 1 item (sem lista pra
+  montar).
+- **Card #20260177 (processos por assistido) — BLOQUEADO**: o gateway só
+  busca processo por número, não por pessoa. `/api/casos/consultar`
+  continua 100% local/fake até esse endpoint existir no Verde.
+
 ## Como substituir (checklist, baseado no que já foi feito)
 
 1. Model Prisma novo (schema + migration) — replicar padrão de `Assistido`/`PessoaPresa`.
