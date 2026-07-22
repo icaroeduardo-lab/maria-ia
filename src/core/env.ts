@@ -35,6 +35,12 @@ export const env = {
   pdpjApiUrl: () => semBarra(process.env.PDPJ_API_URL ?? ""),
   pdpjApiToken: () => process.env.PDPJ_API_TOKEN ?? "",
 
+  // Gateway Verde (repo GatewayConsultaApiVerde) — sem auth. Consulta real de
+  // assistido/agendamentos/processo; default já aponta pro Lambda em uso
+  // (issue #108) — sobrescrever só se o gateway mudar de URL.
+  gatewayVerdeUrl: () =>
+    semBarra(process.env.GATEWAY_VERDE_URL ?? "https://3dike1m3ng.execute-api.us-east-1.amazonaws.com/default"),
+
   // DPERJ (envio final)
   dperjApiUrl: () => process.env.DPERJ_API_URL,
   dperjApiKey: () => process.env.DPERJ_API_KEY,
@@ -72,6 +78,7 @@ const envSchema = z.object({
   PUBLIC_URL: z.string().url().optional().or(z.literal("")),
   SQS_QUEUE_URL: z.string().url().optional().or(z.literal("")),
   PDPJ_API_URL: z.string().url().optional().or(z.literal("")),
+  GATEWAY_VERDE_URL: z.string().url().optional().or(z.literal("")),
   HANDOFF_WEBHOOK_URL: z.string().url().optional().or(z.literal("")),
   LANGCHAIN_TRACING_V2: z.enum(["true", "false"]).optional(),
 });
