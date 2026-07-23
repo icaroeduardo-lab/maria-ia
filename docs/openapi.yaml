@@ -163,11 +163,37 @@ components:
         tem_casos: { type: boolean }
         casos:
           type: array
+          description: "campos preservam os nomes originais do Verde (issue maria-ia#110)"
           items:
             type: object
             properties:
-              identificador: { type: string }
-              tipo: { type: string }
+              id: { type: integer }
+              status: { type: string }
+              tipoCaso: { type: string }
+              assunto:
+                type: object
+                nullable: true
+                properties:
+                  id: { type: integer }
+                  nome: { type: string }
+              numeroProcesso: { type: string, nullable: true }
+              dataAtualizacao: { type: string, nullable: true }
+              orgaosAssociados:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    nome: { type: string }
+                    responsavel: { type: boolean }
+              andamentos:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    titulo: { type: string }
+                    descricao: { type: string }
+                    data: { type: string }
         lista: { type: string }
     PessoaPresaConsultaResp:
       type: object
@@ -242,18 +268,45 @@ components:
     CasoDetalheReq:
       type: object
       properties:
-        caso_sel: { type: string, description: "identificador completo ou índice (1,2,...)" }
-        casos: { type: string, description: "JSON da consulta anterior (para mapear índice)" }
+        caso_sel: { type: string, description: "id completo ou índice (1,2,...)" }
+        casos: { type: string, description: "JSON da consulta anterior (para mapear índice, resolve sem re-fetch)" }
     CasoDetalheResp:
       type: object
       required: [encontrado]
       properties:
         encontrado: { type: boolean }
-        identificador: { type: string }
-        tipo: { type: string }
+        id: { type: integer }
         status: { type: string }
-        criadoEm: { type: string, format: date-time }
-        assistido: { type: string }
+        tipoCaso: { type: string }
+        assunto:
+          type: object
+          nullable: true
+          properties:
+            id: { type: integer }
+            nome: { type: string }
+        orgaosAssociados:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              nome: { type: string }
+              responsavel: { type: boolean }
+        andamentos:
+          type: array
+          description: "só o mais recente (índice 0), não o histórico completo"
+          items:
+            type: object
+            properties:
+              titulo: { type: string }
+              descricao: { type: string }
+              data: { type: string }
+        numeroProcesso: { type: string, nullable: true }
+        processo:
+          type: object
+          nullable: true
+          description: "junta GET /api/processo/{numero} quando há numeroProcesso — mesmo formato dessa rota, sem remapear"
+        temProcesso: { type: string, description: "\"true\"/\"false\" — flag auxiliar pro fluxo rotear (condicao só faz match exato)" }
     AgendamentosConsultaResp:
       type: object
       properties:
@@ -284,6 +337,84 @@ components:
         local: { type: string, nullable: true }
         status: { type: string }
         assistido: { type: string }
+    AgendamentoDetalheRicoReq:
+      type: object
+      required: [idEvento]
+      properties:
+        idEvento: { type: string }
+    AgendamentoDetalheRicoResp:
+      type: object
+      required: [encontrado]
+      description: "campos preservam os nomes originais do Verde (issue maria-ia#111, gateway#21)"
+      properties:
+        encontrado: { type: boolean }
+        idEvento: { type: integer }
+        idAssistido: { type: integer }
+        idOrgao: { type: integer }
+        idCaso: { type: integer, nullable: true }
+        nomeAssistido: { type: string }
+        nomeOrgao: { type: string }
+        endereco: { type: string }
+        data: { type: string }
+        horario: { type: string }
+        documentosNecessarios: { type: string, nullable: true }
+        nomeAssunto: { type: string, nullable: true }
+    AgendamentoVagasReq:
+      type: object
+      required: [idEvento]
+      properties:
+        idEvento: { type: string }
+    AgendamentoVagasResp:
+      type: object
+      properties:
+        tem_vagas: { type: boolean }
+        vagas:
+          type: array
+          items:
+            type: object
+            properties:
+              idIntervalo: { type: integer }
+              data: { type: string }
+              hora: { type: string }
+        lista: { type: string, description: "texto formatado, 1 linha por vaga" }
+    AgendamentoVagaDetalheReq:
+      type: object
+      properties:
+        vaga_sel: { type: string, description: "índice (1,2,...) da lista de vagas anterior" }
+        vagas: { type: string, description: "JSON da consulta de vagas anterior (resolve sem re-fetch)" }
+    AgendamentoVagaDetalheResp:
+      type: object
+      required: [encontrada]
+      properties:
+        encontrada: { type: boolean }
+        idIntervalo: { type: integer }
+        data: { type: string }
+        hora: { type: string }
+    AgendamentoReagendarReq:
+      type: object
+      required: [idAgendamento, configuracaoIntervaloAgenda, dataNova]
+      properties:
+        idAgendamento: { type: string }
+        configuracaoIntervaloAgenda: { type: string, description: "idIntervalo da vaga escolhida" }
+        dataNova: { type: string }
+        horaNova: { type: string, description: "combinada com dataNova antes de enviar ao Verde (\"DD/MM/YYYY HH:mm\")" }
+    AgendamentoReagendarResp:
+      type: object
+      required: [sucesso]
+      properties:
+        sucesso: { type: boolean }
+    AgendamentoDesmarcarReq:
+      type: object
+      required: [idAgendamento, idPessoa]
+      properties:
+        idAgendamento: { type: string }
+        idPessoa: { type: string }
+    AgendamentoDesmarcarResp:
+      type: object
+      required: [sucesso]
+      properties:
+        sucesso: { type: boolean }
+        emailEnviado: { type: boolean, description: "204 do Verde (true) vs 200 sucesso parcial (false, e-mail falhou)" }
     ConfigIA:
       type: object
       description: Configuração global da IA (singleton id=default)
@@ -1002,6 +1133,41 @@ paths:
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDetalheReq' } } } }
       responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDetalheResp' } } } } }
+  /api/agendamentos/detalhe-rico:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Detalhe rico de 1 agendamento (endereço, documentos, órgão, idAssistido) — proxy GET api/agendamento/{idEvento} do gateway (issue #111)"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDetalheRicoReq' } } } }
+      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDetalheRicoResp' } } } } }
+  /api/agendamentos/vagas:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Vagas disponíveis pra reagendar — proxy GET api/agendamento/vagas/{idEvento} do gateway"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoVagasReq' } } } }
+      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoVagasResp' } } } } }
+  /api/agendamentos/vaga-detalhe:
+    post:
+      tags: [Interno (fluxo)]
+      summary: Resolve a vaga escolhida do JSON que /vagas já retornou (índice, zero re-fetch)
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoVagaDetalheReq' } } } }
+      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoVagaDetalheResp' } } } } }
+  /api/agendamentos/reagendar:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Reagenda um agendamento — proxy POST api/agendamento/reagendar do gateway"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoReagendarReq' } } } }
+      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoReagendarResp' } } } } }
+  /api/agendamentos/desmarcar:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Desmarca um agendamento — proxy POST api/agendamento/desmarcar do gateway (ação irreversível, dispara e-mail real)"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDesmarcarReq' } } } }
+      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDesmarcarResp' } } } } }
   /api/processos/consultar:
     post:
       tags: [Interno (fluxo)]
