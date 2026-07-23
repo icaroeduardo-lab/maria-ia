@@ -225,7 +225,7 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
   // por /api/casos/consultar. Resolve direto do JSON que o fluxo já carrega
   // (mesmo padrão de agendamentos/detalhe) — zero chamada nova ao Verde pra
   // relistar. Só dispara UMA chamada nova, condicional: se o caso tiver
-  // numeroProcesso, busca o status judicial (/api/processos/{numero}, já
+  // numeroProcesso, busca o status judicial (/api/processo/{numero}, já
   // real) e junta ao lado do histórico administrativo do caso — são dados
   // complementares (Defensoria x Judiciário), não uma confirmação.
   app.post("/api/casos/detalhe", async (req) => {
@@ -251,7 +251,7 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
 
     let processo: unknown = null;
     if (caso.numeroProcesso) {
-      processo = await gatewayVerdeGet<unknown>(`/api/processos/${caso.numeroProcesso}`);
+      processo = await gatewayVerdeGet<unknown>(`/api/processo/${caso.numeroProcesso}`);
     }
 
     console.log(`[casos] detalhe: ${caso.id} (${caso.tipoCaso}) — processo=${processo ? "sim" : "não"}`);

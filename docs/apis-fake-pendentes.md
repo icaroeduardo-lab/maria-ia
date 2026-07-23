@@ -121,7 +121,7 @@ documento — não precisou de model/rota nova nenhuma:
 Cards Coilab #20260176 (assistido) / #20260178 (agendamentos) / #20260182
 (casos), issues maria-ia#108 e maria-ia#110. Repo do gateway:
 `GatewayConsultaApiVerde` (`.NET`, sem auth) — `GET /api/assistido/{cpf}`,
-`GET /api/agendamentos/{cpf}`, `GET /api/processos/{numero}`,
+`GET /api/agendamentos/{cpf}`, `GET /api/processo/{numero}`,
 `GET /api/casos/{cpf}` (issue #20 do gateway — merged em `develop`, ainda
 não deployado em `main`/produção no momento desta escrita).
 
@@ -139,10 +139,11 @@ não deployado em `main`/produção no momento desta escrita).
   resolver o item selecionado; resolve direto do JSON `agendamentos` que o
   fluxo já carrega (mesmo padrão de índice de `casos/detalhe`), já que
   agendamentos reais (Verde) não têm registro na tabela local.
-- **`GET /api/processos/{numero}`** — real, integrado de duas formas: direto
-  no nó do fluxo `api_processo_real` (uso legado, cards #20260174/175) E
-  agora também server-side dentro de `/api/casos/detalhe` (issue #110), pra
-  juntar o status judicial ao lado do histórico administrativo do caso.
+- **`GET /api/processo/{numero}`** — real, chamado server-side dentro de
+  `/api/casos/detalhe` (issue #110), pra juntar o status judicial ao lado do
+  histórico administrativo do caso (o nó de fluxo `api_processo_real`, que
+  chamava isso direto por número escolhido livremente, foi removido — era
+  o bug de arquitetura que essa issue corrigiu).
 - **`POST /api/casos/consultar`** / **`POST /api/casos/detalhe`** — mesmo
   padrão real+fallback (issue maria-ia#110, card #20260182). Correção de
   arquitetura: a Maria não escolhe processo livremente por número — ela
@@ -150,7 +151,7 @@ não deployado em `main`/produção no momento desta escrita).
   (quando existir) vem vinculado a um caso via `numeroProcesso`.
   `casos/detalhe` resolve o caso do JSON que `casos/consultar` já retornou
   (zero re-fetch de lista); só dispara UMA chamada nova e condicional — se o
-  caso tiver `numeroProcesso`, busca `/api/processos/{numero}` e junta o
+  caso tiver `numeroProcesso`, busca `/api/processo/{numero}` e junta o
   resultado sem remapear campos. Mostra só o andamento mais recente
   (`andamentos[0]`), não o histórico completo. Campos de `orgaosAssociados`
   não usados (enderecos/horarios) são descartados antes de guardar em
