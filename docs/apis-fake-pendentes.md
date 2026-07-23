@@ -160,6 +160,26 @@ não deployado em `main`/produção no momento desta escrita).
 - **Card #20260177 (processos por assistido, listagem solta) — BLOQUEADO**:
   superado pela abordagem de casos acima; não há mais necessidade de listar
   processo por pessoa direto, já que o caso é o ponto de entrada.
+- **Meus Agendamentos — detalhe rico, vagas, reagendar, desmarcar** (issue
+  maria-ia#111, card #20260167, gateway#21): `POST /api/agendamentos/detalhe-rico`
+  (`{idEvento}` → endereço/documentos/órgão/idAssistido, envelope `dados` do
+  Verde desembrulhado), `POST /api/agendamentos/vagas` (`{idEvento}` →
+  `vagasDisponiveis: [{idIntervalo,data,hora}]`, shape não documentado no
+  Swagger do Verde — confirmado testando ao vivo), `POST
+  /api/agendamentos/vaga-detalhe` (resolve a vaga escolhida do JSON já
+  carregado, zero re-fetch), `POST /api/agendamentos/reagendar`
+  (`{idAgendamento,configuracaoIntervaloAgenda,dataNova,horaNova}` —
+  `dataNova` sozinha dá 400 no Verde, precisa vir com hora junto: "DD/MM/YYYY
+  HH:mm"), `POST /api/agendamentos/desmarcar`
+  (`{idAgendamento,idPessoa}`, distingue 200/204 do Verde via `emailEnviado`).
+  Testado ponta a ponta em homologação: detalhe-rico/vagas/vaga-detalhe e
+  desmarcar confirmados com dado real; reagendar passa validação de formato
+  mas bateu 500 interno no Verde homolog (sem mais agendamento de teste ativo
+  pra isolar mais — fluxo trata a falha graciosamente).
+  Fluxo estendido em "Processos e Agendamentos em aberto": depois de mostrar
+  o detalhe do agendamento, pergunta "reagendar / desmarcar / só isso" —
+  reagendar mostra vagas reais e confirma antes de executar; desmarcar avisa
+  que é ação definitiva (e-mail real) e confirma antes de executar.
 
 ## Como substituir (checklist, baseado no que já foi feito)
 
