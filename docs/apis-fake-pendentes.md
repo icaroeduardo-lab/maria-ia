@@ -116,11 +116,14 @@ documento — não precisou de model/rota nova nenhuma:
 - Campo "complemento" do legado foi removido — o model `Assistido` não tem
   essa coluna; perguntar e não conseguir salvar seria pior que não perguntar.
 
-## Cadastro do assistido + Agendamentos — Gateway Verde (real, com fallback local)
+## Cadastro do assistido + Agendamentos + Casos — Gateway Verde (real, com fallback local)
 
-Cards Coilab #20260176 (assistido) / #20260178 (agendamentos), issue maria-ia#108.
-Repo do gateway: `GatewayConsultaApiVerde` (`.NET`, sem auth) —
-`GET /api/assistido/{cpf}`, `GET /api/agendamentos/{cpf}`, `GET /api/processo/{numero}`.
+Cards Coilab #20260176 (assistido) / #20260178 (agendamentos) / #20260182
+(casos), issues maria-ia#108 e maria-ia#110. Repo do gateway:
+`GatewayConsultaApiVerde` (`.NET`, sem auth) — `GET /api/assistido/{cpf}`,
+`GET /api/agendamentos/{cpf}`, `GET /api/processo/{numero}`,
+`GET /api/casos/{cpf}` (issue #20 do gateway — merged em `develop`, ainda
+não deployado em `main`/produção no momento desta escrita).
 
 - **`POST /api/assistidos/consultar`** (`assistidos.ts`) — tenta o Verde primeiro
   (`consultarAssistidoVerde`); se não encontrar (HTTP não-2xx, corpo vazio — o
@@ -136,13 +139,27 @@ Repo do gateway: `GatewayConsultaApiVerde` (`.NET`, sem auth) —
   resolver o item selecionado; resolve direto do JSON `agendamentos` que o
   fluxo já carrega (mesmo padrão de índice de `casos/detalhe`), já que
   agendamentos reais (Verde) não têm registro na tabela local.
-- **`GET /api/processo/{numero}`** — já integrado direto no nó do fluxo
-  (`api_processo_real`, cards #20260174/175) — chamado pela URL externa sem
-  passar pelo backend, porque ali é só detalhe de 1 item (sem lista pra
-  montar).
-- **Card #20260177 (processos por assistido) — BLOQUEADO**: o gateway só
-  busca processo por número, não por pessoa. `/api/casos/consultar`
-  continua 100% local/fake até esse endpoint existir no Verde.
+- **`GET /api/processo/{numero}`** — real, chamado server-side dentro de
+  `/api/casos/detalhe` (issue #110), pra juntar o status judicial ao lado do
+  histórico administrativo do caso (o nó de fluxo `api_processo_real`, que
+  chamava isso direto por número escolhido livremente, foi removido — era
+  o bug de arquitetura que essa issue corrigiu).
+- **`POST /api/casos/consultar`** / **`POST /api/casos/detalhe`** — mesmo
+  padrão real+fallback (issue maria-ia#110, card #20260182). Correção de
+  arquitetura: a Maria não escolhe processo livremente por número — ela
+  consulta os CASOS abertos do assistido na Defensoria primeiro; o processo
+  (quando existir) vem vinculado a um caso via `numeroProcesso`.
+  `casos/detalhe` resolve o caso do JSON que `casos/consultar` já retornou
+  (zero re-fetch de lista); só dispara UMA chamada nova e condicional — se o
+  caso tiver `numeroProcesso`, busca `/api/processo/{numero}` e junta o
+  resultado sem remapear campos. Mostra só o andamento mais recente
+  (`andamentos[0]`), não o histórico completo. Campos de `orgaosAssociados`
+  não usados (enderecos/horarios) são descartados antes de guardar em
+  `dadosColetados` (minimização LGPD) — nomes de campo do Verde preservados
+  em tudo mais.
+- **Card #20260177 (processos por assistido, listagem solta) — BLOQUEADO**:
+  superado pela abordagem de casos acima; não há mais necessidade de listar
+  processo por pessoa direto, já que o caso é o ponto de entrada.
 
 ## Como substituir (checklist, baseado no que já foi feito)
 
