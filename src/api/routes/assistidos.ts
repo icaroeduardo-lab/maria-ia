@@ -50,6 +50,61 @@ async function consultarAssistidoVerde(cpf: string): Promise<Record<string, unkn
   };
 }
 
+// Shape crua do Gateway Verde (GET /api/casos/{cpf}) — issue maria-ia#110.
+// Já filtrado a status "aberto" no gateway (CasosService); nomes de campo
+// preservados exatamente como o Verde devolve (issue #20 do gateway).
+interface CasoVerdeRaw {
+  id?: number;
+  status?: string;
+  tipoCaso?: string;
+  assunto?: { id?: number; nome?: string };
+  numeroProcesso?: string | null;
+  dataAtualizacao?: string;
+  orgaosAssociados?: { id?: number; nome?: string; responsavel?: boolean }[];
+  andamentos?: { titulo?: string; descricao?: string; data?: string }[];
+}
+interface CasosVerdeRaw {
+  dados?: CasoVerdeRaw[];
+}
+
+interface CasoEnxuto {
+  id: number | string;
+  status: string;
+  tipoCaso: string;
+  assunto: { id: number; nome: string } | null;
+  numeroProcesso: string | null;
+  dataAtualizacao: string | null;
+  orgaosAssociados: { id: number; nome: string; responsavel: boolean }[];
+  andamentos: { titulo: string; descricao: string; data: string }[];
+}
+
+// null = gateway fora/CPF não encontrado — quem chama cai pro fallback local.
+async function consultarCasosVerde(cpf: string): Promise<CasoEnxuto[] | null> {
+  const resp = await gatewayVerdeGet<CasosVerdeRaw>(`/api/casos/${cpf}`);
+  const lista = resp?.dados;
+  if (!lista) return null;
+  return lista.map((c) => ({
+    id: c.id ?? 0,
+    status: c.status ?? "aberto",
+    tipoCaso: c.tipoCaso ?? "",
+    assunto: c.assunto?.nome ? { id: c.assunto.id ?? 0, nome: c.assunto.nome } : null,
+    numeroProcesso: c.numeroProcesso ?? null,
+    dataAtualizacao: c.dataAtualizacao ?? null,
+    // enderecos/horarios de orgaosAssociados nunca são exibidos — descartados
+    // aqui pra não carregar/persistir dado que não será usado (LGPD, minimização).
+    orgaosAssociados: (c.orgaosAssociados ?? []).map((o) => ({
+      id: o.id ?? 0,
+      nome: o.nome ?? "",
+      responsavel: !!o.responsavel,
+    })),
+    andamentos: (c.andamentos ?? []).map((a) => ({
+      titulo: a.titulo ?? "",
+      descricao: a.descricao ?? "",
+      data: a.data ?? "",
+    })),
+  }));
+}
+
 // campos do Assistido que vêm de dadosColetados no cadastro/atualização
 const CAMPOS = [
   "nome", "dataNascimento", "nomeMae", "situacao",
@@ -128,46 +183,91 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
   });
 
   // POST /api/casos/consultar — { cpf } → { tem_casos, casos:[...], lista }
-  // casos em aberto do assistido (usado pelo fluxo após confirmar os dados)
+  // Tenta o Gateway Verde primeiro (casos abertos de verdade, vinculados ao
+  // processo quando houver); cai pro fallback local (tabela Caso — dados de
+  // teste) se não encontrar ou o gateway estiver fora (issue maria-ia#110,
+  // correção do fluxo — antes o assistido escolhia processo livremente, o
+  // certo é partir do caso aberto na Defensoria).
   app.post("/api/casos/consultar", async (req) => {
     const cpf = so_digitos((req.body as { cpf?: string })?.cpf);
-    const assistido = cpf.length === 11 ? await db.assistido.findUnique({ where: { cpf } }) : null;
-    const casos = assistido
-      ? await db.caso.findMany({ where: { assistidoId: assistido.id, status: "aberto" }, orderBy: { criadoEm: "desc" } })
-      : [];
-    const enxutos = casos.map((c) => ({ identificador: c.identificador, tipo: c.tipo }));
-    const lista = enxutos.map((c, i) => `${i + 1}. ${c.tipo} (${c.identificador})`).join("\n");
-    console.log(`[casos] consultar: CPF ${cpf} → ${casos.length} caso(s) aberto(s)`);
-    return { tem_casos: casos.length > 0, casos: enxutos, lista };
+
+    let enxutos: CasoEnxuto[];
+    const verde = cpf.length === 11 ? await consultarCasosVerde(cpf) : null;
+    if (verde) {
+      enxutos = verde;
+      console.log(`[casos] consultar (Verde): CPF ${cpf} → ${enxutos.length} caso(s) aberto(s)`);
+    } else {
+      const assistido = cpf.length === 11 ? await db.assistido.findUnique({ where: { cpf } }) : null;
+      const casos = assistido
+        ? await db.caso.findMany({ where: { assistidoId: assistido.id, status: "aberto" }, orderBy: { criadoEm: "desc" } })
+        : [];
+      enxutos = casos.map((c) => ({
+        id: c.id,
+        status: c.status,
+        tipoCaso: c.tipo,
+        assunto: { id: 0, nome: c.tipo },
+        numeroProcesso: null,
+        dataAtualizacao: c.criadoEm.toLocaleDateString("pt-BR"),
+        orgaosAssociados: [],
+        andamentos: [],
+      }));
+      console.log(`[casos] consultar (local): CPF ${cpf} → ${enxutos.length} caso(s) aberto(s)`);
+    }
+
+    const lista = enxutos
+      .map((c, i) => `${i + 1}. ${c.assunto?.nome ?? c.tipoCaso} (${c.dataAtualizacao ?? "-"})`)
+      .join("\n");
+    return { tem_casos: enxutos.length > 0, casos: enxutos, lista };
   });
 
   // POST /api/casos/detalhe — { caso_sel, casos? } → detalhe de 1 caso
-  // caso_sel pode ser o identificador completo OU o índice (1, 2, ...) da lista
-  // retornada por /api/casos/consultar (mesmo padrão do /api/processos/resumo).
+  // caso_sel pode ser o id completo OU o índice (1, 2, ...) da lista retornada
+  // por /api/casos/consultar. Resolve direto do JSON que o fluxo já carrega
+  // (mesmo padrão de agendamentos/detalhe) — zero chamada nova ao Verde pra
+  // relistar. Só dispara UMA chamada nova, condicional: se o caso tiver
+  // numeroProcesso, busca o status judicial (/api/processos/{numero}, já
+  // real) e junta ao lado do histórico administrativo do caso — são dados
+  // complementares (Defensoria x Judiciário), não uma confirmação.
   app.post("/api/casos/detalhe", async (req) => {
     const body = (req.body ?? {}) as { caso_sel?: string; casos?: string };
     const sel = String(body.caso_sel ?? "").trim();
 
-    let identificador = sel;
+    let lista: CasoEnxuto[] = [];
     try {
-      const lista = JSON.parse(body.casos ?? "{}")?.casos as { identificador: string }[] | undefined;
-      const idx = /^\d{1,2}$/.exec(sel);
-      if (idx && lista?.[Number(sel) - 1]) identificador = lista[Number(sel) - 1].identificador;
-    } catch { /* segue com sel */ }
+      lista = JSON.parse(body.casos ?? "{}")?.casos ?? [];
+    } catch { /* segue vazio */ }
 
-    const caso = await db.caso.findFirst({ where: { identificador }, include: { assistido: true } });
+    const idx = /^\d{1,2}$/.exec(sel);
+    const caso = idx ? lista[Number(sel) - 1] : lista.find((c) => String(c.id) === sel);
+
     if (!caso) {
       console.log(`[casos] detalhe: "${sel}" não encontrado`);
       return { encontrado: false };
     }
-    console.log(`[casos] detalhe: ${caso.identificador} (${caso.tipo})`);
+
+    // só o andamento mais recente (não o histórico completo) — mantém a
+    // estrutura de objeto, não achata em string.
+    const andamentos = caso.andamentos.slice(0, 1);
+
+    let processo: unknown = null;
+    if (caso.numeroProcesso) {
+      processo = await gatewayVerdeGet<unknown>(`/api/processos/${caso.numeroProcesso}`);
+    }
+
+    console.log(`[casos] detalhe: ${caso.id} (${caso.tipoCaso}) — processo=${processo ? "sim" : "não"}`);
     return {
       encontrado: true,
-      identificador: caso.identificador,
-      tipo: caso.tipo,
+      id: caso.id,
       status: caso.status,
-      criadoEm: caso.criadoEm.toISOString(),
-      assistido: caso.assistido.nome,
+      tipoCaso: caso.tipoCaso,
+      assunto: caso.assunto,
+      orgaosAssociados: caso.orgaosAssociados,
+      andamentos,
+      numeroProcesso: caso.numeroProcesso,
+      processo,
+      // flag auxiliar pro fluxo rotear (condicao só faz match exato de label;
+      // igual combo_pendencias — engine não tem truthy/if nativo em template)
+      temProcesso: processo ? "true" : "false",
     };
   });
 
