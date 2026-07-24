@@ -53,8 +53,10 @@ async function consultarAssistidoVerde(cpf: string): Promise<Record<string, unkn
 // Payload de cadastro do Verde (POST api/assistido) — issue maria-ia#117,
 // gateway#31. Campos que a Maria não coleta hoje (nomeSocial, complemento)
 // vão vazios: o Verde exige os campos presentes no JSON (não aceita
-// ausentes — validação automática do ApiController do gateway), mas string
-// vazia passa.
+// ausentes — validação automática do ApiController do gateway). String
+// vazia passa pra a maioria, MAS dtNascimento vazia dá 400 (testado em
+// homologação, id real criado só com data preenchida) — ver checagem em
+// cadastrarAssistidoVerde antes de chamar isso.
 function montarPayloadAssistidoVerde(cpf: string, campos: Record<string, string>) {
   return {
     nome: campos.nome ?? "",
@@ -78,7 +80,10 @@ function montarPayloadAssistidoVerde(cpf: string, campos: Record<string, string>
 }
 
 // null = gateway fora/CPF rejeitado — quem chama cai pro fallback local.
+// dtNascimento vazia dá 400 no Verde (testado em homologação) — se não foi
+// coletada, nem tenta, evita round-trip que sabe que vai falhar.
 async function cadastrarAssistidoVerde(cpf: string, campos: Record<string, string>): Promise<boolean> {
+  if (!campos.dataNascimento) return false;
   const resp = await gatewayVerdePost("/api/assistido", montarPayloadAssistidoVerde(cpf, campos));
   return resp.ok;
 }
