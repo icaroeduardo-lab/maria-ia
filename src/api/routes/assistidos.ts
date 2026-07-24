@@ -91,13 +91,22 @@ async function cadastrarAssistidoVerde(cpf: string, campos: Record<string, strin
 // PUT do Verde só aceita endereco/telefone/email (não tem campo "nome" —
 // confirmado no Swagger, gateway#31). Se só nome mudou, não há o que
 // atualizar lá — quem chama decide se ainda assim quer persistir local.
-// telefone.numeroTelefone vazio também dá 400 (testado em homologação) —
-// o Verde exige o telefone preenchido no payload mesmo quando só endereço/
-// email estão mudando, então só tenta o Verde se telefone foi coletado.
+// telefone.numeroTelefone vazio dá 400 (testado em homologação) — o Verde
+// exige preenchido mesmo corrigindo só endereço/email (issue #187: fluxo
+// novo pergunta 1 campo por vez, então telefone frequentemente NÃO vem no
+// corpo). Busca o telefone atual no Verde antes de desistir, em vez de
+// pular pro fallback local à toa.
 async function atualizarAssistidoVerde(cpf: string, campos: Record<string, string>): Promise<boolean> {
-  if (!campos.telefone) return false;
-  const relevante = campos.logradouro || campos.numero || campos.cep || campos.bairro || campos.municipio || campos.uf || campos.email;
+  const relevante = campos.logradouro || campos.numero || campos.cep || campos.bairro || campos.municipio || campos.uf || campos.telefone || campos.email;
   if (!relevante) return false;
+
+  let telefone: string | undefined = campos.telefone;
+  if (!telefone) {
+    const atual = await consultarAssistidoVerde(cpf);
+    telefone = (atual?.telefone as string | null) ?? undefined;
+  }
+  if (!telefone) return false; // nem coletado agora nem já cadastrado — Verde rejeitaria mesmo
+
   const payload = {
     endereco: {
       logradouro: campos.logradouro ?? "",
@@ -108,7 +117,7 @@ async function atualizarAssistidoVerde(cpf: string, campos: Record<string, strin
       municipio: campos.municipio ?? "",
       uf: campos.uf ?? "",
     },
-    telefone: { id: 0, numeroTelefone: campos.telefone ?? "", observacao: "", inWhatsapp: true, tipo: "celular", ramal: "", dataIndicacaoWhatsapp: "" },
+    telefone: { id: 0, numeroTelefone: telefone, observacao: "", inWhatsapp: true, tipo: "celular", ramal: "", dataIndicacaoWhatsapp: "" },
     email: campos.email ?? "",
   };
   const resp = await gatewayVerdePost(`/api/assistido/${cpf}`, payload, "PUT");
