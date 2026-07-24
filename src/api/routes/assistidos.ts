@@ -91,8 +91,12 @@ async function cadastrarAssistidoVerde(cpf: string, campos: Record<string, strin
 // PUT do Verde só aceita endereco/telefone/email (não tem campo "nome" —
 // confirmado no Swagger, gateway#31). Se só nome mudou, não há o que
 // atualizar lá — quem chama decide se ainda assim quer persistir local.
+// telefone.numeroTelefone vazio também dá 400 (testado em homologação) —
+// o Verde exige o telefone preenchido no payload mesmo quando só endereço/
+// email estão mudando, então só tenta o Verde se telefone foi coletado.
 async function atualizarAssistidoVerde(cpf: string, campos: Record<string, string>): Promise<boolean> {
-  const relevante = campos.logradouro || campos.numero || campos.cep || campos.bairro || campos.municipio || campos.uf || campos.telefone || campos.email;
+  if (!campos.telefone) return false;
+  const relevante = campos.logradouro || campos.numero || campos.cep || campos.bairro || campos.municipio || campos.uf || campos.email;
   if (!relevante) return false;
   const payload = {
     endereco: {
