@@ -104,6 +104,7 @@ async function atualizarAssistidoVerde(cpf: string, campos: Record<string, strin
   if (!telefone) {
     const atual = await consultarAssistidoVerde(cpf);
     telefone = (atual?.telefone as string | null) ?? undefined;
+    console.log(`[assistidos] atualizar: telefone não coletado, busquei no Verde → ${telefone ? "achei" : "não achei"}`);
   }
   if (!telefone) return false; // nem coletado agora nem já cadastrado — Verde rejeitaria mesmo
 
@@ -121,6 +122,7 @@ async function atualizarAssistidoVerde(cpf: string, campos: Record<string, strin
     email: campos.email ?? "",
   };
   const resp = await gatewayVerdePost(`/api/assistido/${cpf}`, payload, "PUT");
+  if (!resp.ok) console.log(`[assistidos] atualizar: PUT no Verde falhou, status=${resp.status}`);
   return resp.ok;
 }
 
