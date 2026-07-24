@@ -91,22 +91,24 @@ async function cadastrarAssistidoVerde(cpf: string, campos: Record<string, strin
 // PUT do Verde só aceita endereco/telefone/email (não tem campo "nome" —
 // confirmado no Swagger, gateway#31). Se só nome mudou, não há o que
 // atualizar lá — quem chama decide se ainda assim quer persistir local.
-// telefone.numeroTelefone vazio dá 400 (testado em homologação) — o Verde
-// exige preenchido mesmo corrigindo só endereço/email (issue #187: fluxo
-// novo pergunta 1 campo por vez, então telefone frequentemente NÃO vem no
-// corpo). Busca o telefone atual no Verde antes de desistir, em vez de
-// pular pro fallback local à toa.
+// telefone.numeroTelefone E email vazios dão 400 (testado em homologação,
+// os dois isoladamente) — o Verde exige os dois preenchidos mesmo
+// corrigindo só endereço (issue #187: fluxo novo pergunta 1 campo por vez,
+// então quase nunca vêm juntos). Busca os atuais no Verde antes de
+// desistir, em vez de pular pro fallback local à toa.
 async function atualizarAssistidoVerde(cpf: string, campos: Record<string, string>): Promise<boolean> {
   const relevante = campos.logradouro || campos.numero || campos.cep || campos.bairro || campos.municipio || campos.uf || campos.telefone || campos.email;
   if (!relevante) return false;
 
   let telefone: string | undefined = campos.telefone;
-  if (!telefone) {
+  let email: string | undefined = campos.email;
+  if (!telefone || !email) {
     const atual = await consultarAssistidoVerde(cpf);
-    telefone = (atual?.telefone as string | null) ?? undefined;
-    console.log(`[assistidos] atualizar: telefone não coletado, busquei no Verde → ${telefone ? "achei" : "não achei"}`);
+    telefone ??= (atual?.telefone as string | null) ?? undefined;
+    email ??= (atual?.email as string | null) ?? undefined;
+    console.log(`[assistidos] atualizar: telefone/email não coletados, busquei no Verde → telefone=${telefone ? "achei" : "não achei"} email=${email ? "achei" : "não achei"}`);
   }
-  if (!telefone) return false; // nem coletado agora nem já cadastrado — Verde rejeitaria mesmo
+  if (!telefone || !email) return false; // Verde exige os dois preenchidos mesmo corrigindo só endereço
 
   const payload = {
     endereco: {
@@ -119,7 +121,7 @@ async function atualizarAssistidoVerde(cpf: string, campos: Record<string, strin
       uf: campos.uf ?? "",
     },
     telefone: { id: 0, numeroTelefone: telefone, observacao: "", inWhatsapp: true, tipo: "celular", ramal: "", dataIndicacaoWhatsapp: "" },
-    email: campos.email ?? "",
+    email,
   };
   const resp = await gatewayVerdePost(`/api/assistido/${cpf}`, payload, "PUT");
   if (!resp.ok) console.log(`[assistidos] atualizar: PUT no Verde falhou, status=${resp.status}`);
