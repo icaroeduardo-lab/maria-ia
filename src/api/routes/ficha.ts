@@ -119,7 +119,7 @@ export async function fichaRoutes(app: FastifyInstance) {
       }
     } catch (err) {
       console.error("[ficha] erro:", err);
-      return reply.code(500).send({ erro: String(err) });
+      return reply.code(500).send({ erro: "não foi possível gerar a ficha" });
     }
   });
 }
