@@ -710,6 +710,9 @@ paths:
         "200":
           description: Criado
           content: { application/json: { schema: { $ref: '#/components/schemas/Flow' } } }
+        "400":
+          description: name obrigatório
+          content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } }
   /admin/flows/{id}:
     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
     get:
@@ -753,7 +756,9 @@ paths:
     delete:
       tags: [Admin — Flows]
       summary: Remove fluxo (admin)
-      responses: { "200": { description: OK } }
+      responses:
+        "200": { description: OK }
+        "404": { description: Não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /admin/flows/{id}/versoes:
     get:
       tags: [Admin — Flows]
@@ -797,19 +802,25 @@ paths:
       tags: [Admin — Flows]
       summary: Valida fluxo (estrutura + compilação)
       parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
-      responses: { "200": { description: "{ ok, erros[] }" } }
+      responses:
+        "200": { description: "{ ok, erros[] }" }
+        "404": { description: Não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /admin/flows/{id}/activate:
     post:
       tags: [Admin — Flows]
       summary: Ativa fluxo (desativa os demais) (admin)
       parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK } }
+      responses:
+        "200": { description: OK }
+        "404": { description: Não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /admin/flows/{id}/deactivate:
     post:
       tags: [Admin — Flows]
       summary: Desativa fluxo (admin)
       parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
-      responses: { "200": { description: OK } }
+      responses:
+        "200": { description: OK }
+        "404": { description: Não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /admin/flows/{id}/marcar-template:
     post:
       tags: [Admin — Flows]
@@ -866,6 +877,9 @@ paths:
       summary: Revela PII do assistido (admin, auditado)
       parameters: [{ in: path, name: sessionId, required: true, schema: { type: string } }]
       responses:
+        "404":
+          description: Conversa não encontrada
+          content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } }
         "200":
           description: Dados completos do assistido (acesso registrado em auditoria)
           content:
@@ -945,6 +959,12 @@ paths:
         "200":
           description: Assistido criado
           content: { application/json: { schema: { $ref: '#/components/schemas/Assistido' } } }
+        "400":
+          description: cpf inválido (11 dígitos) ou nome obrigatório
+          content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } }
+        "409":
+          description: CPF já cadastrado
+          content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } }
   /admin/assistidos/{id}:
     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
     get:
@@ -954,7 +974,7 @@ paths:
         "200":
           description: Dados completos (acesso auditado)
           content: { application/json: { schema: { $ref: '#/components/schemas/Assistido' } } }
-        "404": { description: Não encontrado }
+        "404": { description: Não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
     put:
       tags: [Admin — Assistidos]
       summary: Atualiza assistido (admin)
@@ -962,11 +982,13 @@ paths:
         "200":
           description: Assistido atualizado
           content: { application/json: { schema: { $ref: '#/components/schemas/Assistido' } } }
-        "404": { description: Não encontrado }
+        "404": { description: Não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
     delete:
       tags: [Admin — Assistidos]
       summary: Remove assistido (admin)
-      responses: { "200": { description: OK } }
+      responses:
+        "200": { description: OK }
+        "404": { description: Não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
 
   # ── Admin: Config/Users/Analytics/Audit ────────────────────
   /admin/config:
@@ -1009,7 +1031,11 @@ paths:
     post:
       tags: [Admin — Config/Users/Analytics/Audit]
       summary: Cria usuário (admin)
-      responses: { "200": { description: OK } }
+      responses:
+        "200": { description: OK }
+        "400":
+          description: email/senha obrigatórios ou role inválida
+          content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } }
   /admin/analytics/summary:
     get:
       tags: [Admin — Config/Users/Analytics/Audit]
@@ -1056,6 +1082,7 @@ paths:
         no canvas do builder visual.
       responses:
         "200": { description: "{ messages, done, dadosColetados, tipoPerguntaPendente, trilha, resumo?, metadados? }" }
+        "400": { description: sessionId obrigatório }
         "404": { description: Fluxo não encontrado }
         "422": { description: Flow inválido (falha ao compilar) }
   /admin/test-chat/upload:
@@ -1092,82 +1119,109 @@ paths:
       summary: Consulta assistido por CPF
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CpfReq' } } } }
-      responses: { "200": { description: "{ encontrado, assistido }" } }
+      responses:
+        "200": { description: "{ encontrado, assistido }" }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/assistidos/cadastrar:
     post:
       tags: [Interno (fluxo)]
       summary: Cadastra assistido
       security: []
-      responses: { "200": { description: OK } }
+      responses:
+        "200": { description: OK }
+        "400": { description: cpf inválido ou nome obrigatório, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/assistidos/atualizar:
     post:
       tags: [Interno (fluxo)]
       summary: Atualiza assistido
       security: []
-      responses: { "200": { description: OK } }
+      responses:
+        "200": { description: OK }
+        "400": { description: cpf inválido, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+        "404": { description: assistido não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/casos/consultar:
     post:
       tags: [Interno (fluxo)]
       summary: Casos em aberto do assistido (tabela Caso)
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CpfReq' } } } }
-      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/CasosConsultaResp' } } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/CasosConsultaResp' } } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/casos/detalhe:
     post:
       tags: [Interno (fluxo)]
       summary: Detalhe de 1 caso (por identificador ou índice da lista anterior)
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CasoDetalheReq' } } } }
-      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/CasoDetalheResp' } } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/CasoDetalheResp' } } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/agendamentos/consultar:
     post:
       tags: [Interno (fluxo)]
       summary: Agendamentos em aberto do assistido (tabela Agendamento)
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CpfReq' } } } }
-      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentosConsultaResp' } } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentosConsultaResp' } } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/agendamentos/detalhe:
     post:
       tags: [Interno (fluxo)]
       summary: Detalhe de 1 agendamento (por id ou índice da lista anterior)
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDetalheReq' } } } }
-      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDetalheResp' } } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDetalheResp' } } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/agendamentos/detalhe-rico:
     post:
       tags: [Interno (fluxo)]
       summary: "Detalhe rico de 1 agendamento (endereço, documentos, órgão, idAssistido) — proxy GET api/agendamento/{idEvento} do gateway (issue #111)"
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDetalheRicoReq' } } } }
-      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDetalheRicoResp' } } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDetalheRicoResp' } } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/agendamentos/vagas:
     post:
       tags: [Interno (fluxo)]
       summary: "Vagas disponíveis pra reagendar — proxy GET api/agendamento/vagas/{idEvento} do gateway"
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoVagasReq' } } } }
-      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoVagasResp' } } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoVagasResp' } } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/agendamentos/vaga-detalhe:
     post:
       tags: [Interno (fluxo)]
       summary: Resolve a vaga escolhida do JSON que /vagas já retornou (índice, zero re-fetch)
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoVagaDetalheReq' } } } }
-      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoVagaDetalheResp' } } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoVagaDetalheResp' } } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/agendamentos/reagendar:
     post:
       tags: [Interno (fluxo)]
       summary: "Reagenda um agendamento — proxy POST api/agendamento/reagendar do gateway"
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoReagendarReq' } } } }
-      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoReagendarResp' } } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoReagendarResp' } } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/agendamentos/desmarcar:
     post:
       tags: [Interno (fluxo)]
       summary: "Desmarca um agendamento — proxy POST api/agendamento/desmarcar do gateway (ação irreversível, dispara e-mail real)"
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDesmarcarReq' } } } }
-      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDesmarcarResp' } } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDesmarcarResp' } } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/processos/consultar:
     post:
       tags: [Interno (fluxo)]
@@ -1193,6 +1247,7 @@ paths:
         "200":
           description: Resposta FLAT (sem aninhar em "dados") — bate com {{dados_apenado.*}} do fluxo
           content: { application/json: { schema: { $ref: '#/components/schemas/PessoaPresaConsultaResp' } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/pessoa-presa/consultar-processo:
     get:
       tags: [Interno (fluxo)]
@@ -1204,6 +1259,7 @@ paths:
         "200":
           description: "{ encontrado, numero, origem, idProcesso }"
           content: { application/json: { schema: { $ref: '#/components/schemas/PessoaPresaProcessoResp' } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/pessoa-presa/casos:
     get:
       tags: [Interno (fluxo)]
@@ -1215,6 +1271,7 @@ paths:
         "200":
           description: "status = \"ABERTO\" (literal) quando há caso aberto — cond_status_caso compara isso"
           content: { application/json: { schema: { $ref: '#/components/schemas/PessoaPresaCasosResp' } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/pessoa-presa/orgao-responsavel:
     get:
       tags: [Interno (fluxo)]
@@ -1227,6 +1284,7 @@ paths:
         "200":
           description: "status = \"encontrado\" (literal) quando há órgão vinculado — cond_tem_orgao compara isso"
           content: { application/json: { schema: { $ref: '#/components/schemas/PessoaPresaOrgaoResp' } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/pessoa-presa/orgao-responsavel-liberto:
     get:
       tags: [Interno (fluxo)]
@@ -1238,6 +1296,7 @@ paths:
         "200":
           description: "status = \"encontrado\" (literal) quando há órgão vinculado — cond_tem_orgao compara isso"
           content: { application/json: { schema: { $ref: '#/components/schemas/PessoaPresaOrgaoResp' } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/plantao/vigente:
     get:
       tags: [Interno (fluxo)]
@@ -1247,6 +1306,7 @@ paths:
         "200":
           description: "status = \"encontrado\" (literal) quando há plantão ativo com tipo != MUNICIPAL"
           content: { application/json: { schema: { $ref: '#/components/schemas/PlantaoOrgaoResp' } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/recesso/vigente:
     get:
       tags: [Interno (fluxo)]
@@ -1256,24 +1316,31 @@ paths:
         "200":
           description: "status literal SEM_RECESSO_VIGENTE ou RECESSO_VIGENTE"
           content: { application/json: { schema: { $ref: '#/components/schemas/RecessoResp' } } }
+        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/ficha:
     post:
       tags: [Interno (fluxo)]
       summary: Gera imagem da ficha do assistido (S3, efêmera)
       security: []
-      responses: { "200": { description: "{ url }" } }
+      responses:
+        "200": { description: "{ url }" }
+        "500": { description: falha ao gerar a ficha (log do erro real fica só no servidor), content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/kyc/iniciar:
     post:
       tags: [Interno (fluxo)]
       summary: Inicia KYC (gera link)
       security: []
-      responses: { "200": { description: OK } }
+      responses:
+        "200": { description: OK }
+        "400": { description: cpf inválido, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/kyc/captura:
     post:
       tags: [Interno (fluxo)]
       summary: Recebe selfie e verifica identidade
       security: []
-      responses: { "200": { description: "{ confirmado, score }" } }
+      responses:
+        "200": { description: "{ confirmado, score }" }
+        "400": { description: token inválido ou expirado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/kyc/status:
     post:
       tags: [Interno (fluxo)]
@@ -1300,16 +1367,30 @@ paths:
                 file: { type: string, format: binary, description: "jpeg/png/PDF, máx 10MB" }
       responses:
         "200": { description: "{ nome, tamanho, mimeType, messages } — conversa avançada" }
+        "400": { description: "sessionId ou file ausente" }
         "404": { description: "sessionId inexistente ou conversa não ativa" }
         "413": { description: Arquivo grande demais }
         "415": { description: "Tipo de arquivo não aceito (magic bytes)" }
         "429": { description: Rate limit de uploads excedido }
+        "503": { description: banco não configurado }
 
   # ── Mock (teste) ───────────────────────────────────────────
   /mock/verificar-cpf:
-    post: { tags: [Mock], security: [], summary: Mock consulta CPF, responses: { "200": { description: OK } } }
+    post:
+      tags: [Mock]
+      security: []
+      summary: Mock consulta CPF
+      responses:
+        "200": { description: OK }
+        "400": { description: cpf obrigatório, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /mock/cadastrar-usuario:
-    post: { tags: [Mock], security: [], summary: Mock cadastro, responses: { "200": { description: OK } } }
+    post:
+      tags: [Mock]
+      security: []
+      summary: Mock cadastro
+      responses:
+        "200": { description: OK }
+        "400": { description: campos obrigatórios faltando, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /mock/kyc:
     post: { tags: [Mock], security: [], summary: Mock reconhecimento facial, responses: { "200": { description: OK } } }
   /mock/agendamento:
