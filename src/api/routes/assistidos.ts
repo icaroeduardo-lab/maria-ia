@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../../core/db.js";
-import { gatewayVerdeGet } from "../../core/gateway-verde.js";
+import { gatewayVerdeGet, gatewayVerdePost } from "../../core/gateway-verde.js";
 
 // Rotas de Assistido (cidadão) usadas PELO FLUXO — sem JWT, como os mocks.
 // O nó `api` do builder faz POST com body = dadosColetados (que contém o cpf).
@@ -48,6 +48,62 @@ async function consultarAssistidoVerde(cpf: string): Promise<Record<string, unkn
     logradouro: end.logradouro ?? null,
     numero: end.numero ?? null,
   };
+}
+
+// Payload de cadastro do Verde (POST api/assistido) — issue maria-ia#117,
+// gateway#31. Campos que a Maria não coleta hoje (nomeSocial, complemento)
+// vão vazios: o Verde exige os campos presentes no JSON (não aceita
+// ausentes — validação automática do ApiController do gateway), mas string
+// vazia passa.
+function montarPayloadAssistidoVerde(cpf: string, campos: Record<string, string>) {
+  return {
+    nome: campos.nome ?? "",
+    nomeSocial: "",
+    cpf,
+    endereco: {
+      logradouro: campos.logradouro ?? "",
+      numero: campos.numero ?? "",
+      complemento: "",
+      cep: campos.cep ?? "",
+      bairro: campos.bairro ?? "",
+      municipio: campos.municipio ?? "",
+      uf: campos.uf ?? "",
+    },
+    telefones: campos.telefone
+      ? [{ id: 0, numeroTelefone: campos.telefone, observacao: "", inWhatsapp: true, tipo: "celular", ramal: "", dataIndicacaoWhatsapp: "" }]
+      : [],
+    email: campos.email ?? "",
+    dtNascimento: campos.dataNascimento ?? "",
+  };
+}
+
+// null = gateway fora/CPF rejeitado — quem chama cai pro fallback local.
+async function cadastrarAssistidoVerde(cpf: string, campos: Record<string, string>): Promise<boolean> {
+  const resp = await gatewayVerdePost("/api/assistido", montarPayloadAssistidoVerde(cpf, campos));
+  return resp.ok;
+}
+
+// PUT do Verde só aceita endereco/telefone/email (não tem campo "nome" —
+// confirmado no Swagger, gateway#31). Se só nome mudou, não há o que
+// atualizar lá — quem chama decide se ainda assim quer persistir local.
+async function atualizarAssistidoVerde(cpf: string, campos: Record<string, string>): Promise<boolean> {
+  const relevante = campos.logradouro || campos.numero || campos.cep || campos.bairro || campos.municipio || campos.uf || campos.telefone || campos.email;
+  if (!relevante) return false;
+  const payload = {
+    endereco: {
+      logradouro: campos.logradouro ?? "",
+      numero: campos.numero ?? "",
+      complemento: "",
+      cep: campos.cep ?? "",
+      bairro: campos.bairro ?? "",
+      municipio: campos.municipio ?? "",
+      uf: campos.uf ?? "",
+    },
+    telefone: { id: 0, numeroTelefone: campos.telefone ?? "", observacao: "", inWhatsapp: true, tipo: "celular", ramal: "", dataIndicacaoWhatsapp: "" },
+    email: campos.email ?? "",
+  };
+  const resp = await gatewayVerdePost(`/api/assistido/${cpf}`, payload, "PUT");
+  return resp.ok;
 }
 
 // Shape crua do Gateway Verde (GET /api/casos/{cpf}) — issue maria-ia#110.
@@ -162,6 +218,11 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
   });
 
   // POST /api/assistidos/cadastrar — { cpf, nome, ... } → { sucesso, protocolo, dados }
+  // Tenta cadastrar no Verde primeiro (POST api/assistido, issue maria-ia#117,
+  // gateway#31 — cadastro real na Defensoria); cai pro fallback local se o
+  // gateway estiver fora. Não checa "já existe" no Verde antes de tentar —
+  // o Verde responde 422 nesse caso, tratado como falha (cai pro fallback,
+  // que aí sim confere duplicidade local).
   app.post("/api/assistidos/cadastrar", async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const cpf = so_digitos(body.cpf as string);
@@ -170,15 +231,22 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     const campos = extrairCampos(body);
     if (!campos.nome) return reply.code(400).send({ sucesso: false, erro: "nome obrigatório" });
 
+    const protocolo = `CAD-${new Date().getFullYear()}-${Math.floor(Math.random() * 90000 + 10000)}`;
+
+    const verde = await cadastrarAssistidoVerde(cpf, campos);
+    if (verde) {
+      console.log(`[assistidos] cadastrar (Verde): CPF ${cpf} → ok — ${protocolo}`);
+      return { sucesso: true, protocolo, dados: { cpf, ...campos } };
+    }
+
     const existe = await db.assistido.findUnique({ where: { cpf } });
     if (existe) {
-      console.log(`[assistidos] cadastrar: CPF ${cpf} já existe`);
+      console.log(`[assistidos] cadastrar (local): CPF ${cpf} já existe`);
       return { sucesso: false, jaExiste: true, dados: dadosPublicos(existe as unknown as Record<string, unknown>) };
     }
 
     const a = await db.assistido.create({ data: { cpf, nome: campos.nome, ...campos } });
-    const protocolo = `CAD-${new Date().getFullYear()}-${Math.floor(Math.random() * 90000 + 10000)}`;
-    console.log(`[assistidos] cadastrar: CPF ${cpf} criado — ${protocolo}`);
+    console.log(`[assistidos] cadastrar (local): CPF ${cpf} criado — ${protocolo}`);
     return { sucesso: true, protocolo, dados: dadosPublicos(a as unknown as Record<string, unknown>) };
   });
 
@@ -272,17 +340,28 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
   });
 
   // POST /api/assistidos/atualizar — { cpf, ...campos } → { sucesso, dados }
+  // Tenta atualizar no Verde primeiro (PUT api/assistido/{cpf}, issue
+  // maria-ia#117, gateway#31); cai pro fallback local se o gateway estiver
+  // fora ou se os campos alterados forem só os que o Verde não aceita
+  // (ex: só "nome" — PUT do Verde não tem esse campo).
   app.post("/api/assistidos/atualizar", async (req, reply) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const cpf = so_digitos(body.cpf as string);
     if (cpf.length !== 11) return reply.code(400).send({ sucesso: false, erro: "cpf inválido" });
 
+    const campos = extrairCampos(body);
+
+    const verde = await atualizarAssistidoVerde(cpf, campos);
+    if (verde) {
+      console.log(`[assistidos] atualizar (Verde): CPF ${cpf} → campos: ${Object.keys(campos).join(", ")}`);
+      return { sucesso: true, dados: { cpf, ...campos } };
+    }
+
     const existe = await db.assistido.findUnique({ where: { cpf } });
     if (!existe) return reply.code(404).send({ sucesso: false, erro: "assistido não encontrado" });
 
-    const campos = extrairCampos(body);
     const a = await db.assistido.update({ where: { cpf }, data: campos });
-    console.log(`[assistidos] atualizar: CPF ${cpf} → campos: ${Object.keys(campos).join(", ") || "(nenhum)"}`);
+    console.log(`[assistidos] atualizar (local): CPF ${cpf} → campos: ${Object.keys(campos).join(", ") || "(nenhum)"}`);
     return { sucesso: true, dados: dadosPublicos(a as unknown as Record<string, unknown>) };
   });
 }

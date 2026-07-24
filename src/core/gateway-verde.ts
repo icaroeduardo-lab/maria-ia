@@ -29,12 +29,13 @@ export async function gatewayVerdeGet<T>(caminho: string): Promise<T | null> {
 export async function gatewayVerdePost<T>(
   caminho: string,
   body: unknown,
+  metodo: "POST" | "PUT" = "POST",
 ): Promise<{ ok: boolean; status: number; data: T | null }> {
   const base = env.gatewayVerdeUrl();
   if (!base) return { ok: false, status: 0, data: null };
   try {
     const res = await fetch(`${base}${caminho}`, {
-      method: "POST",
+      method: metodo,
       headers: { accept: "application/json", "content-type": "application/json" },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(20_000),
@@ -43,7 +44,7 @@ export async function gatewayVerdePost<T>(
     if (res.status === 204) return { ok: true, status: res.status, data: null };
     return { ok: true, status: res.status, data: (await res.json()) as T };
   } catch (err) {
-    console.warn(`[gateway-verde] falha em POST ${caminho}:`, String(err).slice(0, 120));
+    console.warn(`[gateway-verde] falha em ${metodo} ${caminho}:`, String(err).slice(0, 120));
     return { ok: false, status: 0, data: null };
   }
 }
