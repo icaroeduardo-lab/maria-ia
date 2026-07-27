@@ -28,7 +28,7 @@ const TEMAS_SENSIVEIS = ["violencia", "violência", "penal", "saude", "saúde", 
 
 export interface FlowNode {
   id: string;
-  type: "mensagem" | "pergunta" | "condicao" | "ia" | "classificar" | "api" | "subgrafo" | "subfluxo" | "atribuir" | "encerrar" | "transferir_humano";
+  type: "mensagem" | "pergunta" | "condicao" | "ia" | "classificar" | "api" | "subgrafo" | "subfluxo" | "atribuir" | "tag" | "encerrar" | "transferir_humano";
   position?: { x: number; y: number }; // layout do builder visual (ignorado pelo engine)
   data: {
     label?: string;
@@ -52,7 +52,8 @@ export interface FlowNode {
     refFlowId?: string;        // subfluxo: id do Flow embutido (tema editável no painel)
     saida?: string;            // sub-flow: nomeia a saída deste nó-folha (casa com label da seta do subfluxo)
     semReescrita?: boolean;    // pergunta: não reescrever com IA (texto fixo — ex: LGPD/links)
-    valor?: string;            // atribuir
+    valor?: string;            // atribuir | tag (rótulo a marcar/remover)
+    tagAcao?: "add" | "remove"; // tag (padrão: add)
     ctaUrl?: string;           // mensagem: botão que abre link (interpolável, ex: {{kyc.url}})
     ctaTexto?: string;         // mensagem: rótulo do botão cta_url (<=20 chars)
     nota?: string;             // qualquer tipo: anotação livre do editor — engine ignora em runtime
@@ -242,6 +243,19 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
         node.data.chave
           ? { dadosColetados: { [node.data.chave]: interpolar(String(node.data.valor ?? ""), state.dadosColetados) } }
           : {};
+
+    // marca/remove um rótulo livre em Conversation.tags (card #20260139) —
+    // contexto rápido pro atendente humano no handoff. O nó computa o array
+    // final aqui mesmo (vê state.tags atual), reducer em state.ts é full-replace.
+    case "tag":
+      return async (state: GraphState) => {
+        const rotulo = interpolar(String(node.data.valor ?? ""), state.dadosColetados).trim();
+        if (!rotulo) return {};
+        const atual = state.tags ?? [];
+        if (node.data.tagAcao === "remove")
+          return atual.includes(rotulo) ? { tags: atual.filter((t) => t !== rotulo) } : {};
+        return atual.includes(rotulo) ? {} : { tags: [...atual, rotulo] };
+      };
 
     case "subgrafo": {
       // pergunta o próximo item pendente do serviço referenciado (loop é montado nas edges)

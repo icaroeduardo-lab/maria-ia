@@ -15,6 +15,10 @@ export const GraphAnnotation = Annotation.Root({
   ultimaPergunta:   Annotation<string>({ value: (_, b) => b, default: () => "" }),
   servicoConcluido: Annotation<boolean>({ value: (_, b) => b, default: () => false }),
   canal:            Annotation<string>({ value: (_, b) => b, default: () => "web" }),
+  // rótulos livres da conversa (nó "tag" do fluxo, card #20260139) — o node
+  // já computa o array final (add/remove) considerando o estado atual, então
+  // o reducer é full-replace (igual `canal`/`ultimaPergunta`), não union.
+  tags:             Annotation<string[]>({ value: (_, b) => b, default: () => [] }),
   iniciadoEm:       Annotation<string>({ value: (_, b) => b, default: () => "" }),
   protocolo:        Annotation<string>({ value: (_, b) => b, default: () => "" }),
   // setado pelo nó transferir_humano — sinaliza pra rastrearConversa() que a
