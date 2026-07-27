@@ -8,10 +8,11 @@ import { gatewayVerdeGet } from "../../core/gateway-verde.js";
 //
 // Verde pode devolver MAIS DE UM órgão pro mesmo idPessoa/idAssunto, cada
 // um com seu próprio tipoAtendimento (confirmado testando ao vivo contra
-// homologação: um retornou "Encaminhamento", outro "Agendamento
-// Presencial"). Simplificação adotada: usa sempre o PRIMEIRO da lista como
-// "o" órgão responsável — mesmo padrão de outras rotas (ex: orgaosAssociados
-// de um caso).
+// homologação, mesmo idAssunto: um órgão "Encaminhamento", outro
+// "Agendamento Presencial" — a ordem não é confiável, já vimos o de
+// encaminhamento vir primeiro). Critério adotado: prefere AGENDAMENTO
+// (compromisso concreto, melhor UX) se algum órgão da lista for desse tipo;
+// só cai pra ENCAMINHAMENTO se nenhum oferecer hora marcada.
 
 interface OrgaoVerdeRaw {
   dados?: {
@@ -50,7 +51,11 @@ export async function orgaoFlowRoutes(app: FastifyInstance) {
     const resp = await gatewayVerdeGet<OrgaoVerdeRaw>(
       `/api/orgao/primeiro-atendimento?idPessoa=${idPessoa}&idAssunto=${idAssunto}${complemento}`,
     );
-    const orgao = resp?.dados?.[0];
+    const lista = resp?.dados ?? [];
+    const orgao =
+      lista.find((o) => normalizarTipo(o.tipoAtendimento ?? "") === "agendamento") ??
+      lista.find((o) => normalizarTipo(o.tipoAtendimento ?? "") === "encaminhamento") ??
+      lista[0];
     if (!orgao?.id) {
       console.log(`[orgao] primeiro-atendimento: idAssunto=${idAssunto} → nenhum órgão encontrado`);
       return { tem_orgao: false };
