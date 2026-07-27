@@ -129,6 +129,9 @@ export function validarFlow(nodes: FlowNode[], edges: FlowEdge[]): ResultadoVali
       case "atribuir":
         if (!d.chave) erros.push(`atribuir "${n.id}" sem data.chave`);
         break;
+      case "tag":
+        if (!d.valor) erros.push(`tag "${n.id}" sem data.valor (rótulo a marcar/remover)`);
+        break;
       case "classificar":
         if (!d.chave) erros.push(`classificar "${n.id}" sem data.chave`);
         break;

@@ -284,7 +284,7 @@ export async function adminRoutes(app: FastifyInstance) {
         take: 50,
         select: {
           id: true, sessionId: true, channel: true, flowId: true, status: true,
-          categoria: true, ultimaEtapa: true, protocoloDperj: true,
+          categoria: true, ultimaEtapa: true, protocoloDperj: true, tags: true,
           startedAt: true, updatedAt: true, completedAt: true,
         },
       }),

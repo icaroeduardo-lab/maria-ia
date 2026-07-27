@@ -283,6 +283,7 @@ async function rastrearConversa(
     flowId,
     status: emAndamento || emHandoff ? "active" : "completed",
     categoria: (v.categoria as string) || null,
+    tags: (v.tags as string[]) ?? [],
     ultimaEtapa: emAndamento ? atual.next[0] : emHandoff ? "transferir_humano" : "fim",
     dadosColetados: coletados as object,
     protocoloDperj: (v.protocolo as string) || null,

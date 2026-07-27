@@ -469,6 +469,7 @@ components:
         categoria: { type: string, nullable: true }
         ultimaEtapa: { type: string, nullable: true }
         protocoloDperj: { type: string, nullable: true }
+        tags: { type: array, items: { type: string }, description: "rótulos livres marcados pelo nó \"tag\" do fluxo (card #20260139)" }
         startedAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         completedAt: { type: string, format: date-time, nullable: true }
