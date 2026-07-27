@@ -425,6 +425,72 @@ components:
       properties:
         sucesso: { type: boolean }
         emailEnviado: { type: boolean, description: "204 do Verde (true) vs 200 sucesso parcial (false, e-mail falhou)" }
+    VerificarDuplicadosReq:
+      type: object
+      required: [idPessoa, idAssunto]
+      properties:
+        idPessoa: { type: integer }
+        idAssunto: { type: integer }
+    VerificarDuplicadosResp:
+      type: object
+      required: [tem_duplicado]
+      properties:
+        tem_duplicado: { type: boolean }
+        idAgendamentoDuplicado: { type: integer, nullable: true }
+        dataDuplicado: { type: string, nullable: true }
+    AgendarReq:
+      type: object
+      required: [idPessoa, idOrgao, idAssunto, idIntervalo, dataVaga]
+      properties:
+        idPessoa: { type: integer }
+        idOrgao: { type: integer }
+        idAssunto: { type: integer }
+        idIntervalo: { type: integer, description: "vindo de orgao/primeiro-atendimento (primeira_vaga_intervalo) ou agendamentos/vagas" }
+        dataVaga: { type: string, description: "\"DD/MM/YYYY HH:mm\"" }
+        resumoAtendimento: { type: string }
+        textoComplemento: { type: string }
+    AgendarResp:
+      type: object
+      required: [sucesso]
+      properties:
+        sucesso: { type: boolean }
+        idAgendamento: { type: integer, nullable: true }
+    OrgaoPrimeiroAtendimentoReq:
+      type: object
+      required: [idPessoa, idAssunto]
+      properties:
+        idPessoa: { type: integer }
+        idAssunto: { type: integer }
+        complemento: { type: string }
+    OrgaoPrimeiroAtendimentoResp:
+      type: object
+      required: [tem_orgao]
+      properties:
+        tem_orgao: { type: boolean }
+        orgao_id: { type: integer }
+        orgao_nome: { type: string }
+        tipo_atendimento: { type: string, description: "\"agendamento\" | \"encaminhamento\" | \"outros\" — normalizado do tipoAtendimento bruto do Verde" }
+        idLocalAtendimento: { type: integer, nullable: true }
+        primeira_vaga_intervalo: { type: integer, nullable: true }
+        primeira_vaga_data: { type: string, nullable: true }
+        primeira_vaga_hora: { type: string, nullable: true }
+    EncaminharReq:
+      type: object
+      required: [idPessoa, idOrgao, idAssunto, preferenciaAtendimento]
+      properties:
+        idPessoa: { type: integer }
+        idOrgao: { type: integer }
+        idAssunto: { type: integer }
+        urgencia: { type: boolean }
+        preferenciaAtendimento: { type: string, description: "\"Remoto\" | \"Presencial\"" }
+        idLocalAtendimento: { type: integer, description: "obrigatório quando Presencial" }
+        textoComplemento: { type: string }
+    EncaminharResp:
+      type: object
+      required: [sucesso]
+      properties:
+        sucesso: { type: boolean }
+        idEncaminhamento: { type: integer, nullable: true }
     ConfigIA:
       type: object
       description: Configuração global da IA (singleton id=default)
@@ -1241,6 +1307,38 @@ paths:
       responses:
         "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendamentoDesmarcarResp' } } } }
         "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+  /api/agendamentos/verificar-duplicados:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Checa agendamento duplicado do mesmo assunto — proxy GET api/agendamento/verificar-duplicados do gateway"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/VerificarDuplicadosReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/VerificarDuplicadosResp' } } } }
+  /api/agendamentos/agendar:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Cria agendamento novo (primeiro atendimento, com hora marcada) — proxy POST api/agendamento/agendar do gateway"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AgendarReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AgendarResp' } } } }
+  /api/orgao/primeiro-atendimento:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Consulta o órgão responsável pelo primeiro atendimento — decide agendamento (hora) vs encaminhamento (sem hora) via tipo_atendimento"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/OrgaoPrimeiroAtendimentoReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/OrgaoPrimeiroAtendimentoResp' } } } }
+  /api/encaminhamento/encaminhar:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Cria encaminhamento (primeiro atendimento sem hora marcada) — proxy POST api/encaminhamento/encaminhar do gateway"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/EncaminharReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/EncaminharResp' } } } }
   /api/processos/consultar:
     post:
       tags: [Interno (fluxo)]
