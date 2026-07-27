@@ -28,7 +28,7 @@ interface AssistidoVerdeRaw {
 // Consulta o cadastro real no Verde; mapeia pro mesmo shape do model
 // Assistido local, pra `dadosPublicos()` continuar funcionando igual.
 // null = não encontrado/gateway fora — quem chama cai pro fallback local.
-async function consultarAssistidoVerde(cpf: string): Promise<Record<string, unknown> | null> {
+export async function consultarAssistidoVerde(cpf: string): Promise<Record<string, unknown> | null> {
   const resp = await gatewayVerdeGet<AssistidoVerdeRaw>(`/api/assistido/${cpf}`);
   const d = resp?.dados;
   if (!d?.nome) return null;
@@ -157,7 +157,7 @@ interface CasoEnxuto {
 }
 
 // null = gateway fora/CPF não encontrado — quem chama cai pro fallback local.
-async function consultarCasosVerde(cpf: string): Promise<CasoEnxuto[] | null> {
+export async function consultarCasosVerde(cpf: string): Promise<CasoEnxuto[] | null> {
   const resp = await gatewayVerdeGet<CasosVerdeRaw>(`/api/casos/${cpf}`);
   const lista = resp?.dados;
   if (!lista) return null;

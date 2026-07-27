@@ -265,6 +265,16 @@ components:
       required: [cpf]
       properties:
         cpf: { type: string }
+    ElegibilidadeReq:
+      type: object
+      properties:
+        telefone_whatsapp: { type: string, description: "wa_id cru (E.164 sem +), injetado automaticamente no invoke inicial — ver chat.ts" }
+        cpf: { type: string }
+    ElegibilidadeResp:
+      type: object
+      required: [decisao]
+      properties:
+        decisao: { type: string, description: "\"ok\" (segue normal) ou \"perguntar\" (fluxo pergunta residência/processo direto)" }
     CasoDetalheReq:
       type: object
       properties:
@@ -1159,6 +1169,14 @@ paths:
       responses:
         "200": { content: { application/json: { schema: { $ref: '#/components/schemas/CasoDetalheResp' } } } }
         "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+  /api/elegibilidade/verificar:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Gate de área de atuação (DDD RJ → UF cadastro Verde → caso/processo Verde → perguntar direto)"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ElegibilidadeReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/ElegibilidadeResp' } } } }
   /api/agendamentos/consultar:
     post:
       tags: [Interno (fluxo)]
