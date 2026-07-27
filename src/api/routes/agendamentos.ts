@@ -194,4 +194,55 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
     console.log(`[agendamentos] desmarcar: idAgendamento=${payload.idAgendamento} → ${resp.ok ? "ok" : `falha(${resp.status})`}`);
     return { sucesso: resp.ok, emailEnviado: resp.status === 204 };
   });
+
+  // POST /api/agendamentos/verificar-duplicados — { idPessoa, idAssunto } →
+  // proxy GET api/agendamento/verificar-duplicados (cards #20260146/#20260185,
+  // issue gateway#39) — evita marcar 2 agendamentos pro mesmo assunto.
+  app.post("/api/agendamentos/verificar-duplicados", async (req) => {
+    const body = (req.body ?? {}) as { idPessoa?: string | number; idAssunto?: string | number };
+    const idPessoa = Number(body.idPessoa);
+    const idAssunto = Number(body.idAssunto);
+    if (!idPessoa || !idAssunto) return { tem_duplicado: false };
+
+    const resp = await gatewayVerdeGet<{ dados?: { agendamentos?: { id?: number; dataAgendamento?: string }[] } }>(
+      `/api/agendamento/verificar-duplicados?idPessoa=${idPessoa}&idAssunto=${idAssunto}`,
+    );
+    const duplicados = resp?.dados?.agendamentos ?? [];
+    console.log(`[agendamentos] verificar-duplicados: idPessoa=${idPessoa} idAssunto=${idAssunto} → ${duplicados.length} duplicado(s)`);
+    return {
+      tem_duplicado: duplicados.length > 0,
+      idAgendamentoDuplicado: duplicados[0]?.id ?? null,
+      dataDuplicado: duplicados[0]?.dataAgendamento ?? null,
+    };
+  });
+
+  // POST /api/agendamentos/agendar — { idPessoa, idOrgao, idAssunto, idIntervalo,
+  // dataVaga, resumoAtendimento, textoComplemento? } → proxy POST
+  // api/agendamento/agendar (cards #20260146/#20260185, issue gateway#39).
+  // "Primeiro atendimento" com hora marcada — testado ao vivo contra
+  // homologação, cria agendamento real (id retornado em `dados.id`).
+  app.post("/api/agendamentos/agendar", async (req) => {
+    const body = (req.body ?? {}) as {
+      idPessoa?: string | number;
+      idOrgao?: string | number;
+      idAssunto?: string | number;
+      idIntervalo?: string | number;
+      dataVaga?: string;
+      resumoAtendimento?: string;
+      textoComplemento?: string;
+    };
+    const payload = {
+      idPessoa: Number(body.idPessoa),
+      idOrgao: Number(body.idOrgao),
+      idAssunto: Number(body.idAssunto),
+      idIntervalo: Number(body.idIntervalo),
+      dataVaga: body.dataVaga ?? "",
+      resumoAtendimento: body.resumoAtendimento ?? "",
+      fluxoAtendimento: "PRIMEIRO_ATENDIMENTO",
+      textoComplemento: body.textoComplemento ?? "",
+    };
+    const resp = await gatewayVerdePost<{ dados?: { id?: number } }>("/api/agendamento/agendar", payload);
+    console.log(`[agendamentos] agendar: idPessoa=${payload.idPessoa} idOrgao=${payload.idOrgao} → ${resp.ok ? "ok" : `falha(${resp.status})`}`);
+    return { sucesso: resp.ok, idAgendamento: resp.data?.dados?.id ?? null };
+  });
 }

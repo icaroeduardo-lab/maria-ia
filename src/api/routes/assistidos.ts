@@ -11,6 +11,7 @@ const so_digitos = (s?: string) => (s ?? "").replace(/\D/g, "");
 // Shape crua do Gateway Verde (GET /api/assistido/{cpf}) — issue #108.
 interface AssistidoVerdeRaw {
   dados?: {
+    idPessoa?: number;
     nome?: string;
     email?: string;
     enderecoDetalhado?: {
@@ -35,6 +36,7 @@ export async function consultarAssistidoVerde(cpf: string): Promise<Record<strin
   const end = d.enderecoDetalhado ?? {};
   return {
     cpf,
+    idPessoa: d.idPessoa ?? null,
     nome: d.nome,
     dataNascimento: null,
     nomeMae: null,
