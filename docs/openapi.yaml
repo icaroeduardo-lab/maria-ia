@@ -474,6 +474,20 @@ components:
         primeira_vaga_intervalo: { type: integer, nullable: true }
         primeira_vaga_data: { type: string, nullable: true }
         primeira_vaga_hora: { type: string, nullable: true }
+    BloqueioVerificarReq:
+      type: object
+      required: [idPessoa, idAssunto, idOrgao]
+      properties:
+        idPessoa: { type: integer }
+        idAssunto: { type: integer }
+        idOrgao: { type: integer }
+    BloqueioVerificarResp:
+      type: object
+      required: [tem_bloqueio]
+      properties:
+        tem_bloqueio: { type: boolean }
+        data_bloqueio: { type: string, nullable: true }
+        data_desbloqueio: { type: string, nullable: true }
     EncaminharReq:
       type: object
       required: [idPessoa, idOrgao, idAssunto, preferenciaAtendimento]
@@ -1357,6 +1371,14 @@ paths:
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/OrgaoPrimeiroAtendimentoReq' } } } }
       responses:
         "200": { content: { application/json: { schema: { $ref: '#/components/schemas/OrgaoPrimeiroAtendimentoResp' } } } }
+  /api/bloqueio/verificar:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Checa bloqueio ativo (carência) de idPessoa/idAssunto/idOrgao antes de agendar/encaminhar — proxy GET api/bloqueio do gateway"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/BloqueioVerificarReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/BloqueioVerificarResp' } } } }
   /api/encaminhamento/encaminhar:
     post:
       tags: [Interno (fluxo)]
@@ -1469,13 +1491,12 @@ paths:
   /api/recesso/vigente:
     get:
       tags: [Interno (fluxo)]
-      summary: "Recesso forense vigente (\"API fake\") — fluxo reutilizável Recesso"
+      summary: "Recesso forense vigente — proxy GET api/recesso/vigente do gateway — fluxo reutilizável Recesso"
       security: []
       responses:
         "200":
           description: "status literal SEM_RECESSO_VIGENTE ou RECESSO_VIGENTE"
           content: { application/json: { schema: { $ref: '#/components/schemas/RecessoResp' } } }
-        "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
   /api/ficha:
     post:
       tags: [Interno (fluxo)]
