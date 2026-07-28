@@ -67,6 +67,11 @@ export function validarFlow(nodes: FlowNode[], edges: FlowEdge[]): ResultadoVali
       case "pergunta": {
         if (!d.chave) erros.push(`pergunta "${n.id}" sem data.chave`);
         if (!d.texto) avisos.push(`pergunta "${n.id}" sem texto`);
+        // opcoes: lista vem de data.opcoes (fixa) OU data.opcoesDinamicas (chave
+        // em dadosColetados populada por um nó api anterior, card #20260138) —
+        // sem nenhuma das duas, a pergunta não tem o que oferecer ao usuário
+        if (d.tipoPergunta === "opcoes" && !d.opcoes?.length && !d.opcoesDinamicas)
+          erros.push(`pergunta "${n.id}" tipo opcoes sem data.opcoes nem data.opcoesDinamicas`);
         // múltiplas saídas: só roteiam em sim_nao com labels true/false —
         // sem isso o engine executa TODOS os ramos (fan-out silencioso, #45)
         const saidas = edges.filter((e) => e.source === n.id);
