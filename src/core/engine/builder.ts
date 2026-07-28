@@ -651,13 +651,19 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
       // demais: após 3 falhas o valor bruto (texto não-JSON) fica em
       // dadosColetados[k] — edge case raro aceito.
       const tipoComValidador = temValidadorDeFormato(node.data.tipoPergunta ?? "texto");
+      // opcoesDinamicas tem a mesma semântica de "validador de formato": criarCaptura
+      // só grava dadosColetados[k] quando a escolha resolve pra uma opção válida —
+      // sem entrar aqui, a resposta não resolvida (fala não bate índice/texto de
+      // nenhuma opção) avançava pro próximo nó com k vazio em vez de re-perguntar
+      // (achado testando ao vivo, card #20260138).
+      const opcoesDinamicasChave = node.data.tipoPergunta === "opcoes" ? node.data.opcoesDinamicas : undefined;
       if (!saidas.length) builder.addEdge(`cap_${node.id}`, END);
       else if (roteiaPorLabel)
         builder.addConditionalEdges(`cap_${node.id}`, rotaPorResposta, {
           ...destinosRotulados,
           [END]: END,
         });
-      else if (tipoComValidador && saidas.length === 1) {
+      else if ((tipoComValidador || opcoesDinamicasChave) && saidas.length === 1) {
         const destino = entrada(saidas[0].target);
         builder.addConditionalEdges(
           `cap_${node.id}`,
