@@ -17,6 +17,7 @@ import { assistidosFlowRoutes } from "./routes/assistidos.js";
 import { elegibilidadeFlowRoutes } from "./routes/elegibilidade.js";
 import { agendamentosFlowRoutes } from "./routes/agendamentos.js";
 import { orgaoFlowRoutes } from "./routes/orgao.js";
+import { assuntoFlowRoutes } from "./routes/assunto.js";
 import { encaminhamentoFlowRoutes } from "./routes/encaminhamento.js";
 import { pessoaPresaFlowRoutes } from "./routes/pessoa-presa.js";
 import { plantaoFlowRoutes } from "./routes/plantao.js";
@@ -99,6 +100,7 @@ export async function montarApp(opts: MontarAppOpts = {}) {
   await app.register(elegibilidadeFlowRoutes);
   await app.register(agendamentosFlowRoutes);
   await app.register(orgaoFlowRoutes);
+  await app.register(assuntoFlowRoutes);
   await app.register(encaminhamentoFlowRoutes);
   await app.register(pessoaPresaFlowRoutes);
   await app.register(plantaoFlowRoutes);
