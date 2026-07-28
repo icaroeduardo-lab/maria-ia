@@ -491,6 +491,32 @@ components:
       properties:
         sucesso: { type: boolean }
         idEncaminhamento: { type: integer, nullable: true }
+    ConsultarItemArvoreReq:
+      type: object
+      properties:
+        idCategoria: { type: integer, description: "só na 1ª chamada" }
+        idItemCategoria: { type: integer, description: "resposta escolhida no nível anterior" }
+    ConsultarItemArvoreResp:
+      type: object
+      required: [assunto_encontrado]
+      properties:
+        assunto_encontrado: { type: boolean }
+        idAssunto: { type: integer, nullable: true }
+        pergunta: { type: string }
+        respostas: { type: array, items: { type: object, properties: { id: { type: integer }, resposta: { type: string } } } }
+        lista: { type: string, description: "respostas numeradas, pronta pra exibir" }
+    ResolverEscolhaReq:
+      type: object
+      required: [escolha_sel, resultado_arvore]
+      properties:
+        escolha_sel: { type: string, description: "índice digitado (1, 2, ...) ou o texto da resposta" }
+        resultado_arvore: { type: string, description: "JSON cru da resposta anterior de consultar-item-arvore (mesma chave de dadosColetados)" }
+    ResolverEscolhaResp:
+      type: object
+      required: [encontrada]
+      properties:
+        encontrada: { type: boolean }
+        idItemCategoria: { type: integer, nullable: true }
     ConfigIA:
       type: object
       description: Configuração global da IA (singleton id=default)
@@ -1339,6 +1365,22 @@ paths:
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/EncaminharReq' } } } }
       responses:
         "200": { content: { application/json: { schema: { $ref: '#/components/schemas/EncaminharResp' } } } }
+  /api/assunto/consultar-item-arvore:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Navega 1 nível da árvore de assuntos do Verde (idCategoria na 1ª chamada, idItemCategoria nas seguintes) — proxy GET api/assunto/consultar-item-arvore do gateway"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ConsultarItemArvoreReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/ConsultarItemArvoreResp' } } } }
+  /api/assunto/resolver-escolha:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Resolve o número escolhido pro id da resposta da árvore — zero chamada nova ao Verde"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ResolverEscolhaReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/ResolverEscolhaResp' } } } }
   /api/processos/consultar:
     post:
       tags: [Interno (fluxo)]
