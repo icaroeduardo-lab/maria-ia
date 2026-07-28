@@ -39,6 +39,9 @@ export interface FlowNode {
     chave?: string;            // pergunta | api | atribuir | classificar (campo onde grava a categoria)
     tipoPergunta?: TipoPergunta;
     opcoes?: string[];         // pergunta(opcoes) | classificar (categorias possíveis)
+    opcoesDinamicas?: string;  // pergunta(opcoes): chave/caminho em dadosColetados com a lista
+                               // (populada por um nó api anterior) — usada em vez de data.opcoes
+                               // fixo (card #20260138). Ver resolverOpcoesDinamicas.
     campo?: string;            // condicao: campo de dadosColetados a comparar
     prompt?: string;           // ia | classificar: instrução extra ao LLM
     usarRag?: boolean;         // ia
@@ -87,6 +90,45 @@ function perguntaDoNode(node: FlowNode): Pergunta {
   };
 }
 
+// ── Pergunta com opções dinâmicas (card #20260138) ─────────────────────────────
+// pergunta(opcoes) cuja lista vem de um array em dadosColetados (gravado por um
+// nó api anterior no mesmo fluxo) em vez de data.opcoes fixo no JSON — pensado
+// pra listas grandes demais pra hardcodar (ex: árvore de assunto do Verde,
+// UF→município→bairro). Contrato do array-fonte: cada item é uma string
+// (id = label = o próprio item) OU um objeto — label tenta label|nome|texto|
+// resposta|title, id tenta id|value|codigo (cai no label se nada bater).
+export interface OpcaoDinamica { id: string; label: string }
+
+function resolverOpcoesDinamicas(dados: Record<string, unknown>, caminho: string): OpcaoDinamica[] {
+  const bruto = resolverCampo(dados, caminho);
+  if (!bruto) return [];
+  let arr: unknown;
+  try { arr = JSON.parse(bruto); } catch { return []; }
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((item): OpcaoDinamica => {
+      if (typeof item === "string") return { id: item, label: item };
+      if (item && typeof item === "object") {
+        const o = item as Record<string, unknown>;
+        const label = String(o.label ?? o.nome ?? o.texto ?? o.resposta ?? o.title ?? "");
+        const id = String(o.id ?? o.value ?? o.codigo ?? label);
+        return { id, label };
+      }
+      return { id: String(item), label: String(item) };
+    })
+    .filter((o) => o.label);
+}
+
+// resolve a fala do usuário (índice digitado 1-based OU texto exato da opção,
+// mesmo padrão de /api/assunto/resolver-escolha) pra opção dinâmica escolhida
+function resolverEscolhaDinamica(fala: string, opcoes: OpcaoDinamica[]): OpcaoDinamica | null {
+  const sel = fala.trim();
+  const porIndice = /^\d{1,3}$/.test(sel) ? opcoes[Number(sel) - 1] : undefined;
+  if (porIndice) return porIndice;
+  const porTexto = opcoes.find((o) => o.label.toLowerCase().trim() === sel.toLowerCase());
+  return porTexto ?? null;
+}
+
 
 // base do próprio servidor para chamadas internas do fluxo (nós api com url relativa)
 function baseUrlInterna(): string {
@@ -126,9 +168,17 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
       };
 
     case "pergunta": {
-      const p = perguntaDoNode(node);
+      const pBase = perguntaDoNode(node);
       const semReescrita = node.data.semReescrita === true;
+      // opções dinâmicas: só em tipoPergunta="opcoes" com a chave-fonte configurada
+      const opcoesDinamicasChave = node.data.tipoPergunta === "opcoes" ? node.data.opcoesDinamicas : undefined;
       return async (state: GraphState) => {
+        let p = pBase;
+        if (opcoesDinamicasChave) {
+          const dinamicas = resolverOpcoesDinamicas(state.dadosColetados, opcoesDinamicasChave);
+          if (dinamicas.length) p = { ...pBase, opcoes: dinamicas.map((o) => o.label) };
+          else console.warn(`[engine] pergunta ${node.id}: opcoesDinamicas "${opcoesDinamicasChave}" vazia/ausente em dadosColetados`);
+        }
         // conversacional: reescrita acolhedora (cacheada por pergunta+tom+estilo)
         const cfg = await obterConfig();
         const texto = cfg.conversacional && !semReescrita
@@ -307,10 +357,32 @@ const LIMITE_TENTATIVAS = 3;
 // captura a resposta do usuário após o interrupt de um node pergunta.
 // avaliarSentimento: só true p/ perguntas livres de tema (sf_* + tipo texto) —
 // V2 do tom via Comprehend, reavalia por turno com histerese (só escalona).
-function criarCaptura(p: Pergunta, avaliarSentimento = false) {
+function criarCaptura(p: Pergunta, avaliarSentimento = false, opcoesDinamicasChave?: string) {
   return async (state: GraphState) => {
     const fala = ultimaFalaUsuario(state);
     if (!fala) return {};
+
+    // opções dinâmicas: resolve índice/texto digitado pra opção da lista (fonte
+    // resolvida em runtime, mesma chave usada pra montar a pergunta) e grava o
+    // ID (não o texto bruto) — downstream (ex: próximo nó api) precisa do id
+    // real, não do rótulo exibido. Rótulo fica em `${chave}_label` (interpolável).
+    if (opcoesDinamicasChave) {
+      const opcoes = resolverOpcoesDinamicas(state.dadosColetados, opcoesDinamicasChave);
+      const escolhida = resolverEscolhaDinamica(fala, opcoes);
+      if (escolhida) return { dadosColetados: { [p.chave]: escolhida.id, [`${p.chave}_label`]: escolhida.label } };
+
+      const novoCount = (state.tentativas[p.chave] ?? 0) + 1;
+      if (novoCount <= LIMITE_TENTATIVAS) {
+        return {
+          messages: [new AIMessage("Não entendi a opção — responda com o número da lista ou o texto exato de uma das opções. Pode tentar de novo?")],
+          tentativas: { [p.chave]: novoCount },
+        };
+      }
+      // limite estourado: nunca travar o assistido (card #20260120) — segue com
+      // o texto bruto (sem id resolvido); edge case raro aceito.
+      return { dadosColetados: { [p.chave]: fala, [`${p.chave}_label`]: fala } };
+    }
+
     const valor = p.tipo === "sim_nao" ? interpretarSimNao(fala) : fala;
 
     if (!formatoValido(p.tipo, valor)) {
@@ -502,7 +574,8 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
       builder.addNode(`gate_${node.id}`, async () => ({})); // no-op; decisão na conditional edge
       // pergunta livre de tema (dentro de subfluxo expandido, texto aberto) → V2 do tom
       const livreDeTema = node.id.startsWith("sf_") && (node.data.tipoPergunta ?? "texto") === "texto";
-      builder.addNode(`cap_${node.id}`, criarCaptura(perguntaDoNode(node), livreDeTema));
+      const opcoesDinamicasChave = node.data.tipoPergunta === "opcoes" ? node.data.opcoesDinamicas : undefined;
+      builder.addNode(`cap_${node.id}`, criarCaptura(perguntaDoNode(node), livreDeTema, opcoesDinamicasChave));
       interrupts.push(node.id);
     }
     if (node.type === "subgrafo") {
