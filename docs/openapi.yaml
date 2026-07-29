@@ -531,6 +531,16 @@ components:
       properties:
         encontrada: { type: boolean }
         idItemCategoria: { type: integer, nullable: true }
+    AssuntoMetadadosResp:
+      type: object
+      required: [encontrado, urgente]
+      properties:
+        encontrado: { type: boolean }
+        urgente: { type: boolean }
+        documentos_necessarios:
+          type: string
+          nullable: true
+          description: "txDocumentosNecessarios do Verde — texto pronto (markdown-like) pra exibir ao assistido. \"plantao\" do Verde é ignorado de propósito (fora de escopo, issue #132)."
     ConfigIA:
       type: object
       description: Configuração global da IA (singleton id=default)
@@ -1403,6 +1413,18 @@ paths:
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ResolverEscolhaReq' } } } }
       responses:
         "200": { content: { application/json: { schema: { $ref: '#/components/schemas/ResolverEscolhaResp' } } } }
+  /api/assunto/metadados:
+    get:
+      tags: [Interno (fluxo)]
+      summary: "Urgência e documentos necessários do assunto (idAssunto já identificado) — proxy GET api/assunto/{idAssunto} do gateway"
+      security: []
+      parameters:
+        - name: idAssunto
+          in: query
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AssuntoMetadadosResp' } } } }
   /api/processos/consultar:
     post:
       tags: [Interno (fluxo)]

@@ -7,6 +7,9 @@ import { gatewayVerdeGet } from "../../core/gateway-verde.js";
 // níveis de pergunta (não é categoria→id direto, confirmado testando ao
 // vivo: Divórcio/Pensão levam 3+ níveis) — por isso o subfluxo "Identificar
 // Assunto" no builder visual chama esta rota em loop, uma pergunta por vez.
+//
+// Também expõe metadados do assunto já identificado (card #20260153, issue
+// #132) — urgência e documentos necessários, uma vez que idAssunto é conhecido.
 
 interface RespostaArvore {
   id?: number;
@@ -19,6 +22,24 @@ interface ItemArvoreVerdeRaw {
     idAssunto?: number;
     assuntoEncontrado?: boolean;
     respostas?: RespostaArvore[];
+  };
+}
+
+// Shape real de GET api/assunto/{idAssunto} do gateway (card Coilab #20260153,
+// issue #132) — confirmado testando ao vivo contra homologação com 5
+// idAssunto reais (3151, 3243, 3230, 3052, 8411), todos 200. "complemento"
+// pode estar ausente (não veio em todos os testes, ex: 3230) — por isso é
+// opcional aqui.
+interface AssuntoMetadadosVerdeRaw {
+  dados?: {
+    nome?: string;
+    nomeMateria?: string;
+    descricao?: string;
+    txDocumentosNecessarios?: string;
+    urgente?: boolean;
+    plantao?: boolean;
+    complemento?: { tipo?: string; nome?: string; maximoDiasAteBloqueio?: number | null };
+    documentosNecessarios?: { id?: number; nomeDocumento?: string; basico?: boolean }[];
   };
 }
 
@@ -75,5 +96,37 @@ export async function assuntoFlowRoutes(app: FastifyInstance) {
     }
     console.log(`[assunto] resolver-escolha: "${sel}" → idItemCategoria=${escolhida.id}`);
     return { encontrada: true, idItemCategoria: escolhida.id };
+  });
+
+  // GET /api/assunto/metadados?idAssunto=... — proxy GET api/assunto/{idAssunto}
+  // do gateway (issue #132). Decisão de produto: expor urgência e o texto
+  // pronto de documentos necessários pro fluxo mostrar ao assistido;
+  // "plantao" fica fora de escopo (não expor). Minimização LGPD: não repassa
+  // "descricao"/"complemento" (texto livre da matéria, não relevante ainda
+  // pro fluxo) nem o array cru "documentosNecessarios" — txDocumentosNecessarios
+  // já vem como texto formatado pronto pra exibir, então o array estruturado
+  // seria uma segunda fonte de verdade redundante; se um fluxo precisar
+  // renderizar checklist item a item no futuro, adicionar um campo próprio
+  // então (decisão registrada aqui, não implementado especulativamente).
+  app.get("/api/assunto/metadados", async (req) => {
+    const idAssunto = Number((req.query as { idAssunto?: string | number })?.idAssunto);
+    if (!idAssunto) {
+      console.log(`[assunto] metadados: idAssunto inválido`);
+      return { encontrado: false, urgente: false, documentos_necessarios: null };
+    }
+
+    const resp = await gatewayVerdeGet<AssuntoMetadadosVerdeRaw>(`/api/assunto/${idAssunto}`);
+    const d = resp?.dados;
+    if (!d) {
+      console.log(`[assunto] metadados: idAssunto=${idAssunto} → não encontrado`);
+      return { encontrado: false, urgente: false, documentos_necessarios: null };
+    }
+
+    console.log(`[assunto] metadados: idAssunto=${idAssunto} → urgente=${!!d.urgente}`);
+    return {
+      encontrado: true,
+      urgente: d.urgente ?? false,
+      documentos_necessarios: d.txDocumentosNecessarios ?? null,
+    };
   });
 }
