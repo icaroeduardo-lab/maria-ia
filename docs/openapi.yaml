@@ -280,6 +280,11 @@ components:
       required: [decisao]
       properties:
         decisao: { type: string, description: "\"ok\" (segue normal) ou \"perguntar\" (fluxo pergunta residência/processo direto)" }
+    TemCasoAbertoResp:
+      type: object
+      required: [tem_caso]
+      properties:
+        tem_caso: { type: boolean, description: "true se o CPF tem caso/processo aberto no Verde (prova RJ na prática)" }
     CasoDetalheReq:
       type: object
       properties:
@@ -1340,6 +1345,14 @@ paths:
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ElegibilidadeReq' } } } }
       responses:
         "200": { content: { application/json: { schema: { $ref: '#/components/schemas/ElegibilidadeResp' } } } }
+  /api/elegibilidade/tem-caso-aberto:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Checa isoladamente se o CPF tem caso/processo aberto no Verde (prova RJ) — usado no gate pós-ficha, sem re-checar DDD/UF"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CpfReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/TemCasoAbertoResp' } } } }
   /api/agendamentos/consultar:
     post:
       tags: [Interno (fluxo)]

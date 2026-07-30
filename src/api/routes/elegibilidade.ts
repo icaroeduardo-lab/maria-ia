@@ -69,4 +69,18 @@ export async function elegibilidadeFlowRoutes(app: FastifyInstance) {
     console.log(`[elegibilidade] DDD ${ddd ?? "?"} fora do RJ, sem cadastro/caso no Verde → perguntar`);
     return { decisao: "perguntar" };
   });
+
+  // POST /api/elegibilidade/tem-caso-aberto { cpf } → { tem_caso }
+  // Endpoint enxuto pro node de fluxo checar isoladamente se o assistido já
+  // tem caso/processo aberto no Verde (prova residência RJ na prática) — usado
+  // no novo desenho do gate (roda DEPOIS da ficha do assistido, não precisa
+  // mais do DDD nem re-consultar UF, que já vêm de resultado_cpf mostrado
+  // antes; card Coilab #20260197).
+  app.post("/api/elegibilidade/tem-caso-aberto", async (req) => {
+    const cpf = ((req.body as { cpf?: string } | null)?.cpf ?? "").replace(/\D/g, "");
+    if (cpf.length !== 11) return { tem_caso: false };
+
+    const casos = await consultarCasosVerde(cpf);
+    return { tem_caso: !!(casos && casos.length > 0) };
+  });
 }
