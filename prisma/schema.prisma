@@ -15,6 +15,9 @@ model Flow {
   active     Boolean       @default(false)
   // catálogo de templates (card #20260127) — metadado, não versiona
   isTemplate Boolean       @default(false)
+  // dados de teste (issue #134) — seed de dadosColetados pra testar subfluxo
+  // isolado sem depender de nós anteriores do fluxo pai; metadado, não versiona
+  dadosTeste Json? // Record<string,string> — chave→valor default sugerido
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
   versions   FlowVersion[]
