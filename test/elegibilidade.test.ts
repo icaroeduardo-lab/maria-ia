@@ -91,6 +91,36 @@ test(
   },
 );
 
+// POST /api/elegibilidade/tem-caso-aberto (card Coilab #20260197) — endpoint
+// enxuto pro novo desenho do gate (roda depois da ficha, sem DDD/UF). Não
+// depende de banco: GATEWAY_VERDE_URL="" (setado no topo do arquivo) já
+// garante consultarCasosVerde() determinístico (Verde "fora do ar" → null).
+test("tem-caso-aberto: cpf inválido (tamanho errado) não chama o Verde, devolve tem_caso false", async () => {
+  const app = await montarApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/elegibilidade/tem-caso-aberto",
+    payload: { cpf: "123" },
+  });
+  await app.close();
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().tem_caso, false);
+});
+
+test("tem-caso-aberto: cpf válido sem resposta do Verde (GATEWAY_VERDE_URL vazio) → tem_caso false, sem lançar", async () => {
+  const app = await montarApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/elegibilidade/tem-caso-aberto",
+    payload: { cpf: "90000000000" },
+  });
+  await app.close();
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().tem_caso, false);
+});
+
 after(async () => {
   if (!db) return; // modo sem banco: nada foi tocado, nada a limpar
   await db.$disconnect();
