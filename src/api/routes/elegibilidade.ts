@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { consultarAssistidoVerde, consultarCasosVerde } from "./assistidos.js";
+import { prisma } from "../../core/db.js";
 
 // Gate de elegibilidade por área de atuação da DPERJ (issue Coilab #20260134):
 // atendimento é só pra residentes do RJ ou quem tem processo em trâmite no RJ.
@@ -7,9 +8,13 @@ import { consultarAssistidoVerde, consultarCasosVerde } from "./assistidos.js";
 // alternativa verificável:
 //   1. DDD do telefone (WhatsApp) é do RJ (21/22/24) → ok, sem checar mais nada.
 //   2. DDD fora do RJ, mas CPF já cadastrado no Verde → usa a UF real de lá.
-//   3. Sem cadastro (ou UF ≠ RJ) → checa se tem caso/processo aberto no Verde
-//      (só existe caso lá se for da DPERJ, ou seja, já prova RJ).
-//   4. Nada disso resolveu → devolve "perguntar" pro fluxo perguntar direto.
+//   3. Sem UF pelo Verde → confere o fallback local (tabela Assistido — mesmo
+//      cadastro que /api/assistidos/consultar já usa como fallback quando o
+//      Verde falha/não acha; issue #138: elegibilidade não sabia desse
+//      cadastro e perguntava de novo mesmo com uf="RJ" já salvo aí).
+//   4. Ainda sem UF → checa se tem caso/processo aberto no Verde (só existe
+//      caso lá se for da DPERJ, ou seja, já prova RJ).
+//   5. Nada disso resolveu → devolve "perguntar" pro fluxo perguntar direto.
 const DDD_RJ = new Set(["21", "22", "24"]);
 
 // telefone_whatsapp vem cru do wa_id (formato E.164 sem +, ex "5521999990000").
@@ -43,6 +48,15 @@ export async function elegibilidadeFlowRoutes(app: FastifyInstance) {
       if (uf === "RJ") {
         console.log(`[elegibilidade] DDD ${ddd ?? "?"} fora do RJ, mas cadastro Verde → UF RJ`);
         return { decisao: "ok" };
+      }
+
+      if (prisma) {
+        const local = await prisma.assistido.findUnique({ where: { cpf } });
+        const ufLocal = local?.uf?.trim().toUpperCase();
+        if (ufLocal === "RJ") {
+          console.log(`[elegibilidade] DDD ${ddd ?? "?"} fora do RJ, sem cadastro Verde, mas cadastro local → UF RJ`);
+          return { decisao: "ok" };
+        }
       }
 
       const casos = await consultarCasosVerde(cpf);
