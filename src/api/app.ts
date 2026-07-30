@@ -50,7 +50,11 @@ export async function montarApp(opts: MontarAppOpts = {}) {
     });
   }
 
-  await app.register(fastifyCors, { origin: true });
+  // methods explícito: default do @fastify/cors só libera GET/HEAD/POST no
+  // preflight — sem isso, TODO PUT/DELETE sob /admin (salvar fluxo, excluir
+  // fluxo, dados-teste, etc) falha silenciosamente quando chamado de um
+  // browser real (funciona via curl/MCP, que não fazem preflight).
+  await app.register(fastifyCors, { origin: true, methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] });
   await app.register(fastifyJwt, { secret: env.jwtSecret() });
   await app.register(fastifyStatic, { root: join(__dirname, "../../public") });
 
