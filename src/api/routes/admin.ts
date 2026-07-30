@@ -264,6 +264,19 @@ export async function adminRoutes(app: FastifyInstance) {
     return db.flow.update({ where: { id }, data: { isTemplate: false } });
   });
 
+  // dados de teste (issue #134) — seed sugerido de dadosColetados pra testar
+  // subfluxo isolado no chat de teste (chaves como idPessoa/idAssunto/relato
+  // que normalmente vêm de nós anteriores do fluxo pai). Metadado, não versiona
+  // (mesmo raciocínio de marcar-template/desmarcar-template acima) e sem lock
+  // otimista por updatedAt — é um rascunho de teste, não conteúdo do fluxo.
+  app.put("/flows/:id/dados-teste", { preHandler: [exigirAdmin] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { dadosTeste } = (req.body ?? {}) as { dadosTeste?: Record<string, string> };
+    const existe = await db.flow.findUnique({ where: { id } });
+    if (!existe) return reply.code(404).send({ erro: "fluxo não encontrado" });
+    return db.flow.update({ where: { id }, data: { dadosTeste: dadosTeste ?? {} } });
+  });
+
   // ── Conversas ─────────────────────────────────────────────────────────────
   app.get("/conversations", async (req) => {
     const q = req.query as { status?: string; categoria?: string; channel?: string; page?: string };
@@ -747,10 +760,14 @@ export async function adminRoutes(app: FastifyInstance) {
   }
 
   app.post("/test-chat", async (req, reply) => {
-    const { flowId, sessionId, message } = (req.body ?? {}) as {
+    const { flowId, sessionId, message, dadosIniciais } = (req.body ?? {}) as {
       flowId?: string;
       sessionId?: string;
       message?: string;
+      // seed de dadosColetados (issue #134) — só tem efeito na 1ª chamada da
+      // thread (isResuming=false); testar subfluxo isolado sem depender de
+      // nós anteriores do fluxo pai (idPessoa/idAssunto/relato etc.)
+      dadosIniciais?: Record<string, string>;
     };
     if (!sessionId) return reply.code(400).send({ erro: "sessionId obrigatório" });
 
@@ -786,7 +803,10 @@ export async function adminRoutes(app: FastifyInstance) {
       await graph.updateState(config, { messages: [new HumanMessage(message)] });
     }
 
-    const result = await graph.invoke(isResuming ? null : { canal: "web" }, config);
+    const result = await graph.invoke(
+      isResuming ? null : { canal: "web", dadosColetados: dadosIniciais ?? {} },
+      config
+    );
 
     const newMessages = (result.messages as BaseMessage[])
       .slice(prevLen)

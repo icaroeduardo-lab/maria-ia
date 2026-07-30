@@ -93,6 +93,35 @@ test("skip-gate: pergunta com chave já preenchida é pulada", async () => {
   assert.deepEqual(r1.trilhaExecutada, ["seta", "p_idade"], "p_nome pulado pelo gate não entra na trilha (issue #93)");
 });
 
+test("dadosIniciais (issue #134): seed de dadosColetados na 1ª invoke pula a pergunta (skip-gate)", async () => {
+  // reproduz exatamente o que POST /admin/test-chat faz na 1ª chamada da
+  // sessão: invoke({ canal, dadosColetados: dadosIniciais }, cfg) — sem isso,
+  // testar um subfluxo isolado (ex: Primeiro Atendimento) trava na pergunta
+  // de uma chave que só existiria vinda de um nó anterior do fluxo pai.
+  const flow: FlowJSON = {
+    id: "t-dados-iniciais",
+    nodes: [
+      { id: "p_idPessoa", type: "pergunta", data: { texto: "Qual o id da pessoa?", chave: "idPessoa", semReescrita: true } },
+      { id: "p_relato", type: "pergunta", data: { texto: "Me conta o que houve?", chave: "relato", semReescrita: true } },
+      { id: "fim", type: "encerrar", data: {} },
+    ],
+    edges: [
+      { id: "e1", source: "p_idPessoa", target: "p_relato" },
+      { id: "e2", source: "p_relato", target: "fim" },
+    ],
+  };
+  const graph = buildGraphFromFlow(flow);
+  const cfg = config();
+
+  // idPessoa já vem seedado (como se um nó anterior do fluxo pai já tivesse
+  // preenchido) → gate pula direto pra relato, sem re-perguntar
+  const r1 = await graph.invoke({ canal: "web", dadosColetados: { idPessoa: "abc-123" } }, cfg);
+  assert.doesNotMatch(textos(r1), /Qual o id da pessoa\?/, "pergunta com chave já preenchida via dadosIniciais deve ser pulada");
+  assert.match(textos(r1), /Me conta o que houve\?/, "próxima pergunta pendente segue normal");
+  assert.equal(r1.dadosColetados.idPessoa, "abc-123", "valor seedado permanece em dadosColetados");
+  assert.deepEqual(r1.trilhaExecutada, ["p_relato"], "p_idPessoa pulado pelo gate não entra na trilha");
+});
+
 test("nova sessão (thread_id novo) começa com trilha vazia — reiniciar zera a trajetória", async () => {
   const flow: FlowJSON = {
     id: "t2b",

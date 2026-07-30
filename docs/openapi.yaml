@@ -108,6 +108,11 @@ components:
         edges: { type: array, items: { $ref: '#/components/schemas/FlowEdge' } }
         active: { type: boolean }
         isTemplate: { type: boolean, description: "catálogo de templates — card #20260127" }
+        dadosTeste:
+          type: object
+          additionalProperties: { type: string }
+          nullable: true
+          description: "seed sugerido de dadosColetados p/ testar subfluxo isolado (issue #134) — metadado, não versiona"
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     FlowVersionResumo:
@@ -964,6 +969,28 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Flow' } } } }
         "404": { description: Não encontrado }
+  /admin/flows/{id}/dados-teste:
+    put:
+      tags: [Admin — Flows]
+      summary: Define o seed de dadosColetados usado pelo chat de teste (issue #134) — metadado, não versiona
+      description: >
+        Sem lock otimista por updatedAt e sem criar FlowVersion (mesmo
+        raciocínio de marcar-template/desmarcar-template) — é um rascunho de
+        teste, não conteúdo do fluxo. Usado por /admin/test-chat via
+        dadosIniciais na 1ª chamada da sessão.
+      parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dadosTeste:
+                  type: object
+                  additionalProperties: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Flow' } } } }
+        "404": { description: Não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
 
   # ── Admin: Conversations ───────────────────────────────────
   /admin/conversations:
@@ -1207,6 +1234,25 @@ paths:
         quando flowId é omitido (grafo estático, sem canvas) ou após reiniciar
         a sessão (novo sessionId ou #sair). Alimenta o destaque da trajetória
         no canvas do builder visual.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sessionId]
+              properties:
+                flowId: { type: string, description: "flow de teste (opcional — omitido usa o grafo estático)" }
+                sessionId: { type: string }
+                message: { type: string }
+                dadosIniciais:
+                  type: object
+                  additionalProperties: { type: string }
+                  description: >
+                    Seed de dadosColetados (issue #134) — só tem efeito na 1ª
+                    chamada da sessão (thread nova); testar subfluxo isolado
+                    sem depender de nós anteriores do fluxo pai (idPessoa/
+                    idAssunto/relato etc.). Pergunta com a mesma chave já
+                    preenchida é pulada (skip-gate).
       responses:
         "200": { description: "{ messages, done, dadosColetados, tipoPerguntaPendente, trilha, resumo?, metadados? }" }
         "400": { description: sessionId obrigatório }

@@ -27,3 +27,24 @@ test("GET /flows expõe isTemplate na listagem", () => {
   const handler = src.slice(inicio, fim);
   assert.match(handler, /isTemplate:\s*true/, "select da lista deve incluir isTemplate");
 });
+
+// PUT /flows/:id/dados-teste (issue #134): mesmo raciocínio de metadado dos
+// dois testes acima — não versiona, sem lock otimista por updatedAt.
+test("PUT /flows/:id/dados-teste é metadado: não versiona e trata 404", () => {
+  const src = readFileSync(new URL("../src/api/routes/admin.ts", import.meta.url), "utf8");
+
+  const inicio = src.indexOf('"/flows/:id/dados-teste"');
+  assert.ok(inicio > -1, "rota /flows/:id/dados-teste não encontrada");
+  const fim = src.indexOf("app.", inicio + 1);
+  const handler = src.slice(inicio, fim > -1 ? fim : inicio + 600);
+
+  assert.doesNotMatch(handler, /criarVersao/, "dados-teste não deve versionar (é metadado, não conteúdo)");
+  assert.doesNotMatch(handler, /updatedAt/, "sem lock otimista por updatedAt");
+  assert.match(handler, /404/, "deve tratar fluxo inexistente");
+  assert.match(handler, /dadosTeste/, "deve persistir o campo dadosTeste");
+});
+
+test("rota /flows/:id/dados-teste é PUT (não POST)", () => {
+  const src = readFileSync(new URL("../src/api/routes/admin.ts", import.meta.url), "utf8");
+  assert.match(src, /app\.put\("\/flows\/:id\/dados-teste"/);
+});
