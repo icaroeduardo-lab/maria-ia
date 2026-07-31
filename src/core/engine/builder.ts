@@ -9,6 +9,7 @@ import {
   retriever,
   ultimaFalaUsuario,
   classificarTexto,
+  classificarComExtracao,
   extrairDoRelato,
   reescreverPergunta,
 } from "./ia.js";
@@ -66,6 +67,9 @@ export interface FlowNode {
     chave?: string; // pergunta | api | atribuir | classificar (campo onde grava a categoria)
     tipoPergunta?: TipoPergunta;
     opcoes?: string[]; // pergunta(opcoes) | classificar (categorias possíveis)
+    extrairValor?: boolean; // classificar: além da categoria, extrai valor livre dito
+    // junto na mesma fala (ex: "ap 302" → categoria "numero", valor "302") — grava em
+    // dadosColetados[chave + "_valor"]. Default false (comportamento antigo, inalterado).
     opcoesDinamicas?: string; // pergunta(opcoes): chave/caminho em dadosColetados com a lista
     // (populada por um nó api anterior) — usada em vez de data.opcoes
     // fixo (card #20260138). Ver resolverOpcoesDinamicas.
@@ -299,9 +303,20 @@ function criarNode(
           }
         }
         // 1º classifica; depois extrai SÓ as perguntas do tema escolhido (sem cross-fill)
-        const categoria = await classificarTexto(fala, opcoes, node.data.prompt, contextoRag);
-        const perguntasTema = porCategoria[categoria.toLowerCase()] ?? ctx?.perguntas ?? [];
-        const extra = await extrairDoRelato(fala, perguntasTema, state.dadosColetados);
+        let categoria: string;
+        const extra: Record<string, string> = {};
+        if (node.data.extrairValor) {
+          // via curta: 1 chamada estruturada devolve categoria + valor livre já dito
+          // junto (ex: "ap 302" → categoria "numero", valor "302") — usada por
+          // classificadores de AJUSTE (não de tema), sem o cross-fill de extrairDoRelato.
+          const out = await classificarComExtracao(fala, opcoes, node.data.prompt, contextoRag);
+          categoria = out.categoria;
+          if (out.valor) extra[`${chave}_valor`] = out.valor;
+        } else {
+          categoria = await classificarTexto(fala, opcoes, node.data.prompt, contextoRag);
+          const perguntasTema = porCategoria[categoria.toLowerCase()] ?? ctx?.perguntas ?? [];
+          Object.assign(extra, await extrairDoRelato(fala, perguntasTema, state.dadosColetados));
+        }
         // regra de segurança: tema sensível força o tom mais acolhedor (público vulnerável)
         if (TEMAS_SENSIVEIS.some((t) => categoria.toLowerCase().includes(t))) extra.tom = "acolhedor-forte";
         return { dadosColetados: { [chave]: categoria, ...extra }, categoria };
