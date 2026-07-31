@@ -1,7 +1,13 @@
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
 import { graph as graphEstatico, checkpointer } from "./graph.js";
-import { graphDoFlow, subfluxosReferenciados, nosExpandidos, type FlowRow, type FlowNode } from "./engine/builder.js";
+import {
+  graphDoFlow,
+  subfluxosReferenciados,
+  nosExpandidos,
+  type FlowRow,
+  type FlowNode,
+} from "./engine/builder.js";
 import { prisma } from "./db.js";
 import { montarMetadados, gerarResumoTexto } from "./resumo.js";
 import { env } from "./env.js";
@@ -18,7 +24,16 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 function primeiroNome(dados?: Record<string, unknown>): string | null {
   if (!dados) return null;
   const rc = dados.resultado_cpf;
-  const parsed = typeof rc === "string" ? (() => { try { return JSON.parse(rc); } catch { return null; } })() : rc;
+  const parsed =
+    typeof rc === "string"
+      ? (() => {
+          try {
+            return JSON.parse(rc);
+          } catch {
+            return null;
+          }
+        })()
+      : rc;
   const nome =
     (parsed as { dados?: { nome?: string } } | null)?.dados?.nome ??
     (typeof dados.nome === "string" ? dados.nome : null);
@@ -71,7 +86,11 @@ export async function carregarSubflowsRecursivo(nodesIniciais: unknown): Promise
 // flowNodes: nós (principal + sub-flows carregados) do flow ativo, usados por
 // tipoPerguntaPendente() abaixo para resolver o tipoPergunta de uma chave —
 // null quando é o grafo estático (usa o registro PERGUNTAS_POR_CHAVE).
-async function obterGraph(): Promise<{ graph: typeof graphEstatico; flowId: string | null; flowNodes: FlowNode[] | null }> {
+async function obterGraph(): Promise<{
+  graph: typeof graphEstatico;
+  flowId: string | null;
+  flowNodes: FlowNode[] | null;
+}> {
   if (!prisma) return { graph: graphEstatico, flowId: null, flowNodes: null };
   try {
     const ativo = await prisma.flow.findFirst({ where: { active: true } });
@@ -132,9 +151,9 @@ export async function processarMensagem(
   // comando #sair: reinicia a conversa — apaga o checkpoint do thread.
   // A próxima mensagem começa do zero (saudação). Funciona em web e WhatsApp.
   if (message && message.trim().toLowerCase() === COMANDO_REINICIAR) {
-    await checkpointer.deleteThread(sessionId).catch((err) =>
-      console.error("[chat] falha ao reiniciar thread:", err)
-    );
+    await checkpointer
+      .deleteThread(sessionId)
+      .catch((err) => console.error("[chat] falha ao reiniciar thread:", err));
     const aviso = new AIMessage(
       "Conversa reiniciada. 🔄 Quando quiser, é só mandar uma mensagem que começamos de novo."
     );
@@ -152,9 +171,9 @@ export async function processarMensagem(
     });
     if (conversa?.handoffStatus === "aguardando" || conversa?.handoffStatus === "em_atendimento") {
       if (message) {
-        await graph.updateState(config, { messages: [new HumanMessage(message)] }).catch((err) =>
-          console.error("[chat] falha ao registrar mensagem durante handoff:", err)
-        );
+        await graph
+          .updateState(config, { messages: [new HumanMessage(message)] })
+          .catch((err) => console.error("[chat] falha ao registrar mensagem durante handoff:", err));
       }
       return { result: null, newMessages: [] };
     }
@@ -167,9 +186,9 @@ export async function processarMensagem(
   // checkpoint e recomeça do zero. Sem isso, uma nova mensagem tentaria resumir
   // um grafo terminado (invoke(null) não produz nada) — só #sair destravava.
   if (prevLen > 0 && (prevState.next?.length ?? 0) === 0) {
-    await checkpointer.deleteThread(sessionId).catch((err) =>
-      console.error("[chat] falha ao reiniciar thread encerrado:", err)
-    );
+    await checkpointer
+      .deleteThread(sessionId)
+      .catch((err) => console.error("[chat] falha ao reiniciar thread encerrado:", err));
     prevLen = 0;
   }
 
@@ -192,9 +211,14 @@ export async function processarMensagem(
   // reenviar a mesma mensagem).
   // WhatsApp: sessionId = `wa:<wa_id>` (ver channels/whatsapp.ts) — extrai o
   // telefone cru pro gate de elegibilidade por DDD (issue #20260134) usar sem
-  // precisar perguntar. Só no invoke inicial, igual `canal` (thread_id não é
+  // precisar perguntar, e pro cadastro reaproveitar sem perguntar de novo
+  // (achado 2026-07-31). Só no invoke inicial, igual `canal` (thread_id não é
   // acessível de dentro de um node `api` — ver achado da investigação).
-  const telefoneWhatsapp = canal === "whatsapp" ? sessionId.replace(/^wa:/, "") : "";
+  // wa_id vem em E.164 sem "+" (ex: "5521999990000", DDI 55 + DDD + número) —
+  // tira o DDI pra ficar no formato BR local que o cadastro/Verde esperam
+  // (mesmo critério de tamanho já usado em elegibilidade.ts:extrairDdd).
+  const waIdCru = canal === "whatsapp" ? sessionId.replace(/^wa:/, "") : "";
+  const telefoneWhatsapp = waIdCru.length >= 12 && waIdCru.startsWith("55") ? waIdCru.slice(2) : waIdCru;
 
   let result: Awaited<ReturnType<typeof invokeComRetry>>;
   try {
@@ -275,7 +299,10 @@ async function rastrearConversa(
   // fora do update — a coluna simplesmente não é tocada, turno segue normal.
   const csat = csatValido(coletados.csat);
   if (coletados.csat !== undefined && csat === null) {
-    console.warn("[tracking] csat inválido/fora do range 1-5, ignorado:", String(coletados.csat).slice(0, 20));
+    console.warn(
+      "[tracking] csat inválido/fora do range 1-5, ignorado:",
+      String(coletados.csat).slice(0, 20)
+    );
   }
 
   const dados = {
