@@ -53,12 +53,13 @@ export async function consultarAssistidoVerde(cpf: string): Promise<Record<strin
 }
 
 // Payload de cadastro do Verde (POST api/assistido) — issue maria-ia#117,
-// gateway#31. Campos que a Maria não coleta hoje (nomeSocial, complemento)
-// vão vazios: o Verde exige os campos presentes no JSON (não aceita
-// ausentes — validação automática do ApiController do gateway). String
-// vazia passa pra a maioria, MAS dtNascimento vazia dá 400 (testado em
-// homologação, id real criado só com data preenchida) — ver checagem em
-// cadastrarAssistidoVerde antes de chamar isso.
+// gateway#31. Campos que a Maria não coleta hoje (nomeSocial) vão vazios: o
+// Verde exige os campos presentes no JSON (não aceita ausentes — validação
+// automática do ApiController do gateway). String vazia passa pra a
+// maioria, MAS dtNascimento vazia dá 400 (testado em homologação, id real
+// criado só com data preenchida) — ver checagem em cadastrarAssistidoVerde
+// antes de chamar isso. numero: "SN" quando o assistido não tem número
+// (card 2026-07-31, fluxo pergunta e converte "0" digitado pra "SN").
 function montarPayloadAssistidoVerde(cpf: string, campos: Record<string, string>) {
   return {
     nome: campos.nome ?? "",
@@ -67,7 +68,7 @@ function montarPayloadAssistidoVerde(cpf: string, campos: Record<string, string>
     endereco: {
       logradouro: campos.logradouro ?? "",
       numero: campos.numero ?? "",
-      complemento: "",
+      complemento: campos.complemento ?? "",
       cep: campos.cep ?? "",
       bairro: campos.bairro ?? "",
       municipio: campos.municipio ?? "",
@@ -227,6 +228,7 @@ const CAMPOS = [
   "bairro",
   "logradouro",
   "numero",
+  "complemento",
   "usaWhatsapp",
 ] as const;
 
