@@ -224,9 +224,20 @@ export async function processarMensagem(
   try {
     // retry só no resume (invoke(null) idempotente); fresh não re-invoca (input
     // não-nulo em thread existente reiniciaria o grafo — padrão crítico)
-    const estadoInicial = telefoneWhatsapp
-      ? { canal, dadosColetados: { telefone_whatsapp: telefoneWhatsapp } }
-      : { canal };
+    // tem_telefone_whatsapp: "true"/"false" fixos (não o telefone em si) — nó
+    // condicao do fluxo não pode rotear por "campo vazio" de forma confiável
+    // (label "" colide com "sem label"/fallback no motor, builder.ts ~810),
+    // precisa de um valor literal pra dar match. "true"/"false" (não
+    // "sim"/"nao") porque resolverCampoCondicao normaliza "sim"→"true" e
+    // "não"→"false" automaticamente (pensado pra resposta de pergunta
+    // sim_nao) — usar o valor já normalizado evita a conversão surpresa.
+    const estadoInicial = {
+      canal,
+      dadosColetados: {
+        telefone_whatsapp: telefoneWhatsapp,
+        tem_telefone_whatsapp: telefoneWhatsapp ? "true" : "false",
+      },
+    };
     result = await invokeComRetry(graph, isResuming ? null : estadoInicial, config, isResuming ? 2 : 1);
   } catch (err) {
     console.error("[chat] erro ao processar mensagem:", err);

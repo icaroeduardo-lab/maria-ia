@@ -74,7 +74,17 @@ function montarPayloadAssistidoVerde(cpf: string, campos: Record<string, string>
       uf: campos.uf ?? "",
     },
     telefones: campos.telefone
-      ? [{ id: 0, numeroTelefone: campos.telefone, observacao: "", inWhatsapp: true, tipo: "celular", ramal: "", dataIndicacaoWhatsapp: "" }]
+      ? [
+          {
+            id: 0,
+            numeroTelefone: campos.telefone,
+            observacao: "",
+            inWhatsapp: campos.usaWhatsapp === "true",
+            tipo: "celular",
+            ramal: "",
+            dataIndicacaoWhatsapp: "",
+          },
+        ]
       : [],
     email: campos.email ?? "",
     dtNascimento: campos.dataNascimento ?? "",
@@ -99,7 +109,15 @@ async function cadastrarAssistidoVerde(cpf: string, campos: Record<string, strin
 // então quase nunca vêm juntos). Busca os atuais no Verde antes de
 // desistir, em vez de pular pro fallback local à toa.
 async function atualizarAssistidoVerde(cpf: string, campos: Record<string, string>): Promise<boolean> {
-  const relevante = campos.logradouro || campos.numero || campos.cep || campos.bairro || campos.municipio || campos.uf || campos.telefone || campos.email;
+  const relevante =
+    campos.logradouro ||
+    campos.numero ||
+    campos.cep ||
+    campos.bairro ||
+    campos.municipio ||
+    campos.uf ||
+    campos.telefone ||
+    campos.email;
   if (!relevante) return false;
 
   let telefone: string | undefined = campos.telefone;
@@ -108,7 +126,9 @@ async function atualizarAssistidoVerde(cpf: string, campos: Record<string, strin
     const atual = await consultarAssistidoVerde(cpf);
     telefone ??= (atual?.telefone as string | null) ?? undefined;
     email ??= (atual?.email as string | null) ?? undefined;
-    console.log(`[assistidos] atualizar: telefone/email não coletados, busquei no Verde → telefone=${telefone ? "achei" : "não achei"} email=${email ? "achei" : "não achei"}`);
+    console.log(
+      `[assistidos] atualizar: telefone/email não coletados, busquei no Verde → telefone=${telefone ? "achei" : "não achei"} email=${email ? "achei" : "não achei"}`
+    );
   }
   if (!telefone || !email) return false; // Verde exige os dois preenchidos mesmo corrigindo só endereço
 
@@ -122,7 +142,15 @@ async function atualizarAssistidoVerde(cpf: string, campos: Record<string, strin
       municipio: campos.municipio ?? "",
       uf: campos.uf ?? "",
     },
-    telefone: { id: 0, numeroTelefone: telefone, observacao: "", inWhatsapp: true, tipo: "celular", ramal: "", dataIndicacaoWhatsapp: "" },
+    telefone: {
+      id: 0,
+      numeroTelefone: telefone,
+      observacao: "",
+      inWhatsapp: true,
+      tipo: "celular",
+      ramal: "",
+      dataIndicacaoWhatsapp: "",
+    },
     email,
   };
   const resp = await gatewayVerdePost(`/api/assistido/${cpf}`, payload, "PUT");
@@ -187,8 +215,19 @@ export async function consultarCasosVerde(cpf: string): Promise<CasoEnxuto[] | n
 
 // campos do Assistido que vêm de dadosColetados no cadastro/atualização
 const CAMPOS = [
-  "nome", "dataNascimento", "nomeMae", "situacao",
-  "municipio", "uf", "telefone", "email", "cep", "bairro", "logradouro", "numero",
+  "nome",
+  "dataNascimento",
+  "nomeMae",
+  "situacao",
+  "municipio",
+  "uf",
+  "telefone",
+  "email",
+  "cep",
+  "bairro",
+  "logradouro",
+  "numero",
+  "usaWhatsapp",
 ] as const;
 
 function extrairCampos(body: Record<string, unknown>): Record<string, string> {
@@ -203,7 +242,9 @@ function extrairCampos(body: Record<string, unknown>): Record<string, string> {
 // remove campos internos da resposta exposta ao fluxo
 function dadosPublicos(a: Record<string, unknown>) {
   const { id, createdAt, updatedAt, ...resto } = a;
-  void id; void createdAt; void updatedAt;
+  void id;
+  void createdAt;
+  void updatedAt;
   return resto;
 }
 
@@ -266,7 +307,11 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     const existe = await db.assistido.findUnique({ where: { cpf } });
     if (existe) {
       console.log(`[assistidos] cadastrar (local): CPF ${cpf} já existe`);
-      return { sucesso: false, jaExiste: true, dados: dadosPublicos(existe as unknown as Record<string, unknown>) };
+      return {
+        sucesso: false,
+        jaExiste: true,
+        dados: dadosPublicos(existe as unknown as Record<string, unknown>),
+      };
     }
 
     const a = await db.assistido.create({ data: { cpf, nome: campos.nome, ...campos } });
@@ -291,7 +336,10 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     } else {
       const assistido = cpf.length === 11 ? await db.assistido.findUnique({ where: { cpf } }) : null;
       const casos = assistido
-        ? await db.caso.findMany({ where: { assistidoId: assistido.id, status: "aberto" }, orderBy: { criadoEm: "desc" } })
+        ? await db.caso.findMany({
+            where: { assistidoId: assistido.id, status: "aberto" },
+            orderBy: { criadoEm: "desc" },
+          })
         : [];
       enxutos = casos.map((c) => ({
         id: c.id,
@@ -327,7 +375,9 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     let lista: CasoEnxuto[] = [];
     try {
       lista = JSON.parse(body.casos ?? "{}")?.casos ?? [];
-    } catch { /* segue vazio */ }
+    } catch {
+      /* segue vazio */
+    }
 
     const idx = /^\d{1,2}$/.exec(sel);
     const caso = idx ? lista[Number(sel) - 1] : lista.find((c) => String(c.id) === sel);
@@ -385,7 +435,9 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     if (!existe) return reply.code(404).send({ sucesso: false, erro: "assistido não encontrado" });
 
     const a = await db.assistido.update({ where: { cpf }, data: campos });
-    console.log(`[assistidos] atualizar (local): CPF ${cpf} → campos: ${Object.keys(campos).join(", ") || "(nenhum)"}`);
+    console.log(
+      `[assistidos] atualizar (local): CPF ${cpf} → campos: ${Object.keys(campos).join(", ") || "(nenhum)"}`
+    );
     return { sucesso: true, dados: dadosPublicos(a as unknown as Record<string, unknown>) };
   });
 }
