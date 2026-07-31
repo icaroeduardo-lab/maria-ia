@@ -44,7 +44,12 @@ export function categoriaPadrao(opcoes: string[]): string {
 
 // Classifica um texto livre em uma das categorias. Tenta o LLM (Bedrock); se
 // falhar (sem credenciais/rede), cai num matcher por palavra-chave.
-export async function classificarTexto(fala: string, opcoes: string[], prompt?: string, contextoRag?: string): Promise<string> {
+export async function classificarTexto(
+  fala: string,
+  opcoes: string[],
+  prompt?: string,
+  contextoRag?: string
+): Promise<string> {
   if (!opcoes.length) return "";
   if (!fala.trim()) return categoriaPadrao(opcoes); // sem relato → catch-all
 
@@ -53,26 +58,102 @@ export async function classificarTexto(fala: string, opcoes: string[], prompt?: 
       (prompt ?? "Você classifica o relato de um cidadão em uma categoria de serviço jurídico.") +
       (contextoRag ? `\n\n<base_de_conhecimento>\n${contextoRag}\n</base_de_conhecimento>` : "") +
       `\n\nCategorias possíveis (responda APENAS com uma delas, exatamente como escrita): ${opcoes.join(", ")}.`;
-    const res = await model.invoke([
-      new SystemMessage(instrucao),
-      new HumanMessage(fala),
-    ]);
+    const res = await model.invoke([new SystemMessage(instrucao), new HumanMessage(fala)]);
     const bruto = String(res.content).toLowerCase().trim();
     const achou = opcoes.find((o) => bruto.includes(o.toLowerCase()));
     if (achou) return achou;
   } catch (err) {
-    console.warn("[classificar] LLM indisponível, usando fallback por palavra-chave:", String(err).slice(0, 120));
+    console.warn(
+      "[classificar] LLM indisponível, usando fallback por palavra-chave:",
+      String(err).slice(0, 120)
+    );
   }
 
   return classificarPorPalavraChave(fala, opcoes);
 }
 
+// Classifica E extrai, numa única chamada estruturada, o valor livre que o
+// usuário já tenha informado junto da fala (ex: "ap 302" → categoria "numero",
+// valor "302"). Usado só quando o node `classificar` pede (data.extrairValor) —
+// classificarTexto() continua a via padrão pra todo o resto, sem mudança de risco.
+export async function classificarComExtracao(
+  fala: string,
+  opcoes: string[],
+  prompt?: string,
+  contextoRag?: string
+): Promise<{ categoria: string; valor?: string }> {
+  if (!opcoes.length) return { categoria: "" };
+  if (!fala.trim()) return { categoria: categoriaPadrao(opcoes) };
+
+  try {
+    const instrucao =
+      (prompt ?? "Você classifica o relato de um cidadão em uma categoria de serviço jurídico.") +
+      (contextoRag ? `\n\n<base_de_conhecimento>\n${contextoRag}\n</base_de_conhecimento>` : "") +
+      `\n\nCategorias possíveis: ${opcoes.join(", ")}.`;
+    const schema = z.object({
+      categoria: z
+        .enum(opcoes as [string, ...string[]])
+        .describe("categoria escolhida, exatamente uma da lista"),
+      valor: z
+        .string()
+        .nullish()
+        .describe(
+          "valor livre que o usuário já informou junto da fala, associado à categoria (ex: '302' em 'ap 302'). " +
+            "Deixe null se a fala só nomeia o que quer ajustar, sem informar o valor novo."
+        ),
+    });
+    const out = await model
+      .withStructuredOutput(schema)
+      .invoke([new SystemMessage(instrucao), new HumanMessage(fala)]);
+    const valor = typeof out.valor === "string" ? out.valor.trim() : "";
+    return {
+      categoria: out.categoria,
+      valor: valor && !PLACEHOLDER.test(valor) ? valor : undefined,
+    };
+  } catch (err) {
+    console.warn("[classificar] extração com valor falhou, caindo pro fallback:", String(err).slice(0, 120));
+    return { categoria: await classificarTexto(fala, opcoes, prompt, contextoRag) };
+  }
+}
+
 // Fallback determinístico: mapeia palavras-chave → categoria.
 const PALAVRAS_CHAVE: Record<string, string[]> = {
   alimentação: ["pensão", "pensao", "alimento", "sustento", "filho não", "mesada"],
-  divórcio: ["divórcio", "divorcio", "separar", "separação", "casamento", "marido", "esposa", "cônjuge", "conjuge"],
-  inss: ["inss", "aposentadoria", "aposentar", "benefício", "beneficio", "auxílio", "auxilio", "doença", "doenca", "loas", "bpc"],
-  trabalhista: ["trabalho", "trabalhista", "demitido", "demissão", "rescisão", "salário", "carteira", "fgts", "emprego"],
+  divórcio: [
+    "divórcio",
+    "divorcio",
+    "separar",
+    "separação",
+    "casamento",
+    "marido",
+    "esposa",
+    "cônjuge",
+    "conjuge",
+  ],
+  inss: [
+    "inss",
+    "aposentadoria",
+    "aposentar",
+    "benefício",
+    "beneficio",
+    "auxílio",
+    "auxilio",
+    "doença",
+    "doenca",
+    "loas",
+    "bpc",
+  ],
+  trabalhista: [
+    "trabalho",
+    "trabalhista",
+    "demitido",
+    "demissão",
+    "rescisão",
+    "salário",
+    "carteira",
+    "fgts",
+    "emprego",
+  ],
   acompanhar: ["acompanhar", "andamento", "meu processo", "meu caso", "já tenho", "ja tenho", "protocolo"],
   fora_competencia: ["criminal", "preso", "prisão", "prisao", "empresa", "consumidor"],
 };
@@ -96,7 +177,9 @@ const normSimNao = (v: string) => {
 };
 const casarOpcaoGen = (p: Pergunta, v: string) => {
   const t = v.trim().toLowerCase();
-  return p.opcoes?.find((o) => o.toLowerCase() === t || o.toLowerCase().includes(t) || t.includes(o.toLowerCase()));
+  return p.opcoes?.find(
+    (o) => o.toLowerCase() === t || o.toLowerCase().includes(t) || t.includes(o.toLowerCase())
+  );
 };
 
 // Dado o relato livre, extrai valores para as perguntas ainda não respondidas.
@@ -111,22 +194,31 @@ export async function extrairDoRelato(
 
   const shape: Record<string, z.ZodType> = {};
   for (const p of pendentes) {
-    const desc = p.tipo === "opcoes" && p.opcoes?.length ? `${p.texto} (opções: ${p.opcoes.join(", ")})` : p.texto;
+    const desc =
+      p.tipo === "opcoes" && p.opcoes?.length ? `${p.texto} (opções: ${p.opcoes.join(", ")})` : p.texto;
     shape[p.chave] = z.string().nullish().describe(desc);
   }
   // sentimento do relato → define o tom das próximas perguntas (mesma chamada, custo zero extra)
-  shape._sentimento = z.enum(["neutro", "empatico", "acolhedor-forte"]).nullish()
-    .describe("tom emocional do relato: 'acolhedor-forte' se a pessoa parece fragilizada/aflita/em sofrimento; 'empatico' se abalada; 'neutro' se serena");
+  shape._sentimento = z
+    .enum(["neutro", "empatico", "acolhedor-forte"])
+    .nullish()
+    .describe(
+      "tom emocional do relato: 'acolhedor-forte' se a pessoa parece fragilizada/aflita/em sofrimento; 'empatico' se abalada; 'neutro' se serena"
+    );
 
   try {
     const system = `Você extrai dados do relato de um cidadão (Defensoria Pública do RJ).
 - Extraia APENAS o que foi dito EXPLICITAMENTE no relato. NUNCA deduza, suponha ou invente.
 - Em dúvida, deixe null. Campos sim/não: só preencha se afirmado claramente, use "sim" ou "não".
 - Em "_sentimento", avalie o tom emocional geral do relato.`;
-    const out = await model.withStructuredOutput(z.object(shape)).invoke([
-      new SystemMessage(system),
-      new HumanMessage(`Relato: "${relato}"\n\nExtraia os dados informados (deixe null o que não foi dito).`),
-    ]);
+    const out = await model
+      .withStructuredOutput(z.object(shape))
+      .invoke([
+        new SystemMessage(system),
+        new HumanMessage(
+          `Relato: "${relato}"\n\nExtraia os dados informados (deixe null o que não foi dito).`
+        ),
+      ]);
 
     const updates: Record<string, string> = {};
     for (const [k, v] of Object.entries(out)) {
@@ -136,8 +228,16 @@ export async function extrairDoRelato(
       // descarta quando o LLM ecoa o texto da própria pergunta como "valor"
       if (v.trim().toLowerCase() === p.texto.trim().toLowerCase()) continue;
       if (["true", "false"].includes(v.trim().toLowerCase()) && p.tipo !== "sim_nao") continue;
-      if (p.tipo === "sim_nao") { const n = normSimNao(v); if (n === "sim" || n === "não") updates[k] = n; continue; }
-      if (p.tipo === "opcoes") { const o = casarOpcaoGen(p, v); if (o) updates[k] = o; continue; }
+      if (p.tipo === "sim_nao") {
+        const n = normSimNao(v);
+        if (n === "sim" || n === "não") updates[k] = n;
+        continue;
+      }
+      if (p.tipo === "opcoes") {
+        const o = casarOpcaoGen(p, v);
+        if (o) updates[k] = o;
+        continue;
+      }
       if (p.validar && !p.validar(v)) continue;
       updates[k] = v.trim();
     }
@@ -146,7 +246,8 @@ export async function extrairDoRelato(
     if (typeof sent === "string" && ["neutro", "empatico", "acolhedor-forte"].includes(sent)) {
       updates.tom = sent;
     }
-    if (Object.keys(updates).length) console.log(`[extrair] pré-preenchido: ${Object.keys(updates).join(", ")}`);
+    if (Object.keys(updates).length)
+      console.log(`[extrair] pré-preenchido: ${Object.keys(updates).join(", ")}`);
     return updates;
   } catch (err) {
     console.warn("[extrair] falha:", String(err).slice(0, 120));
@@ -180,17 +281,29 @@ async function gerarVariacoes(raw: string, p: Pergunta, tom: string, estilo: str
     p.tipo === "sim_nao" ? "A pergunta deve poder ser respondida com Sim ou Não." : "",
     p.tipo === "opcoes" ? "NÃO liste as opções (aparecem como botões)." : "",
     `Gere ${N_VARIACOES} variações DIFERENTES entre si.`,
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   try {
-    const out = await model.withStructuredOutput(
-      z.object({ variacoes: z.array(z.string()).describe(`${N_VARIACOES} reescritas diferentes da pergunta`) })
-    ).invoke([
-      new SystemMessage(`${estilo}\n\n${regras}`),
-      new HumanMessage(`Pergunta a reescrever: "${raw}"\n\nResponda com as variações.`),
-    ]);
+    const out = await model
+      .withStructuredOutput(
+        z.object({
+          variacoes: z.array(z.string()).describe(`${N_VARIACOES} reescritas diferentes da pergunta`),
+        })
+      )
+      .invoke([
+        new SystemMessage(`${estilo}\n\n${regras}`),
+        new HumanMessage(`Pergunta a reescrever: "${raw}"\n\nResponda com as variações.`),
+      ]);
     return (out.variacoes ?? [])
-      .map((v) => String(v).replace(/\[[^\]\n]{0,40}\]/g, "").replace(/\s+([,.!?])/g, "$1").replace(/\s{2,}/g, " ").trim())
+      .map((v) =>
+        String(v)
+          .replace(/\[[^\]\n]{0,40}\]/g, "")
+          .replace(/\s+([,.!?])/g, "$1")
+          .replace(/\s{2,}/g, " ")
+          .trim()
+      )
       .filter(Boolean);
   } catch (err) {
     console.warn("[conversacional] falha ao gerar variações:", String(err).slice(0, 100));
