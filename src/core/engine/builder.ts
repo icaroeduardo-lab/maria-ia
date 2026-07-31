@@ -311,6 +311,10 @@ function criarNode(
           // classificadores de AJUSTE (não de tema), sem o cross-fill de extrairDoRelato.
           const out = await classificarComExtracao(fala, opcoes, node.data.prompt, contextoRag);
           categoria = out.categoria;
+          // flag sempre presente (não só o valor) — permite ao fluxo checar via
+          // condicao "{{chave}}_tem_valor" == "true" sem cair na armadilha do
+          // label "" (edge com label vazio colide com o fallback "*" no engine).
+          extra[`${chave}_tem_valor`] = out.valor ? "true" : "false";
           if (out.valor) extra[`${chave}_valor`] = out.valor;
         } else {
           categoria = await classificarTexto(fala, opcoes, node.data.prompt, contextoRag);
