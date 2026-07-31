@@ -5,8 +5,12 @@ import { obterEstilo, obterConfig, styleVersion } from "../config.js";
 import { env } from "../env.js";
 import { resolverCampo, resolverCampoCondicao, interpolar } from "./campos.js";
 import {
-  model, retriever, ultimaFalaUsuario,
-  classificarTexto, extrairDoRelato, reescreverPergunta,
+  model,
+  retriever,
+  ultimaFalaUsuario,
+  classificarTexto,
+  extrairDoRelato,
+  reescreverPergunta,
 } from "./ia.js";
 import { avaliarTom } from "./sentimento.js";
 import { registrarVisitaNode } from "../analytics.js";
@@ -20,7 +24,18 @@ import { encerramento } from "../nodes/atendimento/encerramento.js";
 import { servicoDe } from "../registro-perguntas.js";
 
 // categorias que sempre pedem o tom mais acolhedor (público fragilizado)
-const TEMAS_SENSIVEIS = ["violencia", "violência", "penal", "saude", "saúde", "menor", "crianca", "criança", "obito", "óbito"];
+const TEMAS_SENSIVEIS = [
+  "violencia",
+  "violência",
+  "penal",
+  "saude",
+  "saúde",
+  "menor",
+  "crianca",
+  "criança",
+  "obito",
+  "óbito",
+];
 
 // Compila um Flow (JSON criado no builder visual do painel admin) em um grafo
 // LangGraph executável. Tipos de nó (espelho da paleta do React Flow):
@@ -28,38 +43,50 @@ const TEMAS_SENSIVEIS = ["violencia", "violência", "penal", "saude", "saúde", 
 
 export interface FlowNode {
   id: string;
-  type: "mensagem" | "pergunta" | "condicao" | "ia" | "classificar" | "api" | "subgrafo" | "subfluxo" | "atribuir" | "tag" | "encerrar" | "transferir_humano";
+  type:
+    | "mensagem"
+    | "pergunta"
+    | "condicao"
+    | "ia"
+    | "classificar"
+    | "api"
+    | "subgrafo"
+    | "subfluxo"
+    | "atribuir"
+    | "tag"
+    | "encerrar"
+    | "transferir_humano";
   position?: { x: number; y: number }; // layout do builder visual (ignorado pelo engine)
   data: {
     label?: string;
-    titulo?: string;           // identificação no canvas (api | condicao | classificar | subfluxo)
-    texto?: string;            // mensagem | pergunta | encerrar | transferir_humano (texto opcional antes de pausar)
-    imagem?: string;           // mensagem (url)
-    textoAntes?: boolean;      // mensagem: emite texto antes da imagem (padrão: imagem primeiro)
-    chave?: string;            // pergunta | api | atribuir | classificar (campo onde grava a categoria)
+    titulo?: string; // identificação no canvas (api | condicao | classificar | subfluxo)
+    texto?: string; // mensagem | pergunta | encerrar | transferir_humano (texto opcional antes de pausar)
+    imagem?: string; // mensagem (url)
+    textoAntes?: boolean; // mensagem: emite texto antes da imagem (padrão: imagem primeiro)
+    chave?: string; // pergunta | api | atribuir | classificar (campo onde grava a categoria)
     tipoPergunta?: TipoPergunta;
-    opcoes?: string[];         // pergunta(opcoes) | classificar (categorias possíveis)
-    opcoesDinamicas?: string;  // pergunta(opcoes): chave/caminho em dadosColetados com a lista
-                               // (populada por um nó api anterior) — usada em vez de data.opcoes
-                               // fixo (card #20260138). Ver resolverOpcoesDinamicas.
-    campo?: string;            // condicao: campo de dadosColetados a comparar
-    prompt?: string;           // ia | classificar: instrução extra ao LLM
-    usarRag?: boolean;         // ia
-    url?: string;              // api (relativa = interna; absoluta = externa)
-    metodo?: "GET" | "POST";   // api
+    opcoes?: string[]; // pergunta(opcoes) | classificar (categorias possíveis)
+    opcoesDinamicas?: string; // pergunta(opcoes): chave/caminho em dadosColetados com a lista
+    // (populada por um nó api anterior) — usada em vez de data.opcoes
+    // fixo (card #20260138). Ver resolverOpcoesDinamicas.
+    campo?: string; // condicao: campo de dadosColetados a comparar
+    prompt?: string; // ia | classificar: instrução extra ao LLM
+    usarRag?: boolean; // ia
+    url?: string; // api (relativa = interna; absoluta = externa)
+    metodo?: "GET" | "POST"; // api
     headers?: Record<string, string>; // api: headers extras; valor aceita {{chave}} e {{secret:NOME}} (env)
-    camposCorpo?: string[];    // api: chaves de dadosColetados enviadas no corpo (externa sem isso = corpo vazio)
-    limiteResposta?: number;   // api: limite de chars da resposta gravada (default 2000)
-    timeoutMs?: number;        // api: timeout da chamada em ms (default 10000) — subir p/ integrações externas lentas
-    servico?: string;          // subgrafo: categoria (familia_pensao | trabalhista | ...)
-    refFlowId?: string;        // subfluxo: id do Flow embutido (tema editável no painel)
-    saida?: string;            // sub-flow: nomeia a saída deste nó-folha (casa com label da seta do subfluxo)
-    semReescrita?: boolean;    // pergunta: não reescrever com IA (texto fixo — ex: LGPD/links)
-    valor?: string;            // atribuir | tag (rótulo a marcar/remover)
+    camposCorpo?: string[]; // api: chaves de dadosColetados enviadas no corpo (externa sem isso = corpo vazio)
+    limiteResposta?: number; // api: limite de chars da resposta gravada (default 2000)
+    timeoutMs?: number; // api: timeout da chamada em ms (default 10000) — subir p/ integrações externas lentas
+    servico?: string; // subgrafo: categoria (familia_pensao | trabalhista | ...)
+    refFlowId?: string; // subfluxo: id do Flow embutido (tema editável no painel)
+    saida?: string; // sub-flow: nomeia a saída deste nó-folha (casa com label da seta do subfluxo)
+    semReescrita?: boolean; // pergunta: não reescrever com IA (texto fixo — ex: LGPD/links)
+    valor?: string; // atribuir | tag (rótulo a marcar/remover)
     tagAcao?: "add" | "remove"; // tag (padrão: add)
-    ctaUrl?: string;           // mensagem: botão que abre link (interpolável, ex: {{kyc.url}})
-    ctaTexto?: string;         // mensagem: rótulo do botão cta_url (<=20 chars)
-    nota?: string;             // qualquer tipo: anotação livre do editor — engine ignora em runtime
+    ctaUrl?: string; // mensagem: botão que abre link (interpolável, ex: {{kyc.url}})
+    ctaTexto?: string; // mensagem: rótulo do botão cta_url (<=20 chars)
+    nota?: string; // qualquer tipo: anotação livre do editor — engine ignora em runtime
   };
 }
 
@@ -97,13 +124,20 @@ function perguntaDoNode(node: FlowNode): Pergunta {
 // UF→município→bairro). Contrato do array-fonte: cada item é uma string
 // (id = label = o próprio item) OU um objeto — label tenta label|nome|texto|
 // resposta|title, id tenta id|value|codigo (cai no label se nada bater).
-export interface OpcaoDinamica { id: string; label: string }
+export interface OpcaoDinamica {
+  id: string;
+  label: string;
+}
 
 function resolverOpcoesDinamicas(dados: Record<string, unknown>, caminho: string): OpcaoDinamica[] {
   const bruto = resolverCampo(dados, caminho);
   if (!bruto) return [];
   let arr: unknown;
-  try { arr = JSON.parse(bruto); } catch { return []; }
+  try {
+    arr = JSON.parse(bruto);
+  } catch {
+    return [];
+  }
   if (!Array.isArray(arr)) return [];
   return arr
     .map((item): OpcaoDinamica => {
@@ -129,7 +163,6 @@ function resolverEscolhaDinamica(fala: string, opcoes: OpcaoDinamica[]): OpcaoDi
   return porTexto ?? null;
 }
 
-
 // base do próprio servidor para chamadas internas do fluxo (nós api com url relativa)
 function baseUrlInterna(): string {
   return env.selfUrl();
@@ -140,7 +173,8 @@ function baseUrlInterna(): string {
 function resolverSecrets(valor: string, nodeId: string): string {
   return valor.replace(/\{\{secret:(\w+)\}\}/g, (_, nome) => {
     const v = process.env[nome];
-    if (v === undefined) console.warn(`[engine] node api ${nodeId}: secret "${nome}" não definida no ambiente`);
+    if (v === undefined)
+      console.warn(`[engine] node api ${nodeId}: secret "${nome}" não definida no ambiente`);
     return v ?? "";
   });
 }
@@ -148,19 +182,29 @@ function resolverSecrets(valor: string, nodeId: string): string {
 // ── Funções de nó ─────────────────────────────────────────────────────────────
 
 // ctx.perguntas = todas as perguntas; ctx.perguntasPorCategoria = perguntas por tema (classify)
-function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCategoria?: Record<string, Pergunta[]> }) {
+function criarNode(
+  node: FlowNode,
+  ctx?: { perguntas: Pergunta[]; perguntasPorCategoria?: Record<string, Pergunta[]> }
+) {
   switch (node.type) {
     case "mensagem":
       return async (state: GraphState) => {
         const img = node.data.imagem
-          ? { type: "image_url", image_url: { url: interpolar(String(node.data.imagem), state.dadosColetados) } }
+          ? {
+              type: "image_url",
+              image_url: { url: interpolar(String(node.data.imagem), state.dadosColetados) },
+            }
           : null;
         const txt = node.data.texto
           ? { type: "text", text: interpolar(String(node.data.texto), state.dadosColetados) }
           : null;
         // botão que abre link (ex: KYC). ctaUrl interpolado; rótulo em ctaTexto.
         const cta = node.data.ctaUrl
-          ? { type: "cta_url", url: interpolar(String(node.data.ctaUrl), state.dadosColetados), text: node.data.ctaTexto ? String(node.data.ctaTexto) : "Abrir" }
+          ? {
+              type: "cta_url",
+              url: interpolar(String(node.data.ctaUrl), state.dadosColetados),
+              text: node.data.ctaTexto ? String(node.data.ctaTexto) : "Abrir",
+            }
           : null;
         // padrão: imagem antes do texto. textoAntes=true inverte (texto → imagem)
         const blocos = [...(node.data.textoAntes ? [txt, img] : [img, txt]), cta].filter(Boolean);
@@ -171,24 +215,35 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
       const pBase = perguntaDoNode(node);
       const semReescrita = node.data.semReescrita === true;
       // opções dinâmicas: só em tipoPergunta="opcoes" com a chave-fonte configurada
-      const opcoesDinamicasChave = node.data.tipoPergunta === "opcoes" ? node.data.opcoesDinamicas : undefined;
+      const opcoesDinamicasChave =
+        node.data.tipoPergunta === "opcoes" ? node.data.opcoesDinamicas : undefined;
       return async (state: GraphState) => {
         let p = pBase;
         if (opcoesDinamicasChave) {
           const dinamicas = resolverOpcoesDinamicas(state.dadosColetados, opcoesDinamicasChave);
           if (dinamicas.length) p = { ...pBase, opcoes: dinamicas.map((o) => o.label) };
-          else console.warn(`[engine] pergunta ${node.id}: opcoesDinamicas "${opcoesDinamicasChave}" vazia/ausente em dadosColetados`);
+          else
+            console.warn(
+              `[engine] pergunta ${node.id}: opcoesDinamicas "${opcoesDinamicasChave}" vazia/ausente em dadosColetados`
+            );
         }
         // conversacional: reescrita acolhedora (cacheada por pergunta+tom+estilo)
         const cfg = await obterConfig();
-        const texto = cfg.conversacional && !semReescrita
-          ? await reescreverPergunta(p, state, cfg.estilo, {
-              tom: state.dadosColetados.tom,
-              styleVersion: await styleVersion(),
-            })
-          : interpolar(p.texto, state.dadosColetados);
+        const texto =
+          cfg.conversacional && !semReescrita
+            ? await reescreverPergunta(p, state, cfg.estilo, {
+                tom: state.dadosColetados.tom,
+                styleVersion: await styleVersion(),
+              })
+            : interpolar(p.texto, state.dadosColetados);
         return {
-          messages: [mensagemPergunta({ ...p, texto, imagem: p.imagem ? interpolar(p.imagem, state.dadosColetados) : undefined })],
+          messages: [
+            mensagemPergunta({
+              ...p,
+              texto,
+              imagem: p.imagem ? interpolar(p.imagem, state.dadosColetados) : undefined,
+            }),
+          ],
           perguntasFeitas: [p.chave],
           ultimaPergunta: p.chave,
         };
@@ -221,13 +276,24 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
       const porCategoria = ctx?.perguntasPorCategoria ?? {};
       const usarRag = node.data.usarRag !== false; // RAG ligado por padrão (mais acertivo)
       return async (state: GraphState) => {
-        const fala = ultimaFalaUsuario(state);
+        // texto-fonte: mensagem humana deste turno (produção real, sempre
+        // presente) OU dadosColetados.relato já coletado — chave canônica do
+        // relato livre em todo o app (ver CAMPOS_RESUMO em core/resumo.ts).
+        // Sem esse fallback, testar um subfluxo isolado via POST /admin/test-chat
+        // com dadosIniciais:{relato:"..."} (sem HumanMessage no thread) nunca
+        // chamava o LLM de classificação — caía direto no categoriaPadrao
+        // (issue #143/card #20260199). Produção nunca usa o fallback: sempre
+        // há HumanMessage real, então ultimaFalaUsuario() já resolve primeiro.
+        const fala = ultimaFalaUsuario(state) || String(state.dadosColetados.relato ?? "").trim();
         // contexto da base de conhecimento (serviços DPERJ) p/ classificar melhor
         let contextoRag: string | undefined;
         if (usarRag && retriever && fala.trim()) {
           try {
             const docs = await retriever.invoke(fala);
-            contextoRag = docs.map((d) => d.pageContent).join("\n\n").slice(0, 4000);
+            contextoRag = docs
+              .map((d) => d.pageContent)
+              .join("\n\n")
+              .slice(0, 4000);
           } catch (err) {
             console.warn("[classificar] RAG indisponível:", String(err).slice(0, 100));
           }
@@ -266,7 +332,8 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
               : {};
           // sessão/canal permitem retomada assíncrona (ex: KYC) — só pra dentro,
           // identificador de sessão não vaza pra terceiros
-          if (interna) Object.assign(corpoEnvio, { _sessao: config?.configurable?.thread_id, _canal: state.canal });
+          if (interna)
+            Object.assign(corpoEnvio, { _sessao: config?.configurable?.thread_id, _canal: state.canal });
           const timeoutMs = Number(node.data.timeoutMs) > 0 ? Number(node.data.timeoutMs) : 10_000;
           const res = await fetch(url, {
             method: node.data.metodo ?? "POST",
@@ -278,7 +345,9 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
           const limite = Number(node.data.limiteResposta) > 0 ? Number(node.data.limiteResposta) : 2000;
           const corpo = await res.text();
           if (corpo.length > limite)
-            console.warn(`[engine] node api ${node.id}: resposta truncada (${corpo.length} > ${limite} chars)`);
+            console.warn(
+              `[engine] node api ${node.id}: resposta truncada (${corpo.length} > ${limite} chars)`
+            );
           return { dadosColetados: { [chave]: corpo.slice(0, limite), [`${chave}_erro`]: "false" } };
         } catch (err) {
           console.error(`[engine] node api ${node.id} falhou:`, err);
@@ -291,7 +360,11 @@ function criarNode(node: FlowNode, ctx?: { perguntas: Pergunta[]; perguntasPorCa
     case "atribuir":
       return async (state: GraphState) =>
         node.data.chave
-          ? { dadosColetados: { [node.data.chave]: interpolar(String(node.data.valor ?? ""), state.dadosColetados) } }
+          ? {
+              dadosColetados: {
+                [node.data.chave]: interpolar(String(node.data.valor ?? ""), state.dadosColetados),
+              },
+            }
           : {};
 
     // marca/remove um rótulo livre em Conversation.tags (card #20260139) —
@@ -369,12 +442,17 @@ function criarCaptura(p: Pergunta, avaliarSentimento = false, opcoesDinamicasCha
     if (opcoesDinamicasChave) {
       const opcoes = resolverOpcoesDinamicas(state.dadosColetados, opcoesDinamicasChave);
       const escolhida = resolverEscolhaDinamica(fala, opcoes);
-      if (escolhida) return { dadosColetados: { [p.chave]: escolhida.id, [`${p.chave}_label`]: escolhida.label } };
+      if (escolhida)
+        return { dadosColetados: { [p.chave]: escolhida.id, [`${p.chave}_label`]: escolhida.label } };
 
       const novoCount = (state.tentativas[p.chave] ?? 0) + 1;
       if (novoCount <= LIMITE_TENTATIVAS) {
         return {
-          messages: [new AIMessage("Não entendi a opção — responda com o número da lista ou o texto exato de uma das opções. Pode tentar de novo?")],
+          messages: [
+            new AIMessage(
+              "Não entendi a opção — responda com o número da lista ou o texto exato de uma das opções. Pode tentar de novo?"
+            ),
+          ],
           tentativas: { [p.chave]: novoCount },
         };
       }
@@ -433,7 +511,10 @@ function entradaDe(nodes: FlowNode[], edges: FlowEdge[]): FlowNode {
   let melhor = -1;
   for (const c of candidatos.length ? candidatos : nodes) {
     const tam = alcancaveisDe(c.id).size;
-    if (tam > melhor) { melhor = tam; inicio = c; }
+    if (tam > melhor) {
+      melhor = tam;
+      inicio = c;
+    }
   }
   return inicio;
 }
@@ -445,7 +526,11 @@ function entradaDe(nodes: FlowNode[], edges: FlowEdge[]): FlowNode {
 // temas). Limite de profundidade evita loop em referência circular (A embute
 // B que embute A). O caller (chat.ts/admin.ts) precisa ter carregado TODOS os
 // sub-flows aninhados em `subflows` — ver carregarSubflowsRecursivo.
-function expandirSubfluxos(nodes: FlowNode[], edges: FlowEdge[], subflows: SubflowMap): { nodes: FlowNode[]; edges: FlowEdge[] } {
+function expandirSubfluxos(
+  nodes: FlowNode[],
+  edges: FlowEdge[],
+  subflows: SubflowMap
+): { nodes: FlowNode[]; edges: FlowEdge[] } {
   let N = [...nodes];
   let E = [...edges];
 
@@ -463,14 +548,25 @@ function expandirSubfluxos(nodes: FlowNode[], edges: FlowEdge[], subflows: Subfl
 
       if (!sub?.nodes?.length) {
         // sem ref válida → vira pass-through: liga entradas direto às saídas
-        for (const ent of entradasNode) for (const sai of saidasNode)
-          E.push({ id: `pt_${ent.source}_${sai.target}`, source: ent.source, target: sai.target, label: ent.label });
+        for (const ent of entradasNode)
+          for (const sai of saidasNode)
+            E.push({
+              id: `pt_${ent.source}_${sai.target}`,
+              source: ent.source,
+              target: sai.target,
+              label: ent.label,
+            });
         continue;
       }
 
       const pfx = `sf_${node.id}_`;
       const subNodes = sub.nodes.map((n) => ({ ...n, id: pfx + n.id }));
-      const subEdges = sub.edges.map((e) => ({ ...e, id: pfx + e.id, source: pfx + e.source, target: pfx + e.target }));
+      const subEdges = sub.edges.map((e) => ({
+        ...e,
+        id: pfx + e.id,
+        source: pfx + e.source,
+        target: pfx + e.target,
+      }));
       const entrada = pfx + entradaDe(sub.nodes, sub.edges).id;
       const comSaida = new Set(sub.edges.map((e) => e.source));
       const terminais = sub.nodes.filter((n) => !comSaida.has(n.id)); // nós-folha do sub-flow
@@ -487,9 +583,14 @@ function expandirSubfluxos(nodes: FlowNode[], edges: FlowEdge[], subflows: Subfl
       for (const term of terminais) {
         const nome = (term.data.saida ?? "").toLowerCase().trim();
         const casados = nome ? saidasNode.filter((s) => (s.label ?? "").toLowerCase().trim() === nome) : [];
-        const alvos = casados.length ? casados : (semLabel.length ? semLabel : saidasNode);
+        const alvos = casados.length ? casados : semLabel.length ? semLabel : saidasNode;
         for (const sai of alvos)
-          E.push({ id: `out_${pfx}${term.id}_${sai.target}`, source: pfx + term.id, target: sai.target, label: sai.label });
+          E.push({
+            id: `out_${pfx}${term.id}_${sai.target}`,
+            source: pfx + term.id,
+            target: sai.target,
+            label: sai.label,
+          });
       }
     }
   }
@@ -504,7 +605,8 @@ function expandirSubfluxos(nodes: FlowNode[], edges: FlowEdge[], subflows: Subfl
 // data.chave explícita (id vira prefixado só depois da expansão).
 export function nosExpandidos(flow: FlowRow, subflowRows: FlowRow[] = []): FlowNode[] {
   const subflows: SubflowMap = {};
-  for (const s of subflowRows) subflows[s.id] = { nodes: s.nodes as FlowNode[], edges: s.edges as FlowEdge[] };
+  for (const s of subflowRows)
+    subflows[s.id] = { nodes: s.nodes as FlowNode[], edges: s.edges as FlowEdge[] };
   const nodes = (flow.nodes as FlowNode[]) ?? [];
   const edges = (flow.edges as FlowEdge[]) ?? [];
   return expandirSubfluxos(nodes, edges, subflows).nodes;
@@ -552,7 +654,9 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
   // nodes do flow (+ gate/captura/encerramento auxiliares)
   for (const node of nodesUsados) {
     // classify: mapeia categoria → perguntas do tema (extrai só do tema escolhido, sem cross-fill)
-    let ctx: { perguntas: Pergunta[]; perguntasPorCategoria?: Record<string, Pergunta[]> } = { perguntas: todasPerguntas };
+    let ctx: { perguntas: Pergunta[]; perguntasPorCategoria?: Record<string, Pergunta[]> } = {
+      perguntas: todasPerguntas,
+    };
     if (node.type === "classificar") {
       const porCat: Record<string, Pergunta[]> = {};
       for (const e of edgesUsados.filter((e) => e.source === node.id)) {
@@ -574,8 +678,12 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
       builder.addNode(`gate_${node.id}`, async () => ({})); // no-op; decisão na conditional edge
       // pergunta livre de tema (dentro de subfluxo expandido, texto aberto) → V2 do tom
       const livreDeTema = node.id.startsWith("sf_") && (node.data.tipoPergunta ?? "texto") === "texto";
-      const opcoesDinamicasChave = node.data.tipoPergunta === "opcoes" ? node.data.opcoesDinamicas : undefined;
-      builder.addNode(`cap_${node.id}`, criarCaptura(perguntaDoNode(node), livreDeTema, opcoesDinamicasChave));
+      const opcoesDinamicasChave =
+        node.data.tipoPergunta === "opcoes" ? node.data.opcoesDinamicas : undefined;
+      builder.addNode(
+        `cap_${node.id}`,
+        criarCaptura(perguntaDoNode(node), livreDeTema, opcoesDinamicasChave)
+      );
       interrupts.push(node.id);
     }
     if (node.type === "subgrafo") {
@@ -597,7 +705,11 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
         `msg_${node.id}`,
         despedida
           ? async (state: GraphState) => ({
-              messages: [new AIMessage(interpolar(despedida, { ...state.dadosColetados, protocolo: state.protocolo ?? "" }))],
+              messages: [
+                new AIMessage(
+                  interpolar(despedida, { ...state.dadosColetados, protocolo: state.protocolo ?? "" })
+                ),
+              ],
             })
           : encerramento
       );
@@ -615,8 +727,7 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
       const k = node.data.chave ?? node.id;
       // pergunta sim_nao com saídas rotuladas true/false roteia DIRETO pela
       // resposta — dispensa o nó condição no caso comum (Coilab #20260113).
-      const roteiaPorLabel =
-        node.data.tipoPergunta === "sim_nao" && saidas.some((e) => e.label);
+      const roteiaPorLabel = node.data.tipoPergunta === "sim_nao" && saidas.some((e) => e.label);
       const rotaPorResposta = (state: GraphState) => {
         const valor = resolverCampoCondicao(state.dadosColetados, k);
         const match = saidas.find((e) => (e.label ?? "").toLowerCase().trim() === valor);
@@ -624,9 +735,7 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
         const alvo = (match ?? fallback ?? saidas[0])?.target;
         return alvo ? entrada(alvo) : END;
       };
-      const destinosRotulados = Object.fromEntries(
-        saidas.map((e) => [entrada(e.target), entrada(e.target)])
-      );
+      const destinosRotulados = Object.fromEntries(saidas.map((e) => [entrada(e.target), entrada(e.target)]));
 
       const proximo = saidas[0]?.target;
       const destinoSkip = proximo ? entrada(proximo) : END;
@@ -656,7 +765,8 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
       // sem entrar aqui, a resposta não resolvida (fala não bate índice/texto de
       // nenhuma opção) avançava pro próximo nó com k vazio em vez de re-perguntar
       // (achado testando ao vivo, card #20260138).
-      const opcoesDinamicasChave = node.data.tipoPergunta === "opcoes" ? node.data.opcoesDinamicas : undefined;
+      const opcoesDinamicasChave =
+        node.data.tipoPergunta === "opcoes" ? node.data.opcoesDinamicas : undefined;
       if (!saidas.length) builder.addEdge(`cap_${node.id}`, END);
       else if (roteiaPorLabel)
         builder.addConditionalEdges(`cap_${node.id}`, rotaPorResposta, {
@@ -692,9 +802,10 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
     if (node.type === "condicao" || node.type === "classificar") {
       const campo = node.type === "condicao" ? (node.data.campo ?? "") : (node.data.chave ?? "categoria");
       const rota = (state: GraphState) => {
-        const valor = node.type === "condicao"
-          ? resolverCampoCondicao(state.dadosColetados, campo)
-          : (resolverCampo(state.dadosColetados, campo) || "").toLowerCase().trim();
+        const valor =
+          node.type === "condicao"
+            ? resolverCampoCondicao(state.dadosColetados, campo)
+            : (resolverCampo(state.dadosColetados, campo) || "").toLowerCase().trim();
         const match = saidas.find((e) => (e.label ?? "").toLowerCase().trim() === valor);
         const fallback = saidas.find((e) => !e.label || e.label === "*");
         const alvo = (match ?? fallback ?? saidas[0])?.target;
@@ -742,17 +853,23 @@ export type FlowRow = { id: string; updatedAt: Date; nodes: unknown; edges: unkn
 // ids de flows referenciados por nós "subfluxo"
 export function subfluxosReferenciados(nodes: unknown): string[] {
   const arr = (nodes as FlowNode[]) ?? [];
-  return [...new Set(arr.filter((n) => n.type === "subfluxo" && n.data?.refFlowId).map((n) => n.data.refFlowId!))];
+  return [
+    ...new Set(arr.filter((n) => n.type === "subfluxo" && n.data?.refFlowId).map((n) => n.data.refFlowId!)),
+  ];
 }
 
 export function graphDoFlow(flow: FlowRow, subflowRows: FlowRow[] = []) {
   // versão = updatedAt do principal + dos sub-flows (recompila se qualquer um muda)
-  const versao = [flow, ...subflowRows].map((f) => `${f.id}:${f.updatedAt.toISOString()}`).sort().join("|");
+  const versao = [flow, ...subflowRows]
+    .map((f) => `${f.id}:${f.updatedAt.toISOString()}`)
+    .sort()
+    .join("|");
   const hit = cache.get(flow.id);
   if (hit && hit.versao === versao) return hit.graph;
 
   const subflows: SubflowMap = {};
-  for (const s of subflowRows) subflows[s.id] = { nodes: s.nodes as FlowNode[], edges: s.edges as FlowEdge[] };
+  for (const s of subflowRows)
+    subflows[s.id] = { nodes: s.nodes as FlowNode[], edges: s.edges as FlowEdge[] };
 
   const compilado = buildGraphFromFlow(
     { id: flow.id, nodes: flow.nodes as FlowNode[], edges: flow.edges as FlowEdge[] },
