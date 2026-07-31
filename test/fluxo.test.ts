@@ -42,7 +42,11 @@ test("fluxo pergunta → captura → encerrar (multi-turn com interrupt)", async
     id: "t1",
     nodes: [
       { id: "boas", type: "mensagem", data: { texto: "Olá!" } },
-      { id: "p_nome", type: "pergunta", data: { texto: "Qual seu nome?", chave: "nome", semReescrita: true } },
+      {
+        id: "p_nome",
+        type: "pergunta",
+        data: { texto: "Qual seu nome?", chave: "nome", semReescrita: true },
+      },
       { id: "fim", type: "encerrar", data: {} },
     ],
     edges: [
@@ -58,13 +62,21 @@ test("fluxo pergunta → captura → encerrar (multi-turn com interrupt)", async
   assert.match(textos(r1), /Olá!/);
   assert.match(textos(r1), /Qual seu nome\?/);
   assert.equal(r1.dadosColetados.nome, undefined);
-  assert.deepEqual(r1.trilhaExecutada, ["boas", "p_nome"], "trilha (issue #93) acumula ids do flow em ordem, sem os auxiliares gate_/cap_");
+  assert.deepEqual(
+    r1.trilhaExecutada,
+    ["boas", "p_nome"],
+    "trilha (issue #93) acumula ids do flow em ordem, sem os auxiliares gate_/cap_"
+  );
 
   // 2º turno: resume com a resposta → captura + encerramento com protocolo
   const r2 = await responder(graph, cfg, "Maria da Silva");
   assert.equal(r2.dadosColetados.nome, "Maria da Silva");
   assert.ok(r2.protocolo, "encerramento deve gerar protocolo (modo mock)");
-  assert.deepEqual(r2.trilhaExecutada, ["boas", "p_nome", "fim"], "trilha cresce a cada turno, acumulando sobre o checkpoint");
+  assert.deepEqual(
+    r2.trilhaExecutada,
+    ["boas", "p_nome", "fim"],
+    "trilha cresce a cada turno, acumulando sobre o checkpoint"
+  );
 });
 
 test("skip-gate: pergunta com chave já preenchida é pulada", async () => {
@@ -72,8 +84,16 @@ test("skip-gate: pergunta com chave já preenchida é pulada", async () => {
     id: "t2",
     nodes: [
       { id: "seta", type: "atribuir", data: { chave: "nome", valor: "João" } },
-      { id: "p_nome", type: "pergunta", data: { texto: "Qual seu nome?", chave: "nome", semReescrita: true } },
-      { id: "p_idade", type: "pergunta", data: { texto: "Qual sua idade?", chave: "idade", semReescrita: true } },
+      {
+        id: "p_nome",
+        type: "pergunta",
+        data: { texto: "Qual seu nome?", chave: "nome", semReescrita: true },
+      },
+      {
+        id: "p_idade",
+        type: "pergunta",
+        data: { texto: "Qual sua idade?", chave: "idade", semReescrita: true },
+      },
       { id: "fim", type: "encerrar", data: {} },
     ],
     edges: [
@@ -90,7 +110,11 @@ test("skip-gate: pergunta com chave já preenchida é pulada", async () => {
   assert.doesNotMatch(textos(r1), /Qual seu nome\?/);
   assert.match(textos(r1), /Qual sua idade\?/);
   assert.equal(r1.dadosColetados.nome, "João");
-  assert.deepEqual(r1.trilhaExecutada, ["seta", "p_idade"], "p_nome pulado pelo gate não entra na trilha (issue #93)");
+  assert.deepEqual(
+    r1.trilhaExecutada,
+    ["seta", "p_idade"],
+    "p_nome pulado pelo gate não entra na trilha (issue #93)"
+  );
 });
 
 test("dadosIniciais (issue #134): seed de dadosColetados na 1ª invoke pula a pergunta (skip-gate)", async () => {
@@ -101,8 +125,16 @@ test("dadosIniciais (issue #134): seed de dadosColetados na 1ª invoke pula a pe
   const flow: FlowJSON = {
     id: "t-dados-iniciais",
     nodes: [
-      { id: "p_idPessoa", type: "pergunta", data: { texto: "Qual o id da pessoa?", chave: "idPessoa", semReescrita: true } },
-      { id: "p_relato", type: "pergunta", data: { texto: "Me conta o que houve?", chave: "relato", semReescrita: true } },
+      {
+        id: "p_idPessoa",
+        type: "pergunta",
+        data: { texto: "Qual o id da pessoa?", chave: "idPessoa", semReescrita: true },
+      },
+      {
+        id: "p_relato",
+        type: "pergunta",
+        data: { texto: "Me conta o que houve?", chave: "relato", semReescrita: true },
+      },
       { id: "fim", type: "encerrar", data: {} },
     ],
     edges: [
@@ -116,7 +148,11 @@ test("dadosIniciais (issue #134): seed de dadosColetados na 1ª invoke pula a pe
   // idPessoa já vem seedado (como se um nó anterior do fluxo pai já tivesse
   // preenchido) → gate pula direto pra relato, sem re-perguntar
   const r1 = await graph.invoke({ canal: "web", dadosColetados: { idPessoa: "abc-123" } }, cfg);
-  assert.doesNotMatch(textos(r1), /Qual o id da pessoa\?/, "pergunta com chave já preenchida via dadosIniciais deve ser pulada");
+  assert.doesNotMatch(
+    textos(r1),
+    /Qual o id da pessoa\?/,
+    "pergunta com chave já preenchida via dadosIniciais deve ser pulada"
+  );
   assert.match(textos(r1), /Me conta o que houve\?/, "próxima pergunta pendente segue normal");
   assert.equal(r1.dadosColetados.idPessoa, "abc-123", "valor seedado permanece em dadosColetados");
   assert.deepEqual(r1.trilhaExecutada, ["p_relato"], "p_idPessoa pulado pelo gate não entra na trilha");
@@ -126,7 +162,11 @@ test("nova sessão (thread_id novo) começa com trilha vazia — reiniciar zera 
   const flow: FlowJSON = {
     id: "t2b",
     nodes: [
-      { id: "p_nome", type: "pergunta", data: { texto: "Qual seu nome?", chave: "nome", semReescrita: true } },
+      {
+        id: "p_nome",
+        type: "pergunta",
+        data: { texto: "Qual seu nome?", chave: "nome", semReescrita: true },
+      },
       { id: "fim", type: "encerrar", data: {} },
     ],
     edges: [{ id: "e1", source: "p_nome", target: "fim" }],
@@ -149,7 +189,11 @@ test("condicao roteia pelo valor capturado (sim/não)", async () => {
   const flow: FlowJSON = {
     id: "t3",
     nodes: [
-      { id: "p_tem", type: "pergunta", data: { texto: "Tem filhos?", chave: "tem_filhos", tipoPergunta: "sim_nao", semReescrita: true } },
+      {
+        id: "p_tem",
+        type: "pergunta",
+        data: { texto: "Tem filhos?", chave: "tem_filhos", tipoPergunta: "sim_nao", semReescrita: true },
+      },
       { id: "cond", type: "condicao", data: { campo: "tem_filhos" } },
       { id: "m_sim", type: "mensagem", data: { texto: "Ramo COM filhos" } },
       { id: "m_nao", type: "mensagem", data: { texto: "Ramo SEM filhos" } },
@@ -182,8 +226,16 @@ test("classificar cai no matcher por palavra-chave sem Bedrock e roteia o tema",
   const flow: FlowJSON = {
     id: "t4",
     nodes: [
-      { id: "p_relato", type: "pergunta", data: { texto: "Me conta o que houve", chave: "relato", semReescrita: true } },
-      { id: "cls", type: "classificar", data: { chave: "categoria", opcoes: ["alimentação", "trabalhista", "outros"] } },
+      {
+        id: "p_relato",
+        type: "pergunta",
+        data: { texto: "Me conta o que houve", chave: "relato", semReescrita: true },
+      },
+      {
+        id: "cls",
+        type: "classificar",
+        data: { chave: "categoria", opcoes: ["alimentação", "trabalhista", "outros"] },
+      },
       { id: "m_ali", type: "mensagem", data: { texto: "Tema: pensão alimentícia" } },
       { id: "m_out", type: "mensagem", data: { texto: "Tema: outros" } },
       { id: "fim", type: "encerrar", data: {} },
@@ -206,11 +258,58 @@ test("classificar cai no matcher por palavra-chave sem Bedrock e roteia o tema",
   assert.match(textos(r), /Tema: pensão alimentícia/);
 });
 
+test("classificar isolado via dadosIniciais (sem HumanMessage) ainda classifica pelo relato seedado — issue #143/card #20260199", async () => {
+  // reproduz exatamente o bug: testar um subfluxo isolado via POST
+  // /admin/test-chat com dadosIniciais:{relato:"..."} nunca gera uma
+  // HumanMessage no thread (só a 1ª invoke acontece, com dadosColetados
+  // pré-seedado) — antes do fix, ultimaFalaUsuario() voltava "" e
+  // classificarTexto() batia o guard "sem relato → catch-all" ANTES de
+  // sequer tentar o LLM, então o classificar caía sempre em "outros"
+  // mesmo com um relato claro em dadosColetados.
+  const flow: FlowJSON = {
+    id: "t-classificar-dados-iniciais",
+    nodes: [
+      {
+        id: "cls",
+        type: "classificar",
+        data: { chave: "categoria", opcoes: ["alimentação", "trabalhista", "outros"] },
+      },
+      { id: "m_ali", type: "mensagem", data: { texto: "Tema: pensão alimentícia" } },
+      { id: "m_out", type: "mensagem", data: { texto: "Tema: outros" } },
+      { id: "fim", type: "encerrar", data: {} },
+    ],
+    edges: [
+      { id: "e1", source: "cls", target: "m_ali", label: "alimentação" },
+      { id: "e2", source: "cls", target: "m_out", label: "*" },
+      { id: "e3", source: "m_ali", target: "fim" },
+      { id: "e4", source: "m_out", target: "fim" },
+    ],
+  };
+  const graph = buildGraphFromFlow(flow);
+  const cfg = config();
+
+  // mesma chamada que /admin/test-chat faz na 1ª invoke com dadosIniciais —
+  // NUNCA passa por updateState/HumanMessage nesse turno.
+  const r = await graph.invoke(
+    { canal: "web", dadosColetados: { relato: "o pai não paga a pensão do meu filho" } },
+    cfg
+  );
+  // credenciais falsas → LLM falha → fallback por palavra-chave ("pensão" → alimentação);
+  // o que importa aqui é que o fallback FOI ACIONADO (relato não ficou vazio) em vez
+  // de cair direto no categoriaPadrao ("outros") por falta de HumanMessage.
+  assert.equal(r.dadosColetados.categoria, "alimentação");
+  assert.match(textos(r), /Tema: pensão alimentícia/);
+});
+
 test("pergunta sim_nao com saídas rotuladas roteia direto (sem nó condição)", async () => {
   const flow: FlowJSON = {
     id: "t5",
     nodes: [
-      { id: "p_aceita", type: "pergunta", data: { texto: "Aceita os termos?", chave: "aceita", tipoPergunta: "sim_nao", semReescrita: true } },
+      {
+        id: "p_aceita",
+        type: "pergunta",
+        data: { texto: "Aceita os termos?", chave: "aceita", tipoPergunta: "sim_nao", semReescrita: true },
+      },
       { id: "m_sim", type: "mensagem", data: { texto: "Ramo ACEITOU" } },
       { id: "m_nao", type: "mensagem", data: { texto: "Ramo RECUSOU" } },
       { id: "fim", type: "encerrar", data: {} },
@@ -243,7 +342,11 @@ test("skip-gate em pergunta rotulada roteia pela resposta já preenchida", async
     id: "t6",
     nodes: [
       { id: "seta", type: "atribuir", data: { chave: "aceita", valor: "não" } },
-      { id: "p_aceita", type: "pergunta", data: { texto: "Aceita?", chave: "aceita", tipoPergunta: "sim_nao", semReescrita: true } },
+      {
+        id: "p_aceita",
+        type: "pergunta",
+        data: { texto: "Aceita?", chave: "aceita", tipoPergunta: "sim_nao", semReescrita: true },
+      },
       { id: "m_sim", type: "mensagem", data: { texto: "Ramo ACEITOU" } },
       { id: "m_nao", type: "mensagem", data: { texto: "Ramo RECUSOU" } },
       { id: "fim", type: "encerrar", data: {} },
@@ -320,7 +423,11 @@ test("transferir_humano pausa o grafo e sinaliza handoff (card #20260117)", asyn
   const flow: FlowJSON = {
     id: "t-handoff",
     nodes: [
-      { id: "p1", type: "pergunta", data: { texto: "Qual seu problema?", chave: "problema", semReescrita: true } },
+      {
+        id: "p1",
+        type: "pergunta",
+        data: { texto: "Qual seu problema?", chave: "problema", semReescrita: true },
+      },
       { id: "th", type: "transferir_humano", data: { texto: "Transferindo pra um atendente!" } },
       { id: "fim", type: "encerrar", data: {} },
     ],
@@ -377,7 +484,11 @@ test("subfluxo aninhado (subfluxo dentro de subfluxo) expande e roda até o fim"
   };
   const tema = {
     nodes: [
-      { id: "p_detalhe", type: "pergunta" as const, data: { texto: "Qual detalhe?", chave: "detalhe", semReescrita: true } },
+      {
+        id: "p_detalhe",
+        type: "pergunta" as const,
+        data: { texto: "Qual detalhe?", chave: "detalhe", semReescrita: true },
+      },
       { id: "m_confirma", type: "mensagem" as const, data: { texto: "Detalhe: {{detalhe}}" } },
     ],
     edges: [{ id: "e1", source: "p_detalhe", target: "m_confirma" }],
@@ -391,30 +502,48 @@ test("subfluxo aninhado (subfluxo dentro de subfluxo) expande e roda até o fim"
   assert.deepEqual(r1.trilhaExecutada, ["p_nome"]);
 
   const r2 = await responder(graph, cfg, "Maria");
-  assert.match(textos(r2), /Qual detalhe\?/, "deve alcançar a pergunta DENTRO do subfluxo aninhado (2º nível)");
+  assert.match(
+    textos(r2),
+    /Qual detalhe\?/,
+    "deve alcançar a pergunta DENTRO do subfluxo aninhado (2º nível)"
+  );
   // trilha (issue #93) atravessa o subfluxo naturalmente: o node de pergunta
   // expandido entra com seu id prefixado (sf_<subfluxoNode>_...), igual ao
   // que ultimaPergunta/dadosColetados já usam — front resolve contra o
   // canvas do sub-flow "tema" usando esse mesmo id
   assert.equal(r2.trilhaExecutada.length, 2);
   assert.equal(r2.trilhaExecutada[0], "p_nome");
-  assert.match(r2.trilhaExecutada[1], /^sf_.*_p_detalhe$/, "id do node de pergunta do sub-flow aninhado, prefixado");
+  assert.match(
+    r2.trilhaExecutada[1],
+    /^sf_.*_p_detalhe$/,
+    "id do node de pergunta do sub-flow aninhado, prefixado"
+  );
 
   const r3 = await responder(graph, cfg, "urgente");
   assert.equal(r3.dadosColetados.detalhe, "urgente");
   assert.match(textos(r3), /Detalhe: urgente/);
   assert.ok(r3.protocolo, "deve sair do aninhamento e chegar no encerrar do flow top-level");
-  assert.equal(r3.trilhaExecutada.length, 4, "p_nome, pergunta e mensagem do sub-flow aninhado, encerrar do top-level");
+  assert.equal(
+    r3.trilhaExecutada.length,
+    4,
+    "p_nome, pergunta e mensagem do sub-flow aninhado, encerrar do top-level"
+  );
   assert.equal(r3.trilhaExecutada[0], "p_nome");
   assert.equal(r3.trilhaExecutada[3], "fim");
-  assert.match(r3.trilhaExecutada[2], /^sf_.*_m_confirma$/, "id do node de mensagem do sub-flow aninhado, prefixado");
+  assert.match(
+    r3.trilhaExecutada[2],
+    /^sf_.*_m_confirma$/,
+    "id do node de mensagem do sub-flow aninhado, prefixado"
+  );
 });
 
 // ── nó api genérico (Coilab #20260115): rota erro, corpo seletivo, secrets ────
 
 import { createServer, type Server } from "node:http";
 
-async function servidorDeTeste(handler: Parameters<typeof createServer>[1]): Promise<{ url: string; srv: Server; corpos: unknown[] }> {
+async function servidorDeTeste(
+  handler: Parameters<typeof createServer>[1]
+): Promise<{ url: string; srv: Server; corpos: unknown[] }> {
   const corpos: unknown[] = [];
   const srv = createServer((req, res) => {
     let bruto = "";
@@ -442,8 +571,14 @@ test("api externa: corpo só com camposCorpo, header com {{secret:X}}, sem _sess
         { id: "s1", type: "atribuir", data: { chave: "cep", valor: "20000-000" } },
         { id: "s2", type: "atribuir", data: { chave: "cpf", valor: "111.222.333-44" } },
         {
-          id: "chamada", type: "api",
-          data: { url: `${url}/consulta`, chave: "resultado", camposCorpo: ["cep"], headers: { "x-api-key": "{{secret:CHAVE_TESTE_API}}" } },
+          id: "chamada",
+          type: "api",
+          data: {
+            url: `${url}/consulta`,
+            chave: "resultado",
+            camposCorpo: ["cep"],
+            headers: { "x-api-key": "{{secret:CHAVE_TESTE_API}}" },
+          },
         },
         { id: "fim", type: "encerrar", data: {} },
       ],
