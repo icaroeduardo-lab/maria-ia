@@ -15,7 +15,10 @@ const VALIDADORES: Partial<Record<TipoPergunta, (valor: string) => boolean>> = {
     const d = SO_DIGITOS(v).length;
     return d === 10 || d === 11;
   },
-  cep: (v) => SO_DIGITOS(v).length === 8,
+  // "0" é bypass documentado (não sabe o CEP) — mesma convenção do "0" em
+  // numero_bruto (cadastro) pra "sem número". Passa pro fluxo decidir o que
+  // fazer (endereço manual); só formato realmente errado é re-perguntado.
+  cep: (v) => v.trim() === "0" || SO_DIGITOS(v).length === 8,
   data: (v) => /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) && !Number.isNaN(Date.parse(v.trim())),
   // valor é o metadado JSON devolvido por POST /api/upload-documento ou pelo
   // branch de mídia do WhatsApp (src/core/channels/whatsapp.ts) — NUNCA a URL/
@@ -24,10 +27,17 @@ const VALIDADORES: Partial<Record<TipoPergunta, (valor: string) => boolean>> = {
   documento: (v) => {
     try {
       const o = JSON.parse(v) as { nome?: unknown; tamanho?: unknown; mimeType?: unknown };
-      return typeof o.nome === "string" && o.nome.length > 0
-        && typeof o.tamanho === "number" && o.tamanho > 0
-        && typeof o.mimeType === "string" && o.mimeType.length > 0;
-    } catch { return false; }
+      return (
+        typeof o.nome === "string" &&
+        o.nome.length > 0 &&
+        typeof o.tamanho === "number" &&
+        o.tamanho > 0 &&
+        typeof o.mimeType === "string" &&
+        o.mimeType.length > 0
+      );
+    } catch {
+      return false;
+    }
   },
 };
 
