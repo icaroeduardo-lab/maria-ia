@@ -232,6 +232,18 @@ const CAMPOS = [
   "usaWhatsapp",
 ] as const;
 
+// Campos de CAMPOS que existem só pra montar o payload do Verde (flag de
+// submissão), sem coluna equivalente no model Assistido — espalhar ...campos
+// direto num db.assistido.create/update com um desses dentro derruba com
+// PrismaClientValidationError (unknown argument), engolido silenciosamente
+// pelo catch do node "api" no engine (usuário via "cadastro realizado" sem
+// ter sido realizado — achado no teste manual, 2026-08-03, card a criar).
+const CAMPOS_SO_VERDE = new Set<string>(["usaWhatsapp"]);
+
+function paraBanco(campos: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(campos).filter(([k]) => !CAMPOS_SO_VERDE.has(k)));
+}
+
 function extrairCampos(body: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const c of CAMPOS) {
@@ -316,7 +328,7 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
       };
     }
 
-    const a = await db.assistido.create({ data: { cpf, nome: campos.nome, ...campos } });
+    const a = await db.assistido.create({ data: { cpf, nome: campos.nome, ...paraBanco(campos) } });
     console.log(`[assistidos] cadastrar (local): CPF ${cpf} criado — ${protocolo}`);
     return { sucesso: true, protocolo, dados: dadosPublicos(a as unknown as Record<string, unknown>) };
   });
@@ -436,7 +448,7 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     const existe = await db.assistido.findUnique({ where: { cpf } });
     if (!existe) return reply.code(404).send({ sucesso: false, erro: "assistido não encontrado" });
 
-    const a = await db.assistido.update({ where: { cpf }, data: campos });
+    const a = await db.assistido.update({ where: { cpf }, data: paraBanco(campos) });
     console.log(
       `[assistidos] atualizar (local): CPF ${cpf} → campos: ${Object.keys(campos).join(", ") || "(nenhum)"}`
     );
