@@ -19,6 +19,17 @@ export async function processosRoutes(app: FastifyInstance) {
     };
   });
 
+  // POST /api/processos/existe { numero } → { existe }
+  // Checagem enxuta (booleano) pro gate de elegibilidade confirmar um número
+  // de processo autodeclarado antes de decidir entre seguir o atendimento
+  // normal ou transbordar pra humano (pedido do usuário 2026-08-04, card
+  // maria-ia#20260202) — sem gerar resumo IA, só confere se existe no PDPJ.
+  app.post("/api/processos/existe", async (req) => {
+    const { numero } = (req.body ?? {}) as { numero?: string };
+    const proc = numero ? await consultarPorNumero(numero) : null;
+    return { existe: !!proc };
+  });
+
   // POST /api/processos/resumo { processo_sel | numero, processos? } → resumo IA
   // processo_sel pode ser o número completo OU o índice (1, 2, ...) da lista.
   app.post("/api/processos/resumo", async (req) => {
@@ -31,12 +42,17 @@ export async function processosRoutes(app: FastifyInstance) {
       const lista = JSON.parse(body.processos ?? "{}")?.processos as { numero: string }[] | undefined;
       const idx = /^\d{1,2}$/.exec(sel);
       if (idx && lista?.[Number(sel) - 1]) numero = lista[Number(sel) - 1].numero;
-    } catch { /* segue com sel */ }
+    } catch {
+      /* segue com sel */
+    }
 
     const proc = await consultarPorNumero(numero);
     if (!proc) {
       console.warn(`[pdpj] resumo: processo ${numero} não encontrado`);
-      return { resumo: "Não consegui carregar os detalhes desse processo agora. Pode tentar de novo mais tarde? 🙏", numero };
+      return {
+        resumo: "Não consegui carregar os detalhes desse processo agora. Pode tentar de novo mais tarde? 🙏",
+        numero,
+      };
     }
     const resumo = await resumirProcesso(proc);
     console.log(`[pdpj] resumo gerado para ${numero}`);
