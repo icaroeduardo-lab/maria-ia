@@ -20,6 +20,10 @@ const VALIDADORES: Partial<Record<TipoPergunta, (valor: string) => boolean>> = {
   // fazer (endereço manual); só formato realmente errado é re-perguntado.
   cep: (v) => v.trim() === "0" || SO_DIGITOS(v).length === 8,
   data: (v) => /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) && !Number.isNaN(Date.parse(v.trim())),
+  // Verde exige e-mail em formato válido, não aceita vazio (confirmado
+  // 2026-08-04, ver montarPayloadAssistidoVerde) — regex simples, só forma,
+  // não existência real (mesmo padrão de rigor do resto dos validadores).
+  email: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
   // valor é o metadado JSON devolvido por POST /api/upload-documento ou pelo
   // branch de mídia do WhatsApp (src/core/channels/whatsapp.ts) — NUNCA a URL/
   // bytes do arquivo (LGPD). criarCaptura() não muda: mesmo shape-check das
@@ -57,6 +61,7 @@ const MENSAGENS_ERRO: Partial<Record<TipoPergunta, string>> = {
   telefone: "Isso não parece um telefone válido — DDD + número (10 ou 11 dígitos). Pode conferir?",
   cep: "Isso não parece um CEP válido — são 8 números. Pode conferir?",
   data: "Isso não parece uma data válida — use o formato AAAA-MM-DD. Pode conferir?",
+  email: "Isso não parece um e-mail válido. Pode conferir?",
   documento: "Não recebi um arquivo válido. Envie uma foto (jpeg/png) ou PDF, até 10MB.",
 };
 
