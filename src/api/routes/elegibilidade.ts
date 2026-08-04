@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { consultarAssistidoVerde, consultarCasosVerde } from "./assistidos.js";
+import { consultarAgendamentosVerde } from "./agendamentos.js";
 import { prisma } from "../../core/db.js";
 
 // Gate de elegibilidade por área de atuação da DPERJ (issue Coilab #20260134):
@@ -54,7 +55,9 @@ export async function elegibilidadeFlowRoutes(app: FastifyInstance) {
         const local = await prisma.assistido.findUnique({ where: { cpf } });
         const ufLocal = local?.uf?.trim().toUpperCase();
         if (ufLocal === "RJ") {
-          console.log(`[elegibilidade] DDD ${ddd ?? "?"} fora do RJ, sem cadastro Verde, mas cadastro local → UF RJ`);
+          console.log(
+            `[elegibilidade] DDD ${ddd ?? "?"} fora do RJ, sem cadastro Verde, mas cadastro local → UF RJ`
+          );
           return { decisao: "ok" };
         }
       }
@@ -82,5 +85,23 @@ export async function elegibilidadeFlowRoutes(app: FastifyInstance) {
 
     const casos = await consultarCasosVerde(cpf);
     return { tem_caso: !!(casos && casos.length > 0) };
+  });
+
+  // POST /api/elegibilidade/tem-pendencia-aberto { cpf } → { tem_pendencia }
+  // Caso OU agendamento em aberto no Verde — qualquer um dos dois já prova
+  // vínculo real com a Defensoria (RJ), sem precisar checar UF nem perguntar
+  // nada. Passo 1 da hierarquia nova do gate (pedido do usuário 2026-08-04,
+  // card maria-ia#20260202): pendência > processo real (PDPJ) > UF da ficha
+  // > pergunta direta.
+  app.post("/api/elegibilidade/tem-pendencia-aberto", async (req) => {
+    const cpf = ((req.body as { cpf?: string } | null)?.cpf ?? "").replace(/\D/g, "");
+    if (cpf.length !== 11) return { tem_pendencia: false };
+
+    const [casos, agendamentos] = await Promise.all([
+      consultarCasosVerde(cpf),
+      consultarAgendamentosVerde(cpf),
+    ]);
+    const tem_pendencia = !!(casos && casos.length > 0) || !!(agendamentos && agendamentos.length > 0);
+    return { tem_pendencia };
   });
 }

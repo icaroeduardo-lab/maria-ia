@@ -285,6 +285,11 @@ components:
       required: [tem_caso]
       properties:
         tem_caso: { type: boolean, description: "true se o CPF tem caso/processo aberto no Verde (prova RJ na prática)" }
+    TemPendenciaAbertoResp:
+      type: object
+      required: [tem_pendencia]
+      properties:
+        tem_pendencia: { type: boolean, description: "true se o CPF tem caso OU agendamento em aberto no Verde (prova RJ na prática) — 1º passo da hierarquia do gate" }
     CasoDetalheReq:
       type: object
       properties:
@@ -1353,6 +1358,14 @@ paths:
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CpfReq' } } } }
       responses:
         "200": { content: { application/json: { schema: { $ref: '#/components/schemas/TemCasoAbertoResp' } } } }
+  /api/elegibilidade/tem-pendencia-aberto:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Caso OU agendamento em aberto no Verde — 1º passo da hierarquia do gate pós-ficha (card #20260202): pendência > processo real (PDPJ) > UF da ficha > pergunta direta"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CpfReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/TemPendenciaAbertoResp' } } } }
   /api/agendamentos/consultar:
     post:
       tags: [Interno (fluxo)]

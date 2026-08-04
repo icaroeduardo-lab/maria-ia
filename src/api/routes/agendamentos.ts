@@ -8,7 +8,8 @@ import { gatewayVerdeGet, gatewayVerdePost } from "../../core/gateway-verde.js";
 
 const so_digitos = (s?: string) => (s ?? "").replace(/\D/g, "");
 
-const fmt = (iso: Date) => iso.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+const fmt = (iso: Date) =>
+  iso.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
 interface AgendamentoEnxuto {
   id: string;
@@ -32,7 +33,9 @@ interface AgendamentosVerdeRaw {
 }
 
 // null = gateway fora/CPF não encontrado — quem chama cai pro fallback local.
-async function consultarAgendamentosVerde(cpf: string): Promise<AgendamentoEnxuto[] | null> {
+// Exportada pro gate de elegibilidade (elegibilidade.ts) reusar — agendamento
+// em aberto prova residência RJ tanto quanto caso aberto (issue maria-ia#20260202).
+export async function consultarAgendamentosVerde(cpf: string): Promise<AgendamentoEnxuto[] | null> {
   const resp = await gatewayVerdeGet<AgendamentosVerdeRaw>(`/api/agendamentos/${cpf}`);
   const lista = resp?.dados?.agendamentos;
   if (!lista) return null;
@@ -66,13 +69,26 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
     } else {
       const assistido = cpf.length === 11 ? await db.assistido.findUnique({ where: { cpf } }) : null;
       const agendamentos = assistido
-        ? await db.agendamento.findMany({ where: { assistidoId: assistido.id, status: "aberto" }, orderBy: { data: "asc" } })
+        ? await db.agendamento.findMany({
+            where: { assistidoId: assistido.id, status: "aberto" },
+            orderBy: { data: "asc" },
+          })
         : [];
-      enxutos = agendamentos.map((a) => ({ id: a.id, tipo: a.tipo, data: fmt(a.data), local: a.local, status: a.status }));
-      console.log(`[agendamentos] consultar (local): CPF ${cpf} → ${enxutos.length} agendamento(s) aberto(s)`);
+      enxutos = agendamentos.map((a) => ({
+        id: a.id,
+        tipo: a.tipo,
+        data: fmt(a.data),
+        local: a.local,
+        status: a.status,
+      }));
+      console.log(
+        `[agendamentos] consultar (local): CPF ${cpf} → ${enxutos.length} agendamento(s) aberto(s)`
+      );
     }
 
-    const lista = enxutos.map((a, i) => `${i + 1}. ${a.tipo} — ${a.data}${a.local ? ` (${a.local})` : ""}`).join("\n");
+    const lista = enxutos
+      .map((a, i) => `${i + 1}. ${a.tipo} — ${a.data}${a.local ? ` (${a.local})` : ""}`)
+      .join("\n");
     return { tem_agendamentos: enxutos.length > 0, agendamentos: enxutos, lista };
   });
 
@@ -88,7 +104,9 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
     let lista: AgendamentoEnxuto[] = [];
     try {
       lista = JSON.parse(body.agendamentos ?? "{}")?.agendamentos ?? [];
-    } catch { /* segue vazio */ }
+    } catch {
+      /* segue vazio */
+    }
 
     const idx = /^\d{1,2}$/.exec(sel);
     const item = idx ? lista[Number(sel) - 1] : lista.find((a) => a.id === sel);
@@ -98,7 +116,14 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
       return { encontrado: false };
     }
     console.log(`[agendamentos] detalhe: ${item.id} (${item.tipo})`);
-    return { encontrado: true, id: item.id, tipo: item.tipo, data: item.data, local: item.local, status: item.status };
+    return {
+      encontrado: true,
+      id: item.id,
+      tipo: item.tipo,
+      data: item.data,
+      local: item.local,
+      status: item.status,
+    };
   });
 
   // POST /api/agendamentos/detalhe-rico — { idEvento } → proxy GET
@@ -128,9 +153,9 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
     const idEvento = String((req.body as { idEvento?: string | number })?.idEvento ?? "").trim();
     if (!idEvento) return { tem_vagas: false, vagas: [], lista: "" };
 
-    const resp = await gatewayVerdeGet<{ dados?: { vagasDisponiveis?: { idIntervalo?: number; data?: string; hora?: string }[] } }>(
-      `/api/agendamento/vagas/${idEvento}`,
-    );
+    const resp = await gatewayVerdeGet<{
+      dados?: { vagasDisponiveis?: { idIntervalo?: number; data?: string; hora?: string }[] };
+    }>(`/api/agendamento/vagas/${idEvento}`);
     const vagas = resp?.dados?.vagasDisponiveis ?? [];
     const lista = vagas.map((v, i) => `${i + 1}. ${v.data} às ${v.hora}`).join("\n");
     console.log(`[agendamentos] vagas: ${idEvento} → ${vagas.length} vaga(s)`);
@@ -147,7 +172,9 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
     let vagas: { idIntervalo?: number; data?: string; hora?: string }[] = [];
     try {
       vagas = JSON.parse(body.vagas ?? "{}")?.vagas ?? [];
-    } catch { /* segue vazio */ }
+    } catch {
+      /* segue vazio */
+    }
 
     const idx = /^\d{1,2}$/.exec(sel);
     const vaga = idx ? vagas[Number(sel) - 1] : undefined;
@@ -179,7 +206,9 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
       dataNova: dataHora,
     };
     const resp = await gatewayVerdePost("/api/agendamento/reagendar", payload);
-    console.log(`[agendamentos] reagendar: idAgendamento=${payload.idAgendamento} → ${resp.ok ? "ok" : `falha(${resp.status})`}`);
+    console.log(
+      `[agendamentos] reagendar: idAgendamento=${payload.idAgendamento} → ${resp.ok ? "ok" : `falha(${resp.status})`}`
+    );
     return { sucesso: resp.ok };
   });
 
@@ -191,7 +220,9 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
     const body = (req.body ?? {}) as { idAgendamento?: string | number; idPessoa?: string | number };
     const payload = { idAgendamento: Number(body.idAgendamento), idPessoa: Number(body.idPessoa) };
     const resp = await gatewayVerdePost("/api/agendamento/desmarcar", payload);
-    console.log(`[agendamentos] desmarcar: idAgendamento=${payload.idAgendamento} → ${resp.ok ? "ok" : `falha(${resp.status})`}`);
+    console.log(
+      `[agendamentos] desmarcar: idAgendamento=${payload.idAgendamento} → ${resp.ok ? "ok" : `falha(${resp.status})`}`
+    );
     return { sucesso: resp.ok, emailEnviado: resp.status === 204 };
   });
 
@@ -204,11 +235,13 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
     const idAssunto = Number(body.idAssunto);
     if (!idPessoa || !idAssunto) return { tem_duplicado: false };
 
-    const resp = await gatewayVerdeGet<{ dados?: { agendamentos?: { id?: number; dataAgendamento?: string }[] } }>(
-      `/api/agendamento/verificar-duplicados?idPessoa=${idPessoa}&idAssunto=${idAssunto}`,
-    );
+    const resp = await gatewayVerdeGet<{
+      dados?: { agendamentos?: { id?: number; dataAgendamento?: string }[] };
+    }>(`/api/agendamento/verificar-duplicados?idPessoa=${idPessoa}&idAssunto=${idAssunto}`);
     const duplicados = resp?.dados?.agendamentos ?? [];
-    console.log(`[agendamentos] verificar-duplicados: idPessoa=${idPessoa} idAssunto=${idAssunto} → ${duplicados.length} duplicado(s)`);
+    console.log(
+      `[agendamentos] verificar-duplicados: idPessoa=${idPessoa} idAssunto=${idAssunto} → ${duplicados.length} duplicado(s)`
+    );
     return {
       tem_duplicado: duplicados.length > 0,
       idAgendamentoDuplicado: duplicados[0]?.id ?? null,
@@ -242,7 +275,9 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
       textoComplemento: body.textoComplemento ?? "",
     };
     const resp = await gatewayVerdePost<{ dados?: { id?: number } }>("/api/agendamento/agendar", payload);
-    console.log(`[agendamentos] agendar: idPessoa=${payload.idPessoa} idOrgao=${payload.idOrgao} → ${resp.ok ? "ok" : `falha(${resp.status})`}`);
+    console.log(
+      `[agendamentos] agendar: idPessoa=${payload.idPessoa} idOrgao=${payload.idOrgao} → ${resp.ok ? "ok" : `falha(${resp.status})`}`
+    );
     return { sucesso: resp.ok, idAgendamento: resp.data?.dados?.id ?? null };
   });
 }
