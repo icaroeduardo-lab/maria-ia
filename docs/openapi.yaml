@@ -1230,7 +1230,7 @@ paths:
         Roda o grafo direto num checkpoint LangGraph de teste
         (thread_id: test:<flowId>:<sessionId>), sem criar Conversation.
         Resposta inclui tipoPerguntaPendente (cpf/telefone/cep/data/documento/
-        sim_nao/opcoes/texto/null), resolvido contra o flow informado (ou o
+        email/sim_nao/opcoes/texto/null), resolvido contra o flow informado (ou o
         registro estático se flowId for omitido) — o painel usa esse campo pra
         decidir o widget de resposta (ex: upload em vez de texto livre).
         Também inclui trilha: lista ordenada dos ids de node do flow visitados

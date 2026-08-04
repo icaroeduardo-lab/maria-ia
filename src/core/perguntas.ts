@@ -1,17 +1,26 @@
 import { AIMessage } from "@langchain/core/messages";
 import type { GraphState } from "./state.js";
 
-export type TipoPergunta = "texto" | "sim_nao" | "opcoes" | "cpf" | "telefone" | "cep" | "data" | "documento";
+export type TipoPergunta =
+  | "texto"
+  | "sim_nao"
+  | "opcoes"
+  | "cpf"
+  | "telefone"
+  | "cep"
+  | "data"
+  | "documento"
+  | "email";
 
 export interface Pergunta {
-  chave: string;            // key em dadosColetados
-  texto: string;            // pergunta em linguagem natural
+  chave: string; // key em dadosColetados
+  texto: string; // pergunta em linguagem natural
   obrigatoria: boolean;
   tipo: TipoPergunta;
-  opcoes?: string[];        // para tipo "opcoes"
-  imagem?: string;          // url de imagem exibida antes da pergunta (opcional)
-  descricao?: string;       // dica para o extrator (vira description no schema do LLM)
-  condicao?: (dados: Record<string, string>) => boolean;  // só pergunta se true
+  opcoes?: string[]; // para tipo "opcoes"
+  imagem?: string; // url de imagem exibida antes da pergunta (opcional)
+  descricao?: string; // dica para o extrator (vira description no schema do LLM)
+  condicao?: (dados: Record<string, string>) => boolean; // só pergunta se true
   // valida valor extraído por inferência do LLM; inválido → descarta e pergunta normalmente.
   // NÃO se aplica à resposta direta do usuário (evita loop de re-pergunta).
   validar?: (valor: string) => boolean;
