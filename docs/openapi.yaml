@@ -162,6 +162,15 @@ components:
       properties:
         resumo: { type: string }
         numero: { type: string }
+    ProcessoExisteReq:
+      type: object
+      properties:
+        numero: { type: string }
+    ProcessoExisteResp:
+      type: object
+      required: [existe]
+      properties:
+        existe: { type: boolean, description: "true se o número de processo foi encontrado no PDPJ" }
     CasosConsultaResp:
       type: object
       properties:
@@ -1511,6 +1520,13 @@ paths:
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ResumoReq' } } } }
       responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/ResumoResp' } } } } }
+  /api/processos/existe:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Checa (booleano) se um número de processo existe no PDPJ — usado pro gate de elegibilidade confirmar processo autodeclarado (card #20260202)"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ProcessoExisteReq' } } } }
+      responses: { "200": { content: { application/json: { schema: { $ref: '#/components/schemas/ProcessoExisteResp' } } } } }
   /api/pessoa-presa/consultar-rg:
     get:
       tags: [Interno (fluxo)]
