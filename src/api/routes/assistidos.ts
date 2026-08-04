@@ -52,14 +52,26 @@ export async function consultarAssistidoVerde(cpf: string): Promise<Record<strin
   };
 }
 
+// Verde exige dtNascimento em dd/MM/yyyy — Maria coleta em yyyy-MM-dd
+// (tipoPergunta "data", validado assim no engine). Descoberto investigando
+// por que NENHUM cadastro desta sessão chegava no Verde de verdade: o
+// gateway sempre devolvia "Parâmetro inválido" genérico (corrigido em
+// GatewayConsultaApiVerde#43 pra expor o erro real) — aí sim apareceu
+// "Formato de data inválido... Use dd/MM/yyyy" (maria-ia#20260202).
+function paraDataVerde(isoYyyyMmDd: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoYyyyMmDd);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : isoYyyyMmDd;
+}
+
 // Payload de cadastro do Verde (POST api/assistido) — issue maria-ia#117,
 // gateway#31. Campos que a Maria não coleta hoje (nomeSocial) vão vazios: o
 // Verde exige os campos presentes no JSON (não aceita ausentes — validação
 // automática do ApiController do gateway). String vazia passa pra a
-// maioria, MAS dtNascimento vazia dá 400 (testado em homologação, id real
-// criado só com data preenchida) — ver checagem em cadastrarAssistidoVerde
-// antes de chamar isso. numero: "SN" quando o assistido não tem número
-// (card 2026-07-31, fluxo pergunta e converte "0" digitado pra "SN").
+// maioria, MAS dtNascimento vazia OU email vazio dão 400 (confirmado contra
+// o Verde real, 2026-08-04 — email exige formato válido, não aceita "")
+// — ver checagem em cadastrarAssistidoVerde antes de chamar isso. numero:
+// "SN" quando o assistido não tem número (card 2026-07-31, fluxo pergunta e
+// converte "0" digitado pra "SN").
 function montarPayloadAssistidoVerde(cpf: string, campos: Record<string, string>) {
   return {
     nome: campos.nome ?? "",
@@ -88,15 +100,16 @@ function montarPayloadAssistidoVerde(cpf: string, campos: Record<string, string>
         ]
       : [],
     email: campos.email ?? "",
-    dtNascimento: campos.dataNascimento ?? "",
+    dtNascimento: campos.dataNascimento ? paraDataVerde(campos.dataNascimento) : "",
   };
 }
 
 // null = gateway fora/CPF rejeitado — quem chama cai pro fallback local.
-// dtNascimento vazia dá 400 no Verde (testado em homologação) — se não foi
-// coletada, nem tenta, evita round-trip que sabe que vai falhar.
+// dtNascimento vazia OU email vazio dão 400 no Verde real (confirmado
+// 2026-08-04, ver montarPayloadAssistidoVerde) — se não foram coletados,
+// nem tenta, evita round-trip que sabe que vai falhar.
 async function cadastrarAssistidoVerde(cpf: string, campos: Record<string, string>): Promise<boolean> {
-  if (!campos.dataNascimento) return false;
+  if (!campos.dataNascimento || !campos.email) return false;
   const resp = await gatewayVerdePost("/api/assistido", montarPayloadAssistidoVerde(cpf, campos));
   return resp.ok;
 }
