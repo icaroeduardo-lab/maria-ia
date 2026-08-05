@@ -406,6 +406,9 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     const TAMANHO_PAGINA = 10;
     const pagina = (pagina_marcador?.length ?? 0) + 1;
     const inicio = (pagina - 1) * TAMANHO_PAGINA;
+    console.log(
+      `[casos] paginacao DEBUG: pagina_marcador=${JSON.stringify(pagina_marcador)} pagina=${pagina} inicio=${inicio}`
+    );
     const pageItems = enxutos.slice(inicio, inicio + TAMANHO_PAGINA);
     const temMais = inicio + TAMANHO_PAGINA < enxutos.length;
 
