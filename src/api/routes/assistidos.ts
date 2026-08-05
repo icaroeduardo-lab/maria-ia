@@ -420,7 +420,7 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     const lista = pageItems.length
       ? pageItems
           .map((c, i) => `${inicio + i + 1}. ${c.assunto?.nome ?? c.tipoCaso} (${c.dataAtualizacao ?? "-"})`)
-          .join("\n") + (temMais ? '\n\nDigite "mais" pra ver mais opções.' : "")
+          .join("\n") + (temMais ? "\n\nDigite *0* pra ver mais opções." : "")
       : "Não há mais casos pra mostrar.";
     return { tem_casos: enxutos.length > 0, casos: enxutos, lista, temMais };
   });
