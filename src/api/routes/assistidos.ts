@@ -9,11 +9,17 @@ import { gatewayVerdeGet, gatewayVerdePost } from "../../core/gateway-verde.js";
 const so_digitos = (s?: string) => (s ?? "").replace(/\D/g, "");
 
 // Shape crua do Gateway Verde (GET /api/assistido/{cpf}) — issue #108.
+// dataNascimento adicionada (maria-ia#20260202): a API real SEMPRE devolveu
+// esse campo (dd/MM/yyyy) — o comentário antigo dizendo que não vinha estava
+// desatualizado/errado. Faltava aqui, e o PUT de atualização nunca reenviava
+// a data por não ter de onde puxar, o que zerava a data de nascimento real
+// da pessoa no Verde a cada correção de endereço/telefone/email.
 interface AssistidoVerdeRaw {
   dados?: {
     idPessoa?: number;
     nome?: string;
     email?: string;
+    dataNascimento?: string;
     enderecoDetalhado?: {
       logradouro?: string;
       numero?: string;
@@ -38,7 +44,10 @@ export async function consultarAssistidoVerde(cpf: string): Promise<Record<strin
     cpf,
     idPessoa: d.idPessoa ?? null,
     nome: d.nome,
-    dataNascimento: null,
+    // dd/MM/yyyy, formato bruto do Verde — usado só como fallback interno
+    // (atualizarAssistidoVerde) pra reenviar no PUT; dadosPublicos()/ficha
+    // não exibe esse campo hoje (não era o foco desta correção).
+    dataNascimento: d.dataNascimento ?? null,
     nomeMae: null,
     situacao: "regular",
     municipio: end.municipio ?? null,
@@ -114,14 +123,17 @@ async function cadastrarAssistidoVerde(cpf: string, campos: Record<string, strin
   return resp.ok;
 }
 
-// PUT do Verde só aceita endereco/telefone/email (não tem campo "nome" —
-// confirmado no Swagger, gateway#31). Se só nome mudou, não há o que
-// atualizar lá — quem chama decide se ainda assim quer persistir local.
-// telefone.numeroTelefone E email vazios dão 400 (testado em homologação,
-// os dois isoladamente) — o Verde exige os dois preenchidos mesmo
-// corrigindo só endereço (issue #187: fluxo novo pergunta 1 campo por vez,
-// então quase nunca vêm juntos). Busca os atuais no Verde antes de
-// desistir, em vez de pular pro fallback local à toa.
+// PUT do Verde só aceita endereco/telefone/email/dtNascimento (não tem
+// campo "nome" — confirmado no Swagger, gateway#31). Se só nome mudou, não
+// há o que atualizar lá — quem chama decide se ainda assim quer persistir
+// local. telefone.numeroTelefone E email vazios dão 400 (testado em
+// homologação, os dois isoladamente) — o Verde exige os dois preenchidos
+// mesmo corrigindo só endereço (issue #187: fluxo novo pergunta 1 campo por
+// vez, então quase nunca vêm juntos). SEMPRE busca o cadastro atual no
+// Verde antes de montar o payload — não só pra completar telefone/email
+// faltando, mas pra reenviar dtNascimento: o Verde trata campo ausente no
+// PUT como "apagar", não "manter" (achado 2026-08-05, gateway#44) — sem
+// isso, toda atualização zerava a data de nascimento real da pessoa.
 async function atualizarAssistidoVerde(cpf: string, campos: Record<string, string>): Promise<boolean> {
   const relevante =
     campos.logradouro ||
@@ -134,16 +146,13 @@ async function atualizarAssistidoVerde(cpf: string, campos: Record<string, strin
     campos.email;
   if (!relevante) return false;
 
-  let telefone: string | undefined = campos.telefone;
-  let email: string | undefined = campos.email;
-  if (!telefone || !email) {
-    const atual = await consultarAssistidoVerde(cpf);
-    telefone ??= (atual?.telefone as string | null) ?? undefined;
-    email ??= (atual?.email as string | null) ?? undefined;
-    console.log(
-      `[assistidos] atualizar: telefone/email não coletados, busquei no Verde → telefone=${telefone ? "achei" : "não achei"} email=${email ? "achei" : "não achei"}`
-    );
-  }
+  const atual = await consultarAssistidoVerde(cpf);
+  const telefone = campos.telefone || ((atual?.telefone as string | null) ?? undefined);
+  const email = campos.email || ((atual?.email as string | null) ?? undefined);
+  const dataNascimento = (atual?.dataNascimento as string | null) ?? "";
+  console.log(
+    `[assistidos] atualizar: busquei cadastro atual no Verde → telefone=${telefone ? "achei" : "não achei"} email=${email ? "achei" : "não achei"} dataNascimento=${dataNascimento ? "achei" : "não achei"}`
+  );
   if (!telefone || !email) return false; // Verde exige os dois preenchidos mesmo corrigindo só endereço
 
   const payload = {
@@ -166,6 +175,7 @@ async function atualizarAssistidoVerde(cpf: string, campos: Record<string, strin
       dataIndicacaoWhatsapp: "",
     },
     email,
+    dtNascimento: dataNascimento,
   };
   const resp = await gatewayVerdePost(`/api/assistido/${cpf}`, payload, "PUT");
   if (!resp.ok) console.log(`[assistidos] atualizar: PUT no Verde falhou, status=${resp.status}`);
