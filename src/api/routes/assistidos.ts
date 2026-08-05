@@ -356,14 +356,26 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     return { sucesso: true, protocolo, dados: dadosPublicos(a as unknown as Record<string, unknown>) };
   });
 
-  // POST /api/casos/consultar — { cpf } → { tem_casos, casos:[...], lista }
+  // POST /api/casos/consultar — { cpf, pagina_marcador? } → { tem_casos, casos:[...], lista, temMais }
   // Tenta o Gateway Verde primeiro (casos abertos de verdade, vinculados ao
   // processo quando houver); cai pro fallback local (tabela Caso — dados de
   // teste) se não encontrar ou o gateway estiver fora (issue maria-ia#110,
   // correção do fluxo — antes o assistido escolhia processo livremente, o
   // certo é partir do caso aberto na Defensoria).
+  //
+  // Paginação de 10 em 10 (pedido do usuário 2026-08-05, card #20260202):
+  // visto CPF de teste com 80 casos abertos — lista inteira numa mensagem só
+  // estourava o limite prático de mensagem (WhatsApp ~4096 chars) e virava
+  // uma parede de texto ilegível. O motor de fluxo não tem contador/soma
+  // nativo (só concatenação de string via {{}}), então a "página atual" é
+  // codificada como o COMPRIMENTO de uma string marcadora que o fluxo só
+  // sabe crescer (pagina_marcador = pagina_marcador + "X" a cada "mais") —
+  // mesmo truque de combo_pendencias (string em vez de lógica nativa).
+  // `casos` continua sempre completo (a seleção por índice em /casos/detalhe
+  // precisa do array inteiro) — só `lista` (o texto mostrado) é fatiada.
   app.post("/api/casos/consultar", async (req) => {
-    const cpf = so_digitos((req.body as { cpf?: string })?.cpf);
+    const { cpf: cpfRaw, pagina_marcador } = (req.body ?? {}) as { cpf?: string; pagina_marcador?: string };
+    const cpf = so_digitos(cpfRaw);
 
     let enxutos: CasoEnxuto[];
     const verde = cpf.length === 11 ? await consultarCasosVerde(cpf) : null;
@@ -391,10 +403,18 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
       console.log(`[casos] consultar (local): CPF ${cpf} → ${enxutos.length} caso(s) aberto(s)`);
     }
 
-    const lista = enxutos
-      .map((c, i) => `${i + 1}. ${c.assunto?.nome ?? c.tipoCaso} (${c.dataAtualizacao ?? "-"})`)
-      .join("\n");
-    return { tem_casos: enxutos.length > 0, casos: enxutos, lista };
+    const TAMANHO_PAGINA = 10;
+    const pagina = (pagina_marcador?.length ?? 0) + 1;
+    const inicio = (pagina - 1) * TAMANHO_PAGINA;
+    const pageItems = enxutos.slice(inicio, inicio + TAMANHO_PAGINA);
+    const temMais = inicio + TAMANHO_PAGINA < enxutos.length;
+
+    const lista = pageItems.length
+      ? pageItems
+          .map((c, i) => `${inicio + i + 1}. ${c.assunto?.nome ?? c.tipoCaso} (${c.dataAtualizacao ?? "-"})`)
+          .join("\n") + (temMais ? '\n\nDigite "mais" pra ver mais opções.' : "")
+      : "Não há mais casos pra mostrar.";
+    return { tem_casos: enxutos.length > 0, casos: enxutos, lista, temMais };
   });
 
   // POST /api/casos/detalhe — { caso_sel, casos? } → detalhe de 1 caso

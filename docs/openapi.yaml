@@ -171,10 +171,18 @@ components:
       required: [existe]
       properties:
         existe: { type: boolean, description: "true se o número de processo foi encontrado no PDPJ" }
+    CasosConsultaReq:
+      type: object
+      properties:
+        cpf: { type: string }
+        pagina_marcador:
+          type: string
+          description: "string acumulada pelo fluxo (1 char por página já vista) — comprimento decide a página (card #20260202, paginação de 10 em 10). Omitido/vazio = página 1."
     CasosConsultaResp:
       type: object
       properties:
         tem_casos: { type: boolean }
+        temMais: { type: boolean, description: "true se existem mais casos além dos 10 já retornados em `lista`" }
         casos:
           type: array
           description: "campos preservam os nomes originais do Verde (issue maria-ia#110)"
@@ -1336,9 +1344,9 @@ paths:
   /api/casos/consultar:
     post:
       tags: [Interno (fluxo)]
-      summary: Casos em aberto do assistido (tabela Caso)
+      summary: "Casos em aberto do assistido (tabela Caso) — paginado de 10 em 10 (card #20260202)"
       security: []
-      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CpfReq' } } } }
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CasosConsultaReq' } } } }
       responses:
         "200": { content: { application/json: { schema: { $ref: '#/components/schemas/CasosConsultaResp' } } } }
         "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
