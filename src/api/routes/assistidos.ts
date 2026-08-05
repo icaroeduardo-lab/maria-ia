@@ -374,7 +374,15 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
   // `casos` continua sempre completo (a seleção por índice em /casos/detalhe
   // precisa do array inteiro) — só `lista` (o texto mostrado) é fatiada.
   app.post("/api/casos/consultar", async (req) => {
-    const { cpf: cpfRaw, pagina_marcador } = (req.body ?? {}) as { cpf?: string; pagina_marcador?: string };
+    // nome do body TEM que bater com o chave usado no camposCorpo do node de
+    // fluxo (casos_pagina_marcador) — achado ao vivo, 2026-08-05: o node
+    // mandava certo, mas o destructure aqui lia "pagina_marcador" (nome
+    // diferente), então o valor nunca chegava e a paginação sempre voltava
+    // pra página 1 em silêncio.
+    const { cpf: cpfRaw, casos_pagina_marcador: pagina_marcador } = (req.body ?? {}) as {
+      cpf?: string;
+      casos_pagina_marcador?: string;
+    };
     const cpf = so_digitos(cpfRaw);
 
     let enxutos: CasoEnxuto[];
@@ -406,9 +414,6 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     const TAMANHO_PAGINA = 10;
     const pagina = (pagina_marcador?.length ?? 0) + 1;
     const inicio = (pagina - 1) * TAMANHO_PAGINA;
-    console.log(
-      `[casos] paginacao DEBUG: pagina_marcador=${JSON.stringify(pagina_marcador)} pagina=${pagina} inicio=${inicio}`
-    );
     const pageItems = enxutos.slice(inicio, inicio + TAMANHO_PAGINA);
     const temMais = inicio + TAMANHO_PAGINA < enxutos.length;
 
