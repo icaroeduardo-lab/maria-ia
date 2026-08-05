@@ -123,17 +123,22 @@ async function cadastrarAssistidoVerde(cpf: string, campos: Record<string, strin
   return resp.ok;
 }
 
-// PUT do Verde só aceita endereco/telefone/email/dtNascimento (não tem
-// campo "nome" — confirmado no Swagger, gateway#31). Se só nome mudou, não
-// há o que atualizar lá — quem chama decide se ainda assim quer persistir
-// local. telefone.numeroTelefone E email vazios dão 400 (testado em
-// homologação, os dois isoladamente) — o Verde exige os dois preenchidos
-// mesmo corrigindo só endereço (issue #187: fluxo novo pergunta 1 campo por
-// vez, então quase nunca vêm juntos). SEMPRE busca o cadastro atual no
-// Verde antes de montar o payload — não só pra completar telefone/email
-// faltando, mas pra reenviar dtNascimento: o Verde trata campo ausente no
-// PUT como "apagar", não "manter" (achado 2026-08-05, gateway#44) — sem
-// isso, toda atualização zerava a data de nascimento real da pessoa.
+// PUT do Verde só aceita endereco/telefone/email (não tem campo "nome" —
+// confirmado no Swagger, gateway#31). Se só nome mudou, não há o que
+// atualizar lá — quem chama decide se ainda assim quer persistir local.
+// telefone.numeroTelefone E email vazios dão 400 (testado em homologação,
+// os dois isoladamente) — o Verde exige os dois preenchidos mesmo
+// corrigindo só endereço (issue #187: fluxo novo pergunta 1 campo por vez,
+// então quase nunca vêm juntos). SEMPRE busca o cadastro atual no Verde
+// antes de montar o payload, pra completar telefone/email faltando.
+//
+// LIMITAÇÃO CONHECIDA DO VERDE (não corrigível do nosso lado, achado
+// 2026-08-05): esse PUT some com a dataNascimento da pessoa mesmo
+// corrigindo só endereço/telefone/email — tentamos reenviar `dtNascimento`
+// no payload (gateway#44) e o Verde respondeu "Propriedade não
+// reconhecida: 'dtNascimento'" (400), ou seja, esse endpoint nem aceita
+// esse campo pra preservar. Reportar pro time do Verde/DPERJ — fora do
+// nosso controle consertar por aqui.
 async function atualizarAssistidoVerde(cpf: string, campos: Record<string, string>): Promise<boolean> {
   const relevante =
     campos.logradouro ||
@@ -149,10 +154,6 @@ async function atualizarAssistidoVerde(cpf: string, campos: Record<string, strin
   const atual = await consultarAssistidoVerde(cpf);
   const telefone = campos.telefone || ((atual?.telefone as string | null) ?? undefined);
   const email = campos.email || ((atual?.email as string | null) ?? undefined);
-  const dataNascimento = (atual?.dataNascimento as string | null) ?? "";
-  console.log(
-    `[assistidos] atualizar: busquei cadastro atual no Verde → telefone=${telefone ? "achei" : "não achei"} email=${email ? "achei" : "não achei"} dataNascimento=${dataNascimento ? "achei" : "não achei"}`
-  );
   if (!telefone || !email) return false; // Verde exige os dois preenchidos mesmo corrigindo só endereço
 
   const payload = {
@@ -175,7 +176,6 @@ async function atualizarAssistidoVerde(cpf: string, campos: Record<string, strin
       dataIndicacaoWhatsapp: "",
     },
     email,
-    dtNascimento: dataNascimento,
   };
   const resp = await gatewayVerdePost(`/api/assistido/${cpf}`, payload, "PUT");
   if (!resp.ok) console.log(`[assistidos] atualizar: PUT no Verde falhou, status=${resp.status}`);
