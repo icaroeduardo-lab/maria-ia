@@ -75,6 +75,21 @@ data "aws_iam_policy_document" "task" {
     actions   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
     resources = ["${aws_s3_bucket.documentos.arn}/*"]
   }
+  # S3 ListBucket (documentos) — ação de nível de bucket, não de objeto
+  # (resource é o ARN do bucket, sem /*). Necessário pra ListObjectsV2 achar
+  # o arquivo mais recente de uma sessão por prefixo (verificação de
+  # documento por OCR, card #20260203, src/core/ocr-documento.ts) — o
+  # metadado salvo em dadosColetados nunca guarda a key do S3 (LGPD), então
+  # não dá pra ir direto no objeto sem listar o prefixo antes.
+  statement {
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.documentos.arn]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["documentos/*"]
+    }
+  }
   # SQS (api envia, worker consome)
   statement {
     actions = [
