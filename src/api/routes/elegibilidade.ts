@@ -87,6 +87,20 @@ export async function elegibilidadeFlowRoutes(app: FastifyInstance) {
     return { tem_caso: !!(casos && casos.length > 0) };
   });
 
+  // POST /api/elegibilidade/reside-rj-ficha { uf?, telefone? } → { reside_rj }
+  // Pedido do usuário 2026-08-10: UF ou DDD já presentes na ficha do Verde
+  // (resultado_cpf, já consultado antes do gate) bastam pra pular a pergunta
+  // elig_pergunta_reside — só pergunta direto quando nem UF nem DDD do
+  // cadastro indicam RJ. Puro (sem Verde/DB), reaproveita extrairDdd.
+  app.post("/api/elegibilidade/reside-rj-ficha", async (req) => {
+    const body = (req.body ?? {}) as { uf?: string; telefone?: string };
+    const uf = (body.uf ?? "").trim().toUpperCase();
+    if (uf === "RJ") return { reside_rj: true };
+
+    const ddd = body.telefone ? extrairDdd(body.telefone) : null;
+    return { reside_rj: !!(ddd && DDD_RJ.has(ddd)) };
+  });
+
   // POST /api/elegibilidade/tem-pendencia-aberto { cpf } → { tem_pendencia }
   // Caso OU agendamento em aberto no Verde — qualquer um dos dois já prova
   // vínculo real com a Defensoria (RJ), sem precisar checar UF nem perguntar

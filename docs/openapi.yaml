@@ -307,6 +307,16 @@ components:
       required: [tem_pendencia]
       properties:
         tem_pendencia: { type: boolean, description: "true se o CPF tem caso OU agendamento em aberto no Verde (prova RJ na prática) — 1º passo da hierarquia do gate" }
+    ResideRjFichaReq:
+      type: object
+      properties:
+        uf: { type: string, description: "resultado_cpf.dados.uf (ficha do Verde)" }
+        telefone: { type: string, description: "resultado_cpf.dados.telefone (ficha do Verde) — formato não garantido, DDD extraído de forma defensiva" }
+    ResideRjFichaResp:
+      type: object
+      required: [reside_rj]
+      properties:
+        reside_rj: { type: boolean, description: "true se UF da ficha é RJ ou DDD do telefone da ficha é do RJ (21/22/24)" }
     CasoDetalheReq:
       type: object
       properties:
@@ -1383,6 +1393,14 @@ paths:
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CpfReq' } } } }
       responses:
         "200": { content: { application/json: { schema: { $ref: '#/components/schemas/TemPendenciaAbertoResp' } } } }
+  /api/elegibilidade/reside-rj-ficha:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "UF ou DDD do telefone já presentes na ficha do Verde (resultado_cpf) indicam RJ? — pula a pergunta elig_pergunta_reside quando true"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ResideRjFichaReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/ResideRjFichaResp' } } } }
   /api/agendamentos/consultar:
     post:
       tags: [Interno (fluxo)]
