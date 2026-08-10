@@ -663,6 +663,61 @@ test("api com edge 'erro': sucesso segue o caminho feliz", async () => {
   }
 });
 
+test("api interna injeta _sessao/_canal mesmo quando NÃO é o node imediatamente resumido após interrupt (issue #166)", async () => {
+  // reproduz o bug real: node "api" alcançado por edge DENTRO do mesmo tick
+  // de invoke(null, cfg) — depois do node de captura de uma pergunta, não
+  // como o próprio node resumido. Antes do fix em builder.ts (wrapper de
+  // addNode não repassava `config` pra criarNode()), _sessao chegava
+  // undefined nesse cenário e o JSON.stringify removia a chave do corpo.
+  const { url, srv, corpos } = await servidorDeTeste((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: true }));
+  });
+  const selfUrlOriginal = process.env.SELF_URL;
+  process.env.SELF_URL = url;
+  try {
+    const flow: FlowJSON = {
+      id: "t-api-sessao-nao-imediato",
+      nodes: [
+        {
+          id: "p1",
+          type: "pergunta",
+          data: { texto: "Qual seu nome?", chave: "nome", semReescrita: true },
+        },
+        { id: "chamada", type: "api", data: { url: "/interno/echo", chave: "resultado" } },
+        { id: "fim", type: "encerrar", data: {} },
+      ],
+      edges: [
+        { id: "e1", source: "p1", target: "chamada" },
+        { id: "e2", source: "chamada", target: "fim" },
+      ],
+    };
+    const graph = buildGraphFromFlow(flow);
+    const cfg = config();
+
+    // 1º turno: pausa no interrupt da pergunta — node "api" ainda não rodou
+    await graph.invoke({}, cfg);
+    assert.equal(corpos.length, 0, "api não deve rodar antes do resume");
+
+    // resume: cap_p1 → chamada (api) → fim, tudo no MESMO invoke(null, cfg) —
+    // "chamada" é alcançado por edge, não é o node resumido diretamente
+    const r = await responder(graph, cfg, "Maria da Silva");
+    assert.equal(corpos.length, 1, "api deve rodar dentro do mesmo tick do resume");
+    const recebido = corpos[0] as { body: Record<string, unknown> };
+    assert.equal(
+      recebido.body._sessao,
+      cfg.configurable.thread_id,
+      "_sessao deve chegar preenchido mesmo como node não-imediato do resume"
+    );
+    assert.equal(recebido.body._canal, "web");
+    assert.equal(r.dadosColetados.resultado_erro, "false");
+  } finally {
+    srv.close();
+    if (selfUrlOriginal === undefined) delete process.env.SELF_URL;
+    else process.env.SELF_URL = selfUrlOriginal;
+  }
+});
+
 test("api sem edge 'erro' mantém comportamento atual em falha (segue sem o dado)", async () => {
   const flow: FlowJSON = {
     id: "t-api-regressao",
