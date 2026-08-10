@@ -21,6 +21,11 @@ export const env = {
   bedrockModelId: () => process.env.BEDROCK_MODEL_ID ?? "anthropic.claude-3-haiku-20240307-v1:0",
   bedrockKbId: () => process.env.BEDROCK_KB_ID,
   bedrockKbDsId: () => process.env.BEDROCK_KB_DS_ID,
+  // OCR de documento (card #20260203, src/core/ocr-documento.ts) — override
+  // opcional pra apontar um modelo com melhor suporte a documento/PDF via
+  // Bedrock Converse (nem todo modelo Claude 3 suporta bloco "document");
+  // sem setar, usa o mesmo modelo do resto da IA (BEDROCK_MODEL_ID).
+  bedrockOcrModelId: () => process.env.BEDROCK_OCR_MODEL_ID ?? env.bedrockModelId(),
 
   // WhatsApp (Cloud API)
   waAccessToken: () => process.env.WA_ACCESS_TOKEN,
@@ -39,7 +44,9 @@ export const env = {
   // assistido/agendamentos/processo; default já aponta pro Lambda em uso
   // (issue #108) — sobrescrever só se o gateway mudar de URL.
   gatewayVerdeUrl: () =>
-    semBarra(process.env.GATEWAY_VERDE_URL ?? "https://3dike1m3ng.execute-api.us-east-1.amazonaws.com/default"),
+    semBarra(
+      process.env.GATEWAY_VERDE_URL ?? "https://3dike1m3ng.execute-api.us-east-1.amazonaws.com/default"
+    ),
 
   // DPERJ (envio final)
   dperjApiUrl: () => process.env.DPERJ_API_URL,
@@ -101,5 +108,7 @@ export function validarEnv(): void {
     const faltando = rec.filter(([, v]) => !v).map(([k]) => k);
     if (faltando.length) console.warn(`[env] recomendados ausentes em produção: ${faltando.join(", ")}`);
   }
-  console.log(`[env] region=${env.awsRegion()} db=${env.databaseUrl() ? "ok" : "off"} fila=${env.sqsQueueUrl() ? "ok" : "off"} tracing=${env.langchainTracingV2() && env.langsmithApiKey() ? `ok(${env.langchainProject() || "default"})` : "off"}`);
+  console.log(
+    `[env] region=${env.awsRegion()} db=${env.databaseUrl() ? "ok" : "off"} fila=${env.sqsQueueUrl() ? "ok" : "off"} tracing=${env.langchainTracingV2() && env.langsmithApiKey() ? `ok(${env.langchainProject() || "default"})` : "off"}`
+  );
 }

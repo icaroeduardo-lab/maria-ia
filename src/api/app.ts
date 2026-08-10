@@ -27,6 +27,7 @@ import { fichaRoutes } from "./routes/ficha.js";
 import { kycRoutes } from "./routes/kyc.js";
 import { processosRoutes } from "./routes/processos.js";
 import { uploadDocumentoRoutes } from "./routes/upload-documento.js";
+import { documentosFlowRoutes } from "./routes/documentos.js";
 import { env } from "../core/env.js";
 
 // Monta a app Fastify com todas as rotas registradas, SEM listen e sem jobs de
@@ -54,7 +55,10 @@ export async function montarApp(opts: MontarAppOpts = {}) {
   // preflight — sem isso, TODO PUT/DELETE sob /admin (salvar fluxo, excluir
   // fluxo, dados-teste, etc) falha silenciosamente quando chamado de um
   // browser real (funciona via curl/MCP, que não fazem preflight).
-  await app.register(fastifyCors, { origin: true, methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] });
+  await app.register(fastifyCors, {
+    origin: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+  });
   await app.register(fastifyJwt, { secret: env.jwtSecret() });
   await app.register(fastifyStatic, { root: join(__dirname, "../../public") });
 
@@ -115,6 +119,7 @@ export async function montarApp(opts: MontarAppOpts = {}) {
   await app.register(kycRoutes);
   await app.register(processosRoutes);
   await app.register(uploadDocumentoRoutes);
+  await app.register(documentosFlowRoutes);
 
   return app;
 }
