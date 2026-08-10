@@ -42,6 +42,16 @@ export function categoriaPadrao(opcoes: string[]): string {
   return opcoes.find((o) => o.toLowerCase() === "outros") ?? opcoes[opcoes.length - 1];
 }
 
+// z.enum não valida de fato em runtime contra a saída do modelo (Bedrock
+// tool-calling não é estrito ao schema) — modelo às vezes devolve a
+// categoria certa sem acento (ex: "alimentacao"). Casa por texto
+// normalizado e devolve a grafia original de `opcoes`.
+function normalizarCategoria(valor: string, opcoes: string[]): string | undefined {
+  const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const alvo = norm(valor);
+  return opcoes.find((o) => norm(o) === alvo);
+}
+
 // Classifica um texto livre em uma das categorias. Tenta o LLM (Bedrock); se
 // falhar (sem credenciais/rede), cai num matcher por palavra-chave.
 export async function classificarTexto(
@@ -57,11 +67,23 @@ export async function classificarTexto(
     const instrucao =
       (prompt ?? "Você classifica o relato de um cidadão em uma categoria de serviço jurídico.") +
       (contextoRag ? `\n\n<base_de_conhecimento>\n${contextoRag}\n</base_de_conhecimento>` : "") +
-      `\n\nCategorias possíveis (responda APENAS com uma delas, exatamente como escrita): ${opcoes.join(", ")}.`;
-    const res = await model.invoke([new SystemMessage(instrucao), new HumanMessage(fala)]);
-    const bruto = String(res.content).toLowerCase().trim();
-    const achou = opcoes.find((o) => bruto.includes(o.toLowerCase()));
+      `\n\nCategorias possíveis: ${opcoes.join(", ")}.`;
+    // Saída estruturada (zod enum) em vez de parsing por substring: modelo
+    // que responde com frase explicativa (violando "responda só a categoria")
+    // podia citar OUTRA categoria de passagem (ex: pra descartá-la) e o
+    // parser antigo pegava essa por engano, sempre a 1ª de `opcoes` que
+    // aparecesse no texto — bug real encontrado via eval set + LangSmith.
+    const schema = z.object({
+      categoria: z
+        .enum(opcoes as [string, ...string[]])
+        .describe("categoria escolhida, exatamente uma da lista"),
+    });
+    const out = await model
+      .withStructuredOutput(schema)
+      .invoke([new SystemMessage(instrucao), new HumanMessage(fala)]);
+    const achou = normalizarCategoria(out.categoria, opcoes);
     if (achou) return achou;
+    console.warn("[classificar] categoria fora da lista mesmo com enum:", out.categoria);
   } catch (err) {
     console.warn(
       "[classificar] LLM indisponível, usando fallback por palavra-chave:",
@@ -106,8 +128,13 @@ export async function classificarComExtracao(
       .withStructuredOutput(schema)
       .invoke([new SystemMessage(instrucao), new HumanMessage(fala)]);
     const valor = typeof out.valor === "string" ? out.valor.trim() : "";
+    const categoria = normalizarCategoria(out.categoria, opcoes);
+    if (!categoria) {
+      console.warn("[classificar] categoria fora da lista mesmo com enum:", out.categoria);
+      return { categoria: await classificarTexto(fala, opcoes, prompt, contextoRag) };
+    }
     return {
-      categoria: out.categoria,
+      categoria,
       valor: valor && !PLACEHOLDER.test(valor) ? valor : undefined,
     };
   } catch (err) {
