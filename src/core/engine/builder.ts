@@ -1,4 +1,4 @@
-import { StateGraph, END, START } from "@langchain/langgraph";
+import { StateGraph, END, START, type LangGraphRunnableConfig } from "@langchain/langgraph";
 import { AIMessage } from "@langchain/core/messages";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { obterEstilo, obterConfig, styleVersion } from "../config.js";
@@ -685,9 +685,16 @@ export function buildGraphFromFlow(flow: FlowJSON, subflows: SubflowMap = {}) {
       ctx = { perguntas: todasPerguntas, perguntasPorCategoria: porCat };
     }
     const fnNode = criarNode(node, ctx);
-    builder.addNode(node.id, async (state: GraphState) => {
+    builder.addNode(node.id, async (state: GraphState, config?: LangGraphRunnableConfig) => {
       registrarVisitaNode(flow.id, node.id);
-      const resultado = await fnNode(state);
+      // repassar config é essencial pro node "api" injetar _sessao (thread_id)
+      // no corpo de chamadas internas — sem isso, config chega undefined
+      // dentro de criarNode() pra QUALQUER node (não só o "api"), pois este
+      // wrapper central é quem o LangGraph de fato invoca; um wrapper de
+      // aridade 1 (sem declarar o 2º parâmetro) descarta o config recebido
+      // silenciosamente, independente da posição do node no grafo/tick
+      // (bug real: issue #166).
+      const resultado = await fnNode(state, config);
       // trilha de execução (issue #93): ponto central único — cobre todos os
       // tipos de node, incluindo ids prefixados de subfluxo expandido, sem
       // precisar duplicar em cada case de criarNode()
