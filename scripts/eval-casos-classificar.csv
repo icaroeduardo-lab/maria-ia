@@ -1,0 +1,48 @@
+relato,categoria_esperada
+Quero me divorciar do meu marido,divórcio
+Preciso separar da minha esposa; já não moramos mais juntos,divórcio
+Quero terminar minha união estável e dividir os bens,divórcio
+Como faço pra me separar legalmente do meu companheiro?,divórcio
+Quero desfazer meu casamento; já estamos separados de fato há 1 ano,divórcio
+Meu ex não paga pensão do meu filho há 3 meses,alimentação
+Preciso de pensão alimentícia pra minha filha,alimentação
+O pai da minha criança não ajuda financeiramente,alimentação
+Quero entrar com ação de alimentos contra meu ex-marido,alimentação
+Meu marido não sustenta os filhos; preciso de ajuda com pensão,alimentação
+Fui demitido sem justa causa e não recebi minhas verbas,trabalhista
+Minha empresa não pagou meu FGTS,trabalhista
+Trabalhei um ano sem carteira assinada; o que eu faço?,trabalhista
+Fui mandado embora e não recebi o aviso prévio,trabalhista
+Meu patrão não paga horas extras,trabalhista
+Meu filho está preso e preciso de ajuda jurídica pra ele,pessoa_presa
+Meu marido foi preso em flagrante; o que eu faço?,pessoa_presa
+Quero saber sobre a situação do meu irmão que está no presídio,pessoa_presa
+Preciso de assistência pro meu companheiro que está detido,pessoa_presa
+Meu pai é apenado; como faço pra ter um defensor pra ele?,pessoa_presa
+Meu marido me agride; preciso de ajuda,violencia_domestica
+Sofro violência doméstica do meu companheiro,violencia_domestica
+Preciso de uma medida protetiva contra meu ex,violencia_domestica
+Meu companheiro me bate e ameaça,violencia_domestica
+Sou vítima de violência do meu marido; quero denunciar,violencia_domestica
+Quero saber o andamento do meu processo,falar_processo
+Recebi uma intimação e não entendi o que fazer,falar_processo
+Preciso acompanhar meu processo; já tenho número,falar_processo
+Já tenho um processo aberto; quero saber como está,falar_processo
+Recebi uma notificação judicial e preciso de orientação,falar_processo
+Preciso de um remédio que o SUS não está fornecendo,questoes_saude
+Meu plano de saúde negou um procedimento,questoes_saude
+Preciso de ajuda pra conseguir internação urgente,questoes_saude
+O hospital está negando meu tratamento,questoes_saude
+Preciso de medicamento de alto custo e não consigo pelo SUS,questoes_saude
+Estou respondendo um processo criminal em liberdade e preciso de advogado,fora_competencia
+Fui indiciado por um crime mas não estou preso; o que faço?,fora_competencia
+Recebi uma intimação da polícia porque sou suspeito de um crime,fora_competencia
+Estou sendo processado criminalmente mas continuo solto; preciso de defesa,fora_competencia
+Meu filho responde um processo criminal mas está solto; precisa de advogado,fora_competencia
+Preciso de ajuda com um problema no meu apartamento,outros
+Quero saber sobre meus direitos como consumidor,outros
+Tenho uma dúvida sobre herança,outros
+Preciso regularizar um documento,outros
+Quero fazer uma reclamação sobre meu vizinho,outros
+Quero me separar do meu marido e também preciso que ele pague pensão pro nosso filho,alimentação
+Quero me divorciar; mas não quero pensão; só dividir os bens,divórcio
