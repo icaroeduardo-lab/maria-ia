@@ -537,6 +537,96 @@ test("subfluxo aninhado (subfluxo dentro de subfluxo) expande e roda até o fim"
   );
 });
 
+test("transferir_humano terminal DENTRO de subfluxo continua dead-end (não religa pro pai)", async () => {
+  // bug real (achado ao vivo testando "Cadastro de Assistido" →
+  // cad_transfere_doc_falha via /admin/test-chat): expandirSubfluxos religava
+  // TODO terminal sem data.saida — inclusive transferir_humano — pra saída
+  // do subfluxo no pai, ignorando que handoff sem edge própria é dead-end
+  // intencional (mesmo comportamento de transferir_humano no nível-topo).
+  // O sub-flow abaixo tem os dois terminais lado a lado (mesmo pergunta
+  // sim_nao decide o ramo) pra provar que só o transferir_humano trava;
+  // o terminal "mensagem" comum continua fluindo pro pai normalmente.
+  const top: FlowJSON = {
+    id: "t-top-handoff-sub",
+    nodes: [
+      { id: "p_nome", type: "pergunta", data: { texto: "Seu nome?", chave: "nome", semReescrita: true } },
+      { id: "sf", type: "subfluxo", data: { refFlowId: "sub" } },
+      { id: "fim", type: "encerrar", data: {} },
+    ],
+    edges: [
+      { id: "e1", source: "p_nome", target: "sf" },
+      { id: "e2", source: "sf", target: "fim" },
+    ],
+  };
+  const sub = {
+    nodes: [
+      {
+        id: "p_falha",
+        type: "pergunta" as const,
+        data: { texto: "Falhou o documento?", chave: "falha", tipoPergunta: "sim_nao", semReescrita: true },
+      },
+      { id: "th", type: "transferir_humano" as const, data: { texto: "Transferindo pra um atendente!" } },
+      { id: "m_ok", type: "mensagem" as const, data: { texto: "Documento certinho!" } },
+    ],
+    edges: [
+      { id: "e1", source: "p_falha", target: "th", label: "true" },
+      { id: "e2", source: "p_falha", target: "m_ok", label: "false" },
+    ],
+  };
+
+  // ramo transferir_humano: deve travar de verdade dentro do subfluxo
+  const graphHandoff = buildGraphFromFlow(top, { sub });
+  const cfgHandoff = config();
+  const r1 = await graphHandoff.invoke({}, cfgHandoff);
+  assert.match(textos(r1), /Seu nome\?/);
+
+  const r2 = await responder(graphHandoff, cfgHandoff, "Maria");
+  assert.match(textos(r2), /Falhou o documento\?/);
+
+  const r3 = await responder(graphHandoff, cfgHandoff, "sim");
+  assert.match(textos(r3), /Transferindo pra um atendente!/);
+  assert.equal(r3.handoff, "aguardando");
+  assert.equal(r3.protocolo, "", "não deve ter religado pro encerrar do pai e gerado protocolo");
+  assert.ok(!r3.trilhaExecutada.includes("fim"), "não deve ter alcançado o encerrar do fluxo pai");
+  // dead-end de verdade (sem edge de saída pro "th") termina em END depois
+  // de rodar — igual ao comportamento comprovado a nível-topo (nenhuma
+  // pergunta/nó pendente sobra em `next`, ver teste
+  // "transferir_humano sem texto usa mensagem padrão"). O que prova que o
+  // handoff NÃO foi religado artificialmente pro fluxo pai é a trilha nunca
+  // alcançar "fim" nem gerar protocolo, mesmo mandando mais mensagens depois.
+  const stateHandoff = await graphHandoff.getState(cfgHandoff);
+  assert.deepEqual(
+    stateHandoff.next ?? [],
+    [],
+    "dead-end real: sem pergunta/nó do fluxo PAI pendente em next, igual ao topo"
+  );
+
+  // mandar mais uma mensagem depois do handoff NÃO deve avançar a trilha pro
+  // fluxo pai (processarMensagem() de verdade bloqueia antes mesmo de chamar
+  // o grafo, checando handoffStatus na Conversation — ver src/core/chat.ts;
+  // no nível do grafo puro, o equivalente é: sem edge de saída de "th",
+  // resumir não tem pra onde ir além do END já alcançado, então a trilha e o
+  // protocolo continuam exatamente como estavam no handoff)
+  const r4 = await responder(graphHandoff, cfgHandoff, "mais uma mensagem qualquer");
+  assert.equal(r4.protocolo, "", "continua sem protocolo — não avançou pro encerrar do pai");
+  assert.ok(!r4.trilhaExecutada.includes("fim"), "trilha ainda não deve ter alcançado o encerrar do pai");
+  assert.deepEqual(
+    r4.trilhaExecutada,
+    r3.trilhaExecutada,
+    "trilha não cresce mais — o dead-end não reabre nem religa pro pai"
+  );
+
+  // ramo mensagem comum: deve continuar fluindo pro pai normalmente (não quebrar esse caso)
+  const graphFluxo = buildGraphFromFlow(top, { sub });
+  const cfgFluxo = config();
+  await graphFluxo.invoke({}, cfgFluxo);
+  await responder(graphFluxo, cfgFluxo, "Maria");
+  const rFinal = await responder(graphFluxo, cfgFluxo, "não");
+  assert.match(textos(rFinal), /Documento certinho!/);
+  assert.ok(rFinal.protocolo, "terminal mensagem comum deve religar pro pai e chegar no encerrar");
+  assert.ok(rFinal.trilhaExecutada.includes("fim"), "trilha deve alcançar o encerrar do fluxo pai");
+});
+
 // ── nó api genérico (Coilab #20260115): rota erro, corpo seletivo, secrets ────
 
 import { createServer, type Server } from "node:http";

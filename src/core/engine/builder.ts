@@ -599,9 +599,23 @@ function expandirSubfluxos(
       // saídas: cada terminal do sub-flow liga às saídas do nó subfluxo.
       // Saída nomeada: terminal com data.saida casa com a seta de mesmo label.
       const semLabel = saidasNode.filter((s) => !s.label);
+      // transferir_humano/encerrar são dead-end DE PROPÓSITO quando terminam
+      // um branch sem data.saida (handoff humano / fim de conversa) — mesmo
+      // racional do comentário em criarNode() sobre transferir_humano no
+      // nível-topo: "sem edge de saída configurada → segue pro END quando
+      // liberado". Sem esta exceção, o fallback abaixo religava esse
+      // terminal automaticamente pra saída do subfluxo (semLabel/saidasNode),
+      // fazendo o handoff nunca travar de verdade dentro de subfluxo — o
+      // grafo seguia o fluxo pai normal na próxima mensagem do usuário
+      // (achado ao vivo testando "Cadastro de Assistido" →
+      // cad_transfere_doc_falha via /admin/test-chat). Só ganham edge de
+      // saída quando o autor do fluxo setou data.saida explicitamente E ela
+      // casa com uma saída nomeada do nó subfluxo — nunca pelo fallback.
+      const DEAD_END_SEM_SAIDA = new Set(["transferir_humano", "encerrar"]);
       for (const term of terminais) {
         const nome = (term.data.saida ?? "").toLowerCase().trim();
         const casados = nome ? saidasNode.filter((s) => (s.label ?? "").toLowerCase().trim() === nome) : [];
+        if (!casados.length && DEAD_END_SEM_SAIDA.has(term.type)) continue; // dead-end intencional
         const alvos = casados.length ? casados : semLabel.length ? semLabel : saidasNode;
         for (const sai of alvos)
           E.push({
