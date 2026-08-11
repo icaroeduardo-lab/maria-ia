@@ -92,12 +92,25 @@ export async function elegibilidadeFlowRoutes(app: FastifyInstance) {
   // (resultado_cpf, já consultado antes do gate) bastam pra pular a pergunta
   // elig_pergunta_reside — só pergunta direto quando nem UF nem DDD do
   // cadastro indicam RJ. Puro (sem Verde/DB), reaproveita extrairDdd.
+  //
+  // BUG-011 (achado no teste manual 2026-08-11, cenário E3): o node do fluxo
+  // (elig_check_reside_rj_ficha) manda camposCorpo com o MESMO nome da chave
+  // em dadosColetados — "uf_ficha"/"telefone_ficha" (nomeadas assim de
+  // propósito, pra não colidir com a chave "telefone" real do cadastro) —
+  // não "uf"/"telefone". O endpoint só lia os nomes curtos, então o corpo
+  // real chegava vazio e a pergunta nunca era pulada. Aceita os dois nomes.
   app.post("/api/elegibilidade/reside-rj-ficha", async (req) => {
-    const body = (req.body ?? {}) as { uf?: string; telefone?: string };
-    const uf = (body.uf ?? "").trim().toUpperCase();
+    const body = (req.body ?? {}) as {
+      uf?: string;
+      telefone?: string;
+      uf_ficha?: string;
+      telefone_ficha?: string;
+    };
+    const uf = (body.uf ?? body.uf_ficha ?? "").trim().toUpperCase();
     if (uf === "RJ") return { reside_rj: true };
 
-    const ddd = body.telefone ? extrairDdd(body.telefone) : null;
+    const telefone = body.telefone ?? body.telefone_ficha ?? "";
+    const ddd = telefone ? extrairDdd(telefone) : null;
     return { reside_rj: !!(ddd && DDD_RJ.has(ddd)) };
   });
 
