@@ -48,7 +48,7 @@ export async function assuntoFlowRoutes(app: FastifyInstance) {
   // → { assunto_encontrado, idAssunto, pergunta, respostas, lista }
   // 1ª chamada usa idCategoria (ponto de entrada da árvore pra cada categoria
   // da Maria); chamadas seguintes usam idItemCategoria (resposta escolhida).
-  app.post("/api/assunto/consultar-item-arvore", async (req) => {
+  app.post("/api/assunto/consultar-item-arvore", async (req, reply) => {
     const body = (req.body ?? {}) as { idCategoria?: string | number; idItemCategoria?: string | number };
     const idItemCategoria = body.idItemCategoria ? Number(body.idItemCategoria) : null;
     const idCategoria = !idItemCategoria && body.idCategoria ? Number(body.idCategoria) : null;
@@ -59,7 +59,18 @@ export async function assuntoFlowRoutes(app: FastifyInstance) {
 
     const query = idItemCategoria ? `idItemCategoria=${idItemCategoria}` : `idCategoria=${idCategoria}`;
     const resp = await gatewayVerdeGet<ItemArvoreVerdeRaw>(`/api/assunto/consultar-item-arvore?${query}`);
-    const d = resp?.dados;
+    // BUG-013 (teste manual 2026-08-11): gatewayVerdeGet devolve null tanto
+    // pra "sem resposta" quanto pra qualquer erro real (401/timeout/5xx) —
+    // sem distinguir, esta rota sempre respondia 200 com pergunta/respostas
+    // vazias, e o node `api` do fluxo (que só marca `_erro` em `!res.ok`)
+    // nunca via a falha. Usuário caía num loop mudo (pergunta em branco,
+    // zero opções) em vez de ver erro/handoff. 502 aqui ativa a edge "erro"
+    // já suportada nativamente pelo node `api` do engine.
+    if (!resp) {
+      console.warn(`[assunto] consultar-item-arvore: ${query} → gateway Verde falhou`);
+      return reply.code(502).send({ erro: "gateway_verde_indisponivel" });
+    }
+    const d = resp.dados;
     const respostas = d?.respostas ?? [];
     const lista = respostas.map((r, i) => `${i + 1}. ${r.resposta}`).join("\n");
 
@@ -85,7 +96,9 @@ export async function assuntoFlowRoutes(app: FastifyInstance) {
     let respostas: RespostaArvore[] = [];
     try {
       respostas = JSON.parse(body.resultado_arvore ?? "{}")?.respostas ?? [];
-    } catch { /* segue vazio */ }
+    } catch {
+      /* segue vazio */
+    }
 
     const idx = /^\d{1,2}$/.exec(sel);
     const escolhida = idx ? respostas[Number(sel) - 1] : respostas.find((r) => r.resposta === sel);
