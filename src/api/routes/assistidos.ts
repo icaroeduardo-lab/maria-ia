@@ -505,4 +505,17 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     );
     return { sucesso: true, dados: dadosPublicos(a as unknown as Record<string, unknown>) };
   });
+
+  // POST /api/assistidos/campo-preenchido { valor? } → { preenchido }
+  // Pedido do usuário 2026-08-11: gate genérico "esse campo tem valor?" —
+  // endpoint dedicado em vez de condicao com label vazio (evita a
+  // ambiguidade de match documentada nos outros gates de elegibilidade,
+  // onde edge sem label e edge com label "" colidem no fallback do engine).
+  // Usado no gate de UF≠RJ: se a ficha tem UF de verdade (não vazia), é
+  // prova de outro estado — pula direto pro transbordo humano em vez de
+  // perguntar "mora no RJ?" de novo.
+  app.post("/api/assistidos/campo-preenchido", async (req) => {
+    const valor = ((req.body as { valor?: string } | null)?.valor ?? "").trim();
+    return { preenchido: !!valor };
+  });
 }

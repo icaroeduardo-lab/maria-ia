@@ -317,6 +317,15 @@ components:
       required: [reside_rj]
       properties:
         reside_rj: { type: boolean, description: "true se UF da ficha é RJ ou DDD do telefone da ficha é do RJ (21/22/24)" }
+    CampoPreenchidoReq:
+      type: object
+      properties:
+        valor: { type: string, description: "valor a checar (ex: UF da ficha, promovida pra chave flat antes)" }
+    CampoPreenchidoResp:
+      type: object
+      required: [preenchido]
+      properties:
+        preenchido: { type: boolean, description: "true se valor não está vazio" }
     CasoDetalheReq:
       type: object
       properties:
@@ -1351,6 +1360,14 @@ paths:
         "400": { description: cpf inválido, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
         "404": { description: assistido não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
         "503": { description: banco não configurado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+  /api/assistidos/campo-preenchido:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Gate genérico 'esse campo tem valor?' — usado no gate de UF≠RJ pra distinguir UF real de outro estado (pula pra transbordo humano) de UF vazia (segue pro fluxo de perguntar residência)"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/CampoPreenchidoReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/CampoPreenchidoResp' } } } }
   /api/casos/consultar:
     post:
       tags: [Interno (fluxo)]
