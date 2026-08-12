@@ -67,6 +67,18 @@ export async function buscarDocumentoMaisRecente(sessionId: string): Promise<Doc
 }
 
 const ExtracaoSchema = z.object({
+  // Campo de raciocínio ANTES dos valores finais — de propósito: saída
+  // estruturada direto (sem espaço pra "pensar") mostrou-se menos precisa em
+  // documento real complexo (CNH tem 2 números de 11 dígitos parecidos e 3
+  // datas) do que uma resposta em texto livre pedindo a mesma extração —
+  // achado testando ao vivo 2026-08-12. Preencher este campo primeiro força
+  // o modelo a citar o rótulo exato de cada campo antes de decidir o valor,
+  // reduzindo confusão entre campos vizinhos parecidos.
+  raciocinio: z
+    .string()
+    .describe(
+      "Antes de responder: cite o RÓTULO exato de cada campo que você está lendo no documento (ex: 'CPF está no campo rotulado 6 CPF, valor X; NÃO é o campo 5 Nº REGISTRO'). 1-3 frases curtas, uma por campo encontrado."
+    ),
   nome: z
     .string()
     .nullish()
