@@ -1,7 +1,5 @@
 import { GetObjectCommand, ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
-import { ChatBedrockConverse } from "@langchain/aws";
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { z } from "zod";
+import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
 import { env } from "./env.js";
 import { mimeReal, type MimeAceito } from "./documentos.js";
 
@@ -16,14 +14,23 @@ import { mimeReal, type MimeAceito } from "./documentos.js";
 //
 // LGPD: nenhuma função aqui loga nome/CPF em texto claro — só booleans de
 // match saem pro chamador (rota em src/api/routes/documentos.ts).
+//
+// Chama o AWS SDK direto (BedrockRuntimeClient/ConverseCommand), NÃO
+// @langchain/aws (usado no resto do engine) — achado ao vivo 2026-08-12,
+// testando com PDF real (CNH-e do governo, ~290KB): a tradução de bloco de
+// arquivo do @langchain/aws (ChatBedrockConverse.withStructuredOutput) falha
+// silenciosamente pra esse documento específico (devolve texto tipo "não há
+// informação", sem erro) — funcionava certinho num PDF sintético pequeno
+// (gerado localmente pra teste), só quebrava no documento real. A mesma
+// chamada via SDK puro (bytes idênticos, tool-calling) lê o documento
+// corretamente. Não investigamos a causa raiz exata dentro do @langchain/aws
+// (não é código nosso) — só confirmamos que bypassar resolve.
 
 const s3 = new S3Client({ region: env.awsRegion() });
+const bedrock = new BedrockRuntimeClient({ region: env.awsRegion() });
 
-const model = new ChatBedrockConverse({
-  model: env.bedrockOcrModelId(),
-  region: env.awsRegion(),
-  temperature: 0,
-});
+const FORMATO_DOCUMENTO: Record<string, "pdf"> = { "application/pdf": "pdf" };
+const FORMATO_IMAGEM: Record<string, "jpeg" | "png"> = { "image/jpeg": "jpeg", "image/png": "png" };
 
 export interface DocumentoBaixado {
   buffer: Buffer;
@@ -66,74 +73,104 @@ export async function buscarDocumentoMaisRecente(sessionId: string): Promise<Doc
   return { buffer, mimeType: tipoReal };
 }
 
-const ExtracaoSchema = z.object({
-  // Campo de raciocínio ANTES dos valores finais — de propósito: saída
-  // estruturada direto (sem espaço pra "pensar") mostrou-se menos precisa em
-  // documento real complexo (CNH tem 2 números de 11 dígitos parecidos e 3
-  // datas) do que uma resposta em texto livre pedindo a mesma extração —
-  // achado testando ao vivo 2026-08-12. Preencher este campo primeiro força
-  // o modelo a citar o rótulo exato de cada campo antes de decidir o valor,
-  // reduzindo confusão entre campos vizinhos parecidos.
-  raciocinio: z
-    .string()
-    .describe(
-      "Antes de responder: cite o RÓTULO exato de cada campo que você está lendo no documento (ex: 'CPF está no campo rotulado 6 CPF, valor X; NÃO é o campo 5 Nº REGISTRO'). 1-3 frases curtas, uma por campo encontrado."
-    ),
-  nome: z
-    .string()
-    .nullish()
-    .describe("Nome completo da pessoa exatamente como está impresso no documento de identidade"),
-  cpf: z.string().nullish().describe("Número do CPF como está impresso no documento (com ou sem pontuação)"),
-  dataNascimento: z
-    .string()
-    .nullish()
-    .describe(
-      "Data de nascimento exatamente como está impressa no documento (qualquer formato). Null se o documento não trouxer essa informação (ex: alguns modelos de CNH mais antigos)."
-    ),
-});
-
 export interface DadosExtraidos {
   nome: string | null;
   cpf: string | null;
   dataNascimento: string | null;
 }
 
-// OCR via Bedrock multimodal — sem Textract: um modelo Claude com visão já lê
-// o documento e devolve nome/CPF estruturados (Zod), mesmo padrão de
-// src/core/nodes/atendimento/extrator.ts. PDF vai como "file" block (Bedrock
-// Converse "document"); imagem vai como "image_url" (mesmo formato do
-// exemplo oficial do @langchain/aws). Suporte a PDF depende do modelo
-// configurado suportar o bloco "document" do Converse — nem todo modelo
-// Claude 3 suporta; ajustar BEDROCK_OCR_MODEL_ID se precisar de um modelo
-// mais recente só pra esta feature.
-export async function extrairDadosDocumento(doc: DocumentoBaixado): Promise<DadosExtraidos> {
-  const base64 = doc.buffer.toString("base64");
-  const blocoArquivo =
-    doc.mimeType === "application/pdf"
-      ? { type: "file" as const, source_type: "base64" as const, mime_type: doc.mimeType, data: base64 }
-      : { type: "image_url" as const, image_url: { url: `data:${doc.mimeType};base64,${base64}` } };
+// Curto de propósito — achado ao vivo 2026-08-12 testando com PDF real (CNH-e
+// do governo): um system prompt longo com lista de "não confunda X com Y"
+// combinado com o campo `raciocinio` do schema (abaixo) fazia o modelo
+// concluir erroneamente que o documento "só tem cabeçalho de assinatura
+// digital, sem dados pessoais" — 4/4 tentativas reproduziram isso de forma
+// determinística (mesmo em temperature 0). Prompt curto + raciocinio juntos
+// leram o documento certo em 3/3 tentativas seguidas. Não investigamos por
+// que a combinação longa quebra — só confirmamos empiricamente qual
+// combinação funciona nesse documento real.
+const SYSTEM_PROMPT =
+  "Você lê documentos de identidade brasileiros (RG, CNH, certidão de nascimento). Extraia nome completo, CPF e data de nascimento exatamente como aparecem no documento. Nunca invente um valor.";
 
-  const resultado = await model.withStructuredOutput(ExtracaoSchema).invoke([
-    new SystemMessage(
-      "Você lê documentos de identidade brasileiros (RG, CNH, certidão de nascimento). Extraia o nome completo, o CPF e a data de nascimento exatamente como aparecem no documento.\n\n" +
-        "ATENÇÃO — esses documentos têm vários campos parecidos, não confunda:\n" +
-        '- CPF: é o campo rotulado exatamente "CPF" (formato NNN.NNN.NNN-NN). NUNCA use o "Nº DE REGISTRO" da CNH (outro número de 11 dígitos, rotulado "5 Nº REGISTRO" ou similar) nem o "DOC IDENTIDADE"/RG — são campos diferentes.\n' +
-        '- Data de nascimento: é a data dentro do campo "DATA, LOCAL E UF DE NASCIMENTO" (ou "3" na CNH). NUNCA use "DATA DE EMISSÃO"/"4a" nem "VALIDADE"/"4b" — são as outras duas datas que sempre aparecem no mesmo documento.\n' +
-        '- Nome: geralmente rotulado "NOME E SOBRENOME" ou "2 e 1" — o nome completo da pessoa, não o campo "FILIAÇÃO" (nome dos pais).\n\n' +
-        "Nem todo documento traz os três campos — data de nascimento pode faltar. Nunca invente um valor — se não conseguir ler algum campo com segurança ou tiver dúvida sobre qual campo é qual, devolva null nele em vez de arriscar um campo errado."
-    ),
-    new HumanMessage({
-      content: [
-        { type: "text", text: "Extraia o nome completo, o CPF e a data de nascimento deste documento." },
-        blocoArquivo,
+const FERRAMENTA_EXTRACAO = {
+  toolSpec: {
+    name: "extrair_dados_documento",
+    description: "Registra os dados de identidade lidos do documento.",
+    inputSchema: {
+      json: {
+        type: "object",
+        properties: {
+          raciocinio: {
+            type: "string",
+            description: "Cite o rótulo exato de cada campo que você leu no documento, 1-3 frases curtas.",
+          },
+          nome: {
+            type: ["string", "null"],
+            description:
+              "Nome completo da pessoa exatamente como está impresso no documento. null se não conseguir ler com segurança.",
+          },
+          cpf: {
+            type: ["string", "null"],
+            description:
+              "Número do CPF como está impresso no documento (com ou sem pontuação). null se não conseguir ler com segurança.",
+          },
+          dataNascimento: {
+            type: ["string", "null"],
+            description:
+              "Data de nascimento exatamente como está impressa no documento (qualquer formato). null se o documento não trouxer essa informação ou não conseguir ler com segurança.",
+          },
+        },
+        required: ["raciocinio", "nome", "cpf", "dataNascimento"],
+      },
+    },
+  },
+};
+
+// OCR via Bedrock multimodal — sem Textract: o modelo lê o documento com
+// visão e devolve nome/CPF/data de nascimento via tool-calling (saída
+// estruturada). Chama BedrockRuntimeClient/ConverseCommand direto (ver
+// comentário no topo do arquivo — não usa @langchain/aws pra este caso).
+// PDF vai como content block "document"; imagem (jpeg/png) vai como
+// "image". Suporte a PDF depende do modelo configurado suportar o bloco
+// "document" do Converse — nem todo modelo Claude suporta; ajustar
+// BEDROCK_OCR_MODEL_ID se precisar trocar.
+export async function extrairDadosDocumento(doc: DocumentoBaixado): Promise<DadosExtraidos> {
+  const formatoDocumento = FORMATO_DOCUMENTO[doc.mimeType];
+  const conteudo = formatoDocumento
+    ? [{ document: { format: formatoDocumento, name: "documento", source: { bytes: doc.buffer } } }]
+    : [{ image: { format: FORMATO_IMAGEM[doc.mimeType] ?? "jpeg", source: { bytes: doc.buffer } } }];
+
+  const resp = await bedrock.send(
+    new ConverseCommand({
+      modelId: env.bedrockOcrModelId(),
+      system: [{ text: SYSTEM_PROMPT }],
+      messages: [
+        {
+          role: "user",
+          content: [
+            { text: "Extraia o nome completo, o CPF e a data de nascimento deste documento." },
+            ...conteudo,
+          ],
+        },
       ],
-    }),
-  ]);
+      toolConfig: {
+        tools: [FERRAMENTA_EXTRACAO],
+        toolChoice: { tool: { name: "extrair_dados_documento" } },
+      },
+      inferenceConfig: { temperature: 0 },
+    })
+  );
+
+  const toolUse = resp.output?.message?.content?.find((b) => b.toolUse)?.toolUse;
+  const input = (toolUse?.input ?? {}) as {
+    nome?: string | null;
+    cpf?: string | null;
+    dataNascimento?: string | null;
+  };
 
   return {
-    nome: resultado.nome?.trim() || null,
-    cpf: resultado.cpf?.trim() || null,
-    dataNascimento: resultado.dataNascimento?.trim() || null,
+    nome: input.nome?.trim() || null,
+    cpf: input.cpf?.trim() || null,
+    dataNascimento: input.dataNascimento?.trim() || null,
   };
 }
 
