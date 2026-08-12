@@ -62,6 +62,7 @@ locals {
     { name = "S3_BUCKET_DOCUMENTOS", value = aws_s3_bucket.documentos.bucket },
     { name = "SQS_QUEUE_URL", value = aws_sqs_queue.msgs.url },
     { name = "BEDROCK_MODEL_ID", value = var.bedrock_model_id },
+    { name = "BEDROCK_OCR_MODEL_ID", value = var.bedrock_ocr_model_id },
     { name = "BEDROCK_KB_ID", value = var.bedrock_kb_id },
     { name = "BEDROCK_KB_DS_ID", value = var.bedrock_kb_ds_id },
     { name = "PUBLIC_URL", value = var.public_url },
