@@ -103,7 +103,12 @@ export async function extrairDadosDocumento(doc: DocumentoBaixado): Promise<Dado
 
   const resultado = await model.withStructuredOutput(ExtracaoSchema).invoke([
     new SystemMessage(
-      "Você lê documentos de identidade brasileiros (RG, CNH, certidão de nascimento). Extraia o nome completo, o CPF e a data de nascimento exatamente como aparecem no documento. Nem todo documento traz os três — data de nascimento pode faltar. Nunca invente um valor — se não conseguir ler algum campo com segurança, devolva null nele."
+      "Você lê documentos de identidade brasileiros (RG, CNH, certidão de nascimento). Extraia o nome completo, o CPF e a data de nascimento exatamente como aparecem no documento.\n\n" +
+        "ATENÇÃO — esses documentos têm vários campos parecidos, não confunda:\n" +
+        '- CPF: é o campo rotulado exatamente "CPF" (formato NNN.NNN.NNN-NN). NUNCA use o "Nº DE REGISTRO" da CNH (outro número de 11 dígitos, rotulado "5 Nº REGISTRO" ou similar) nem o "DOC IDENTIDADE"/RG — são campos diferentes.\n' +
+        '- Data de nascimento: é a data dentro do campo "DATA, LOCAL E UF DE NASCIMENTO" (ou "3" na CNH). NUNCA use "DATA DE EMISSÃO"/"4a" nem "VALIDADE"/"4b" — são as outras duas datas que sempre aparecem no mesmo documento.\n' +
+        '- Nome: geralmente rotulado "NOME E SOBRENOME" ou "2 e 1" — o nome completo da pessoa, não o campo "FILIAÇÃO" (nome dos pais).\n\n' +
+        "Nem todo documento traz os três campos — data de nascimento pode faltar. Nunca invente um valor — se não conseguir ler algum campo com segurança ou tiver dúvida sobre qual campo é qual, devolva null nele em vez de arriscar um campo errado."
     ),
     new HumanMessage({
       content: [
@@ -153,8 +158,14 @@ function tokensBatem(a: string, b: string): boolean {
   return a === b || a.startsWith(b) || b.startsWith(a);
 }
 
-// limiar 0.7: nome + sobrenome (2 tokens) exige os 2 batendo; nome composto
-// (3+) tolera 1 token divergente (abreviação, erro de digitação, nome social).
+// Limiar 0.7 aplicado sobre o MENOR dos dois nomes (não o maior — bug real
+// achado 2026-08-12: cadastro geralmente tem nome abreviado/informal ("Icaro
+// Albar") enquanto o documento sempre traz o nome legal completo ("Icaro Luiz
+// Albar Eduardo"); dividir pelo maior penalizava esse caso legítimo demais —
+// 2 de 2 tokens do cadastro batiam, mas 2/4 = 0.5 ficava abaixo do limiar.
+// Dividir pelo menor: nome + sobrenome (2 tokens) exige os 2 batendo; nome
+// composto (3+, no lado menor) tolera 1 token divergente (abreviação, erro
+// de digitação, nome social).
 export function nomesCompativeis(digitado?: string | null, extraido?: string | null): boolean {
   const nd = normalizarNome(digitado);
   const ne = normalizarNome(extraido);
@@ -165,8 +176,9 @@ export function nomesCompativeis(digitado?: string | null, extraido?: string | n
   const b = tokensSignificativos(extraido);
   if (!a.length || !b.length) return false;
 
-  const acertos = a.filter((ta) => b.some((tb) => tokensBatem(ta, tb))).length;
-  return acertos / Math.max(a.length, b.length) >= 0.7;
+  const [menor, maior] = a.length <= b.length ? [a, b] : [b, a];
+  const acertos = menor.filter((tm) => maior.some((tM) => tokensBatem(tm, tM))).length;
+  return acertos / menor.length >= 0.7;
 }
 
 export function cpfsCompativeis(digitado?: string | null, extraido?: string | null): boolean {
