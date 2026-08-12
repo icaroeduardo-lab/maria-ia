@@ -50,22 +50,63 @@ test("cpfsCompativeis: formato inválido (não 11 dígitos) nunca bate", () => {
 
 test("compararComCadastro: match true só quando nome E cpf batem", () => {
   const r = compararComCadastro(
-    { nome: "João Pereira", cpf: "111.444.777-35" },
+    { nome: "João Pereira", cpf: "111.444.777-35", dataNascimento: null },
     "Joao Pereira",
     "11144477735"
   );
   assert.equal(r.match, true);
-  assert.deepEqual(r.detalhes, { nome_ok: true, cpf_ok: true });
+  assert.deepEqual(r.detalhes, { nome_ok: true, cpf_ok: true, dataNascimento_ok: null });
 });
 
 test("compararComCadastro: cpf divergente derruba match mesmo com nome ok", () => {
-  const r = compararComCadastro({ nome: "João Pereira", cpf: "11144477735" }, "Joao Pereira", "22233344456");
+  const r = compararComCadastro(
+    { nome: "João Pereira", cpf: "11144477735", dataNascimento: null },
+    "Joao Pereira",
+    "22233344456"
+  );
   assert.equal(r.match, false);
-  assert.deepEqual(r.detalhes, { nome_ok: true, cpf_ok: false });
+  assert.deepEqual(r.detalhes, { nome_ok: true, cpf_ok: false, dataNascimento_ok: null });
 });
 
 test("compararComCadastro: OCR sem extrair nada nunca dá match", () => {
-  const r = compararComCadastro({ nome: null, cpf: null }, "Joao Pereira", "11144477735");
+  const r = compararComCadastro(
+    { nome: null, cpf: null, dataNascimento: null },
+    "Joao Pereira",
+    "11144477735"
+  );
   assert.equal(r.match, false);
-  assert.deepEqual(r.detalhes, { nome_ok: false, cpf_ok: false });
+  assert.deepEqual(r.detalhes, { nome_ok: false, cpf_ok: false, dataNascimento_ok: null });
+});
+
+test("compararComCadastro: data de nascimento no documento bate com o cadastro (ISO)", () => {
+  const r = compararComCadastro(
+    { nome: "João Pereira", cpf: "11144477735", dataNascimento: "15/03/1990" },
+    "Joao Pereira",
+    "11144477735",
+    "1990-03-15"
+  );
+  assert.equal(r.match, true);
+  assert.deepEqual(r.detalhes, { nome_ok: true, cpf_ok: true, dataNascimento_ok: true });
+});
+
+test("compararComCadastro: data de nascimento divergente derruba match", () => {
+  const r = compararComCadastro(
+    { nome: "João Pereira", cpf: "11144477735", dataNascimento: "15/03/1990" },
+    "Joao Pereira",
+    "11144477735",
+    "1991-03-15"
+  );
+  assert.equal(r.match, false);
+  assert.deepEqual(r.detalhes, { nome_ok: true, cpf_ok: true, dataNascimento_ok: false });
+});
+
+test("compararComCadastro: documento sem data de nascimento não derruba match", () => {
+  const r = compararComCadastro(
+    { nome: "João Pereira", cpf: "11144477735", dataNascimento: null },
+    "Joao Pereira",
+    "11144477735",
+    "1990-03-15"
+  );
+  assert.equal(r.match, true);
+  assert.deepEqual(r.detalhes, { nome_ok: true, cpf_ok: true, dataNascimento_ok: null });
 });
