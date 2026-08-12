@@ -202,6 +202,12 @@ variable "bedrock_model_id" {
   description = "Modelo do Bedrock."
 }
 
+variable "bedrock_ocr_model_id" {
+  type        = string
+  default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+  description = "Modelo do Bedrock usado só pro OCR de documento (src/core/ocr-documento.ts). Precisa ler bloco 'document' (PDF) via Converse — Claude 3 Haiku (var.bedrock_model_id) NÃO lê PDF (testado ao vivo 2026-08-12: devolve 'documento não foi fornecido' mesmo com o arquivo anexado). Modelos mais novos (4.x) exigem inference profile (prefixo us./global., não o model id puro) — confirmado com aws bedrock list-inference-profiles."
+}
+
 variable "bedrock_kb_id" {
   type        = string
   default     = "LF04FDVIYP"
