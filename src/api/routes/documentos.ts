@@ -33,12 +33,16 @@ export async function documentosFlowRoutes(app: FastifyInstance) {
 
     let nomeCadastro = typeof body.nome === "string" ? body.nome : undefined;
     let cpfCadastro = typeof body.cpf === "string" ? body.cpf : undefined;
+    // dataNascimento é opcional (nem todo fluxo/documento tem essa info) —
+    // por isso não entra na checagem de 422 abaixo junto com nome/cpf.
+    let dataNascimentoCadastro = typeof body.dataNascimento === "string" ? body.dataNascimento : undefined;
 
-    if ((!nomeCadastro || !cpfCadastro) && prisma) {
+    if ((!nomeCadastro || !cpfCadastro || !dataNascimentoCadastro) && prisma) {
       const conversa = await prisma.conversation.findUnique({ where: { sessionId } });
       const dados = (conversa?.dadosColetados as Record<string, unknown>) ?? {};
       nomeCadastro ??= typeof dados.nome === "string" ? dados.nome : undefined;
       cpfCadastro ??= typeof dados.cpf === "string" ? dados.cpf : undefined;
+      dataNascimentoCadastro ??= typeof dados.dataNascimento === "string" ? dados.dataNascimento : undefined;
     }
 
     if (!nomeCadastro || !cpfCadastro) {
@@ -52,10 +56,11 @@ export async function documentosFlowRoutes(app: FastifyInstance) {
 
     try {
       const extraido = await extrairDadosDocumento(documento);
-      const resultado = compararComCadastro(extraido, nomeCadastro, cpfCadastro);
+      const resultado = compararComCadastro(extraido, nomeCadastro, cpfCadastro, dataNascimentoCadastro);
       console.log(
         `[documentos] verificar: sessão ${sessionId} → match=${resultado.match} ` +
-          `(nome_ok=${resultado.detalhes.nome_ok}, cpf_ok=${resultado.detalhes.cpf_ok})`
+          `(nome_ok=${resultado.detalhes.nome_ok}, cpf_ok=${resultado.detalhes.cpf_ok}, ` +
+          `dataNascimento_ok=${resultado.detalhes.dataNascimento_ok})`
       );
       return resultado;
     } catch (err) {

@@ -72,11 +72,18 @@ const ExtracaoSchema = z.object({
     .nullish()
     .describe("Nome completo da pessoa exatamente como está impresso no documento de identidade"),
   cpf: z.string().nullish().describe("Número do CPF como está impresso no documento (com ou sem pontuação)"),
+  dataNascimento: z
+    .string()
+    .nullish()
+    .describe(
+      "Data de nascimento exatamente como está impressa no documento (qualquer formato). Null se o documento não trouxer essa informação (ex: alguns modelos de CNH mais antigos)."
+    ),
 });
 
 export interface DadosExtraidos {
   nome: string | null;
   cpf: string | null;
+  dataNascimento: string | null;
 }
 
 // OCR via Bedrock multimodal — sem Textract: um modelo Claude com visão já lê
@@ -96,14 +103,21 @@ export async function extrairDadosDocumento(doc: DocumentoBaixado): Promise<Dado
 
   const resultado = await model.withStructuredOutput(ExtracaoSchema).invoke([
     new SystemMessage(
-      "Você lê documentos de identidade brasileiros (RG, CNH, certidão de nascimento). Extraia SOMENTE o nome completo e o CPF exatamente como aparecem no documento. Nunca invente um valor — se não conseguir ler algum campo com segurança, devolva null nele."
+      "Você lê documentos de identidade brasileiros (RG, CNH, certidão de nascimento). Extraia o nome completo, o CPF e a data de nascimento exatamente como aparecem no documento. Nem todo documento traz os três — data de nascimento pode faltar. Nunca invente um valor — se não conseguir ler algum campo com segurança, devolva null nele."
     ),
     new HumanMessage({
-      content: [{ type: "text", text: "Extraia o nome completo e o CPF deste documento." }, blocoArquivo],
+      content: [
+        { type: "text", text: "Extraia o nome completo, o CPF e a data de nascimento deste documento." },
+        blocoArquivo,
+      ],
     }),
   ]);
 
-  return { nome: resultado.nome?.trim() || null, cpf: resultado.cpf?.trim() || null };
+  return {
+    nome: resultado.nome?.trim() || null,
+    cpf: resultado.cpf?.trim() || null,
+    dataNascimento: resultado.dataNascimento?.trim() || null,
+  };
 }
 
 // ── Comparação tolerante ────────────────────────────────────────────────
@@ -161,17 +175,43 @@ export function cpfsCompativeis(digitado?: string | null, extraido?: string | nu
   return a.length === 11 && a === b;
 }
 
-export interface ResultadoVerificacao {
-  match: boolean;
-  detalhes: { nome_ok: boolean; cpf_ok: boolean };
+// Cadastro guarda dataNascimento em ISO (yyyy-MM-dd, validado pelo
+// tipoPergunta "data" do engine) — extraído do documento pode vir em
+// qualquer formato (dd/MM/yyyy, "12 de março de 1990" etc). Comparação
+// tolerante: reduz os dois a só dígitos e casa contra a permutação
+// dia-mês-ano OU ano-mês-dia (cobre OCR que já devolveu em ISO por engano).
+// null = documento não trouxe data de nascimento — "não aplicável", não é
+// uma divergência (ver compararComCadastro).
+export function datasCompativeis(digitadoIso?: string | null, extraido?: string | null): boolean | null {
+  if (!extraido) return null;
+  const extraidoDigitos = soDigitos(extraido);
+  if (extraidoDigitos.length !== 8) return null; // não deu pra ler uma data completa
+
+  const [ano, mes, dia] = (digitadoIso ?? "").split("-");
+  if (!ano || !mes || !dia) return false;
+  const diaMesAno = `${dia.padStart(2, "0")}${mes.padStart(2, "0")}${ano}`;
+  const anoMesDia = `${ano}${mes.padStart(2, "0")}${dia.padStart(2, "0")}`;
+  return extraidoDigitos === diaMesAno || extraidoDigitos === anoMesDia;
 }
 
+export interface ResultadoVerificacao {
+  match: boolean;
+  detalhes: { nome_ok: boolean; cpf_ok: boolean; dataNascimento_ok: boolean | null };
+}
+
+// dataNascimento_ok null (documento não trouxe essa info) não derruba o
+// match — só entra na conta quando o documento realmente tem o campo
+// (pedido do usuário 2026-08-12: "caso tenha esses dados no documento, pode
+// comparar").
 export function compararComCadastro(
   extraido: DadosExtraidos,
   nomeCadastro?: string | null,
-  cpfCadastro?: string | null
+  cpfCadastro?: string | null,
+  dataNascimentoCadastro?: string | null
 ): ResultadoVerificacao {
   const nome_ok = nomesCompativeis(nomeCadastro, extraido.nome);
   const cpf_ok = cpfsCompativeis(cpfCadastro, extraido.cpf);
-  return { match: nome_ok && cpf_ok, detalhes: { nome_ok, cpf_ok } };
+  const dataNascimento_ok = datasCompativeis(dataNascimentoCadastro, extraido.dataNascimento);
+  const match = nome_ok && cpf_ok && dataNascimento_ok !== false;
+  return { match, detalhes: { nome_ok, cpf_ok, dataNascimento_ok } };
 }
