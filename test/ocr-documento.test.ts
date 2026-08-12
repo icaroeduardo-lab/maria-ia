@@ -32,6 +32,19 @@ test("nomesCompativeis: nome completamente diferente não bate", () => {
   assert.equal(nomesCompativeis("Maria da Silva", "Joao Pereira"), false);
 });
 
+test("nomesCompativeis: cadastro com nome abreviado bate contra documento com nome legal completo", () => {
+  // bug real achado 2026-08-12 (CNH-e real): cadastro "Icaro Albar" (2
+  // tokens) vs documento "Icaro Luiz Albar Eduardo" (4 tokens) — antes do
+  // fix, 2/4=0.5 ficava abaixo do limiar 0.7; agora divide pelo MENOR nome.
+  assert.equal(nomesCompativeis("Icaro Albar", "Icaro Luiz Albar Eduardo"), true);
+  // mesma lógica no sentido inverso (documento abreviado, cadastro completo)
+  assert.equal(nomesCompativeis("Icaro Luiz Albar Eduardo", "Icaro Albar"), true);
+});
+
+test("nomesCompativeis: nome curto genuinamente diferente ainda não bate mesmo com 1 token em comum", () => {
+  assert.equal(nomesCompativeis("Icaro Albar", "Icaro Luiz Souza Eduardo"), false);
+});
+
 test("nomesCompativeis: vazio nunca bate", () => {
   assert.equal(nomesCompativeis("", "Maria Silva"), false);
   assert.equal(nomesCompativeis("Maria Silva", ""), false);
