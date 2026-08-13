@@ -2,6 +2,7 @@ import { GetObjectCommand, ListObjectsV2Command, S3Client } from "@aws-sdk/clien
 import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
 import { env } from "./env.js";
 import { mimeReal, type MimeAceito } from "./documentos.js";
+import { renderizarPrimeiraPaginaComoPng } from "./pdf-render.js";
 
 // Verificação de documento por OCR (card #20260203). Fase anterior (#20260129,
 // src/core/documentos.ts) já sobe foto/PDF do documento pro bucket privado
@@ -25,11 +26,14 @@ import { mimeReal, type MimeAceito } from "./documentos.js";
 // chamada via SDK puro (bytes idênticos, tool-calling) lê o documento
 // corretamente. Não investigamos a causa raiz exata dentro do @langchain/aws
 // (não é código nosso) — só confirmamos que bypassar resolve.
+//
+// PDF nunca vai como bloco "document" do Converse (issue #196) — é
+// rasterizado em imagem antes (ver pdf-render.ts e o comentário em
+// extrairDadosDocumento abaixo).
 
 const s3 = new S3Client({ region: env.awsRegion() });
 const bedrock = new BedrockRuntimeClient({ region: env.awsRegion() });
 
-const FORMATO_DOCUMENTO: Record<string, "pdf"> = { "application/pdf": "pdf" };
 const FORMATO_IMAGEM: Record<string, "jpeg" | "png"> = { "image/jpeg": "jpeg", "image/png": "png" };
 
 export interface DocumentoBaixado {
@@ -129,15 +133,18 @@ const FERRAMENTA_EXTRACAO = {
 // visão e devolve nome/CPF/data de nascimento via tool-calling (saída
 // estruturada). Chama BedrockRuntimeClient/ConverseCommand direto (ver
 // comentário no topo do arquivo — não usa @langchain/aws pra este caso).
-// PDF vai como content block "document"; imagem (jpeg/png) vai como
-// "image". Suporte a PDF depende do modelo configurado suportar o bloco
-// "document" do Converse — nem todo modelo Claude suporta; ajustar
-// BEDROCK_OCR_MODEL_ID se precisar trocar.
+//
+// PDF SEMPRE vira imagem antes de ir pro Bedrock (issue #196, ver
+// pdf-render.ts): o bloco "document" do Converse, testado ao vivo contra
+// documento real, lia dígitos do CPF errados de forma determinística —
+// rasterizar a 300dpi e mandar como bloco "image" resolveu (3/3 execuções
+// corretas). Imagem (jpeg/png) enviada direto pelo assistido não passa por
+// rasterização, só pelo bloco "image" de sempre.
 export async function extrairDadosDocumento(doc: DocumentoBaixado): Promise<DadosExtraidos> {
-  const formatoDocumento = FORMATO_DOCUMENTO[doc.mimeType];
-  const conteudo = formatoDocumento
-    ? [{ document: { format: formatoDocumento, name: "documento", source: { bytes: doc.buffer } } }]
-    : [{ image: { format: FORMATO_IMAGEM[doc.mimeType] ?? "jpeg", source: { bytes: doc.buffer } } }];
+  const ehPdf = doc.mimeType === "application/pdf";
+  const bytes = ehPdf ? await renderizarPrimeiraPaginaComoPng(doc.buffer) : doc.buffer;
+  const formatoImagem = ehPdf ? "png" : (FORMATO_IMAGEM[doc.mimeType] ?? "jpeg");
+  const conteudo = [{ image: { format: formatoImagem, source: { bytes } } }];
 
   const resp = await bedrock.send(
     new ConverseCommand({

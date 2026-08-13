@@ -27,6 +27,11 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v5
         with: { node-version: 22, cache: pnpm }
+      # poppler-utils (pdftoppm) — usado por test/pdf-render.test.ts (issue
+      # #196: rasteriza PDF de documento antes do OCR via Bedrock, ver
+      # src/core/pdf-render.ts). Instalado explicitamente em vez de confiar
+      # no que já vem no runner — mesmo pacote instalado no Dockerfile.api.
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec prisma generate
       - run: pnpm exec tsc --noEmit
