@@ -20,6 +20,9 @@ importers:
       '@aws-sdk/client-sqs':
         specifier: ^3.1078.0
         version: 3.1078.0
+      '@aws-sdk/client-textract':
+        specifier: ^3.1109.0
+        version: 3.1109.0
       '@aws-sdk/client-transcribe':
         specifier: ^3.1070.0
         version: 3.1070.0
@@ -221,6 +224,10 @@ packages:
 
   '@aws-sdk/client-sqs@3.1078.0':
     resolution: {integrity: sha512-Kd6Tqb/h1VB6Vp6ZuU+5fbbcd+sxaAp3Z2A7Dt6q3orfnkudhYVTxeLbAgfysKP4fMUIOptED0cn8R8/9KqS6A==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-textract@3.1109.0':
+    resolution: {integrity: sha512-pxqiv1o39IPHCYFK5+ANxnJtSkfwYkqAoCiYI1tRSl0+1kCkS4hf51PRHG8LYrFNYbVfZ0PFdq/5IhVs+OIn2Q==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-transcribe@3.1070.0':
@@ -3227,6 +3234,17 @@ snapshots:
       '@smithy/fetch-http-handler': 5.6.2
       '@smithy/node-http-handler': 4.9.2
       '@smithy/types': 4.15.1
+      tslib: 2.8.1
+
+  '@aws-sdk/client-textract@3.1109.0':
+    dependencies:
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/credential-provider-node': 3.972.79
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
+      '@smithy/fetch-http-handler': 5.7.0
+      '@smithy/node-http-handler': 4.10.0
+      '@smithy/types': 4.17.0
       tslib: 2.8.1
 
   '@aws-sdk/client-transcribe@3.1070.0':
