@@ -65,6 +65,16 @@ data "aws_iam_policy_document" "task" {
     actions   = ["comprehend:DetectSentiment"]
     resources = ["*"]
   }
+  # Textract AnalyzeID — avaliado como alternativa de OCR de documento na
+  # issue #194 (src/core/ocr-documento-textract.ts). Permissão preparada mas
+  # a função NÃO é chamada em produção hoje (veredito: não substitui o
+  # Bedrock, ver comentário no topo do módulo) — mantida aqui só pra não
+  # bloquear se/quando alguém retomar essa avaliação; não usar como sinal de
+  # que o Textract está ativo.
+  statement {
+    actions   = ["textract:AnalyzeID"]
+    resources = ["*"]
+  }
   # S3 (fichas/áudios)
   statement {
     actions   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
