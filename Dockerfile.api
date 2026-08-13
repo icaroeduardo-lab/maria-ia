@@ -15,7 +15,10 @@ RUN pnpm build   # prisma generate + tsc
 FROM base AS runner
 ENV NODE_ENV=production
 # fontes p/ render da ficha (sharp/SVG) — a api serve /api/ficha
-RUN apk add --no-cache fontconfig ttf-dejavu && fc-cache -f
+# poppler-utils (pdftoppm) — rasteriza PDF de documento antes do OCR via
+# Bedrock (issue #196, src/core/pdf-render.ts): bloco "document" do Converse
+# lia dígitos do CPF errados em documento real; imagem rasterizada resolve.
+RUN apk add --no-cache fontconfig ttf-dejavu poppler-utils && fc-cache -f
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public
