@@ -1,8 +1,9 @@
-// GATEWAY_VERDE_URL fake + mock de global.fetch: cobre a lógica de mapeamento
-// de src/api/routes/orgao.ts (nunca testada antes — zero cobertura). Sem
-// isso, o único teste indireto era "gateway fora do ar" via GATEWAY_VERDE_URL="",
-// que nunca exercita a desambiguação agendamento-vs-encaminhamento nem o
-// mapeamento de campos. Não depende de banco (orgao.ts não usa prisma).
+// GATEWAY_VERDE_URL fake + mock de global.fetch: cobre a árvore de decisão
+// nova de src/api/routes/orgao.ts (reescrita completa — descartou a lógica
+// antiga de "prefere agendamento sobre encaminhamento, retorna só a 1ª
+// vaga"). Sem isso, o único teste indireto seria "gateway fora do ar" via
+// GATEWAY_VERDE_URL="", que nunca exercita a regra real. Não depende de
+// banco (orgao.ts não usa prisma).
 process.env.GATEWAY_VERDE_URL = "http://fake-gateway.test";
 
 import { test, mock, afterEach } from "node:test";
@@ -17,94 +18,319 @@ afterEach(() => {
   mock.reset();
 });
 
-test("primeiro-atendimento: idPessoa/idAssunto ausentes → tem_orgao false, sem chamar o gateway", async () => {
+async function chamarPrimeiroAtendimento(payload: Record<string, unknown>) {
+  const app = await montarApp();
+  const res = await app.inject({ method: "POST", url: "/api/orgao/primeiro-atendimento", payload });
+  await app.close();
+  return res;
+}
+
+test("primeiro-atendimento: idPessoa/idAssunto ausentes → sem vaga, sem chamar o gateway", async () => {
   const fetchMock = mockarFetch(() => {
     throw new Error("não deveria chamar o gateway");
   });
-  const app = await montarApp();
-  const res = await app.inject({
-    method: "POST",
-    url: "/api/orgao/primeiro-atendimento",
-    payload: {},
-  });
-  await app.close();
+  const res = await chamarPrimeiroAtendimento({});
 
   assert.equal(res.statusCode, 200);
-  assert.equal(res.json().tem_orgao, false);
+  const body = res.json();
+  assert.equal(body.semVagaDisponivel, true);
+  assert.equal(body.perguntarTipo, false);
+  assert.equal(body.tipoDefault, null);
   assert.equal(fetchMock.mock.callCount(), 0);
 });
 
-test("primeiro-atendimento: prefere órgão de AGENDAMENTO mesmo quando encaminhamento vem primeiro na lista (confirmado ao vivo em homolog)", async () => {
+test("primeiro-atendimento: gateway fora do ar → sem vaga, sem lançar", async () => {
+  mockarFetch(() => new Response(null, { status: 500 }));
+  const res = await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2 });
+
+  assert.equal(res.statusCode, 200);
+  const body = res.json();
+  assert.equal(body.semVagaDisponivel, true);
+  assert.equal(body.presencial.temOpcao, false);
+  assert.equal(body.remoto.temOpcao, false);
+});
+
+test("primeiro-atendimento: nenhuma entrada com vaga → semVagaDisponivel true", async () => {
   mockarFetch(() =>
     Response.json({
       dados: [
-        { id: 10, nome: "Núcleo Encaminhamento", tipoAtendimento: "Encaminhamento" },
         {
-          id: 20,
-          nome: "Núcleo Agendamento Presencial",
+          id: 10,
+          nome: "Núcleo A",
           tipoAtendimento: "Agendamento Presencial",
-          enderecos: [{ idLocalAtendimento: 99, logradouro: "Rua X", municipio: "Rio de Janeiro" }],
+          vagasDisponiveis: { vagasDisponiveis: [] },
+        },
+        {
+          id: 10,
+          nome: "Núcleo A",
+          tipoAtendimento: "Agendamento Remoto",
+          vagasDisponiveis: { vagasDisponiveis: [] },
+        },
+      ],
+    })
+  );
+  const res = await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2 });
+
+  const body = res.json();
+  assert.equal(body.semVagaDisponivel, true);
+  assert.equal(body.perguntarTipo, false);
+  assert.equal(body.tipoDefault, null);
+  assert.equal(body.presencial.temOpcao, false);
+  assert.equal(body.remoto.temOpcao, false);
+});
+
+test("primeiro-atendimento: entrada com vagasDisponiveis ausente (não só vazio) também é ignorada", async () => {
+  mockarFetch(() =>
+    Response.json({
+      dados: [{ id: 10, nome: "Núcleo Sem Vaga", tipoAtendimento: "Agendamento Presencial" }],
+    })
+  );
+  const res = await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2 });
+
+  const body = res.json();
+  assert.equal(body.semVagaDisponivel, true);
+});
+
+test("primeiro-atendimento: só presencial, 1 unidade → pula pergunta de tipo E de unidade, vagas prontas", async () => {
+  mockarFetch(() =>
+    Response.json({
+      dados: [
+        {
+          id: 30,
+          nome: "Núcleo Único",
+          tipoAtendimento: "Agendamento Presencial",
+          enderecos: [{ bairro: "Méier", municipio: "Rio de Janeiro" }],
+          vagasDisponiveis: { vagasDisponiveis: [{ idIntervalo: 555, data: "20/08/2026", hora: "10:00" }] },
+        },
+      ],
+    })
+  );
+  const res = await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2 });
+
+  const body = res.json();
+  assert.equal(body.semVagaDisponivel, false);
+  assert.equal(body.perguntarTipo, false);
+  assert.equal(body.tipoDefault, "presencial");
+  assert.equal(body.presencial.temOpcao, true);
+  assert.equal(body.presencial.perguntarUnidade, false);
+  assert.equal(body.presencial.unidades.length, 1);
+  assert.equal(body.presencial.unidades[0].id, 30);
+  assert.equal(body.presencial.unidades[0].bairro, "Méier");
+  assert.deepEqual(body.presencial.vagasUnicaUnidade, [
+    { data: "20/08/2026", horarios: [{ idIntervalo: 555, hora: "10:00" }] },
+  ]);
+  assert.equal(body.remoto.temOpcao, false);
+});
+
+test("primeiro-atendimento: vagas vêm agrupadas por data (2 telas: escolhe data, depois horário) — várias horas no mesmo dia + dias diferentes", async () => {
+  mockarFetch(() =>
+    Response.json({
+      dados: [
+        {
+          id: 30,
+          nome: "Núcleo Único",
+          tipoAtendimento: "Agendamento Presencial",
           vagasDisponiveis: {
             vagasDisponiveis: [
-              { idIntervalo: 555, data: "20/08/2026", hora: "10:00" },
-              { idIntervalo: 556, data: "21/08/2026", hora: "11:00" },
+              { idIntervalo: 1, data: "18/08/2026", hora: "08:30" },
+              { idIntervalo: 2, data: "18/08/2026", hora: "10:00" },
+              { idIntervalo: 3, data: "19/08/2026", hora: "08:30" },
             ],
           },
         },
       ],
     })
   );
-  const app = await montarApp();
-  const res = await app.inject({
-    method: "POST",
-    url: "/api/orgao/primeiro-atendimento",
-    payload: { idPessoa: 2973942, idAssunto: 3151 },
-  });
-  await app.close();
+  const res = await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2 });
 
   const body = res.json();
-  assert.equal(res.statusCode, 200);
-  assert.equal(body.tem_orgao, true);
-  assert.equal(body.orgao_id, 20);
-  assert.equal(body.tipo_atendimento, "agendamento");
-  assert.equal(body.idLocalAtendimento, 99);
-  assert.equal(body.primeira_vaga_intervalo, 555);
-  assert.equal(body.primeira_vaga_data, "20/08/2026");
-  assert.equal(body.primeira_vaga_hora, "10:00");
+  assert.deepEqual(body.presencial.vagasUnicaUnidade, [
+    {
+      data: "18/08/2026",
+      horarios: [
+        { idIntervalo: 1, hora: "08:30" },
+        { idIntervalo: 2, hora: "10:00" },
+      ],
+    },
+    { data: "19/08/2026", horarios: [{ idIntervalo: 3, hora: "08:30" }] },
+  ]);
 });
 
-test("primeiro-atendimento: só órgão de encaminhamento disponível → tipo_atendimento encaminhamento, sem vaga", async () => {
+test("primeiro-atendimento: só presencial, várias unidades → pula pergunta de tipo, PERGUNTA unidade, lista embutida com vagas", async () => {
   mockarFetch(() =>
     Response.json({
-      dados: [{ id: 30, nome: "Núcleo Remoto", tipoAtendimento: "Encaminhamento" }],
+      dados: [
+        {
+          id: 10,
+          nome: "Núcleo A",
+          tipoAtendimento: "Agendamento Presencial",
+          enderecos: [{ bairro: "Méier", municipio: "Rio de Janeiro" }],
+          vagasDisponiveis: { vagasDisponiveis: [{ idIntervalo: 1, data: "18/08/2026", hora: "08:00" }] },
+        },
+        {
+          id: 20,
+          nome: "Núcleo B",
+          tipoAtendimento: "Agendamento Presencial",
+          enderecos: [{ bairro: "Madureira", municipio: "Rio de Janeiro" }],
+          vagasDisponiveis: {
+            vagasDisponiveis: [
+              { idIntervalo: 2, data: "19/08/2026", hora: "09:00" },
+              { idIntervalo: 3, data: "20/08/2026", hora: "09:00" },
+            ],
+          },
+        },
+      ],
     })
   );
-  const app = await montarApp();
-  const res = await app.inject({
-    method: "POST",
-    url: "/api/orgao/primeiro-atendimento",
-    payload: { idPessoa: 1, idAssunto: 2 },
-  });
-  await app.close();
+  const res = await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2 });
 
   const body = res.json();
-  assert.equal(body.tem_orgao, true);
-  assert.equal(body.tipo_atendimento, "encaminhamento");
-  assert.equal(body.primeira_vaga_data, null);
+  assert.equal(body.perguntarTipo, false);
+  assert.equal(body.tipoDefault, "presencial");
+  assert.equal(body.presencial.temOpcao, true);
+  assert.equal(body.presencial.perguntarUnidade, true);
+  assert.equal(body.presencial.unidades.length, 2);
+  assert.equal(body.presencial.unidades[1].vagas.length, 2);
+  assert.deepEqual(body.presencial.vagasUnicaUnidade, []);
 });
 
-test("primeiro-atendimento: gateway fora do ar → tem_orgao false, sem lançar", async () => {
-  mockarFetch(() => new Response(null, { status: 500 }));
-  const app = await montarApp();
-  const res = await app.inject({
-    method: "POST",
-    url: "/api/orgao/primeiro-atendimento",
-    payload: { idPessoa: 1, idAssunto: 2 },
-  });
-  await app.close();
+test("primeiro-atendimento: só remoto, 1 unidade → tipoDefault remoto, unidade+vagas prontas", async () => {
+  mockarFetch(() =>
+    Response.json({
+      dados: [
+        {
+          id: 40,
+          nome: "Núcleo Remoto Único",
+          tipoAtendimento: "Agendamento Remoto",
+          vagasDisponiveis: { vagasDisponiveis: [{ idIntervalo: 7, data: "18/08/2026", hora: "08:00" }] },
+        },
+      ],
+    })
+  );
+  const res = await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2 });
 
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.json().tem_orgao, false);
+  const body = res.json();
+  assert.equal(body.perguntarTipo, false);
+  assert.equal(body.tipoDefault, "remoto");
+  assert.equal(body.remoto.temOpcao, true);
+  assert.deepEqual(body.remoto.unidadeEscolhida, { id: 40, nome: "Núcleo Remoto Único" });
+  assert.equal(body.remoto.vagas.length, 1);
+  assert.equal(body.presencial.temOpcao, false);
+});
+
+test("primeiro-atendimento: só remoto, várias unidades → NÃO pergunta unidade, auto-escolhe a de MAIS horários no total (soma entre dias, não nº de dias)", async () => {
+  mockarFetch(() =>
+    Response.json({
+      dados: [
+        {
+          // 2 dias, 1 horário cada = 2 no total, mas 2 grupos de data
+          id: 40,
+          nome: "Remoto Menos Horários",
+          tipoAtendimento: "Agendamento Remoto",
+          vagasDisponiveis: {
+            vagasDisponiveis: [
+              { idIntervalo: 1, data: "18/08/2026", hora: "08:00" },
+              { idIntervalo: 2, data: "19/08/2026", hora: "08:00" },
+            ],
+          },
+        },
+        {
+          // 1 dia só, 3 horários = 3 no total (mais que a outra, apesar de
+          // ter só 1 grupo de data) — confirma que a comparação é por soma
+          // de horários, não por quantidade de dias distintos.
+          id: 41,
+          nome: "Remoto Mais Horários",
+          tipoAtendimento: "Agendamento Remoto",
+          vagasDisponiveis: {
+            vagasDisponiveis: [
+              { idIntervalo: 3, data: "20/08/2026", hora: "08:00" },
+              { idIntervalo: 4, data: "20/08/2026", hora: "09:00" },
+              { idIntervalo: 5, data: "20/08/2026", hora: "10:00" },
+            ],
+          },
+        },
+      ],
+    })
+  );
+  const res = await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2 });
+
+  const body = res.json();
+  assert.equal(body.tipoDefault, "remoto");
+  assert.equal(body.remoto.unidadeEscolhida.id, 41);
+  assert.deepEqual(body.remoto.vagas, [
+    {
+      data: "20/08/2026",
+      horarios: [
+        { idIntervalo: 3, hora: "08:00" },
+        { idIntervalo: 4, hora: "09:00" },
+        { idIntervalo: 5, hora: "10:00" },
+      ],
+    },
+  ]);
+});
+
+test("primeiro-atendimento: presencial E remoto com vaga → PERGUNTA tipo, tipoDefault null, ambos os ramos resolvidos", async () => {
+  mockarFetch(() =>
+    Response.json({
+      dados: [
+        {
+          id: 1363,
+          nome: "Núcleo Madureira",
+          tipoAtendimento: "Agendamento Presencial",
+          enderecos: [{ bairro: "Méier", municipio: "Rio de Janeiro" }],
+          vagasDisponiveis: {
+            vagasDisponiveis: [{ idIntervalo: 677670, data: "18/08/2026", hora: "08:30" }],
+          },
+        },
+        {
+          id: 1363,
+          nome: "Núcleo Madureira",
+          tipoAtendimento: "Agendamento Remoto",
+          vagasDisponiveis: {
+            vagasDisponiveis: [{ idIntervalo: 677260, data: "19/08/2026", hora: "08:00" }],
+          },
+        },
+      ],
+    })
+  );
+  const res = await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2 });
+
+  const body = res.json();
+  assert.equal(body.semVagaDisponivel, false);
+  assert.equal(body.perguntarTipo, true);
+  assert.equal(body.tipoDefault, null);
+  assert.equal(body.presencial.temOpcao, true);
+  assert.equal(body.presencial.perguntarUnidade, false);
+  assert.equal(body.presencial.unidades[0].id, 1363);
+  assert.equal(body.remoto.temOpcao, true);
+  assert.equal(body.remoto.unidadeEscolhida.id, 1363);
+});
+
+test("primeiro-atendimento: mesma unidade presencial e remota (id repetido) — grupos independentes, não se misturam", async () => {
+  mockarFetch(() =>
+    Response.json({
+      dados: [
+        {
+          id: 5,
+          nome: "Núcleo Dual",
+          tipoAtendimento: "Agendamento Presencial",
+          vagasDisponiveis: { vagasDisponiveis: [{ idIntervalo: 1, data: "18/08/2026", hora: "08:00" }] },
+        },
+        {
+          id: 5,
+          nome: "Núcleo Dual",
+          tipoAtendimento: "Agendamento Remoto",
+          vagasDisponiveis: { vagasDisponiveis: [{ idIntervalo: 2, data: "18/08/2026", hora: "09:00" }] },
+        },
+      ],
+    })
+  );
+  const res = await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2 });
+
+  const body = res.json();
+  assert.equal(body.presencial.unidades.length, 1);
+  assert.equal(body.presencial.unidades[0].vagas.length, 1);
+  assert.equal(body.remoto.vagas.length, 1);
 });
 
 test("primeiro-atendimento: envia complemento na query quando informado", async () => {
@@ -113,15 +339,89 @@ test("primeiro-atendimento: envia complemento na query quando informado", async 
     urlChamada = url;
     return Response.json({ dados: [] });
   });
-  const app = await montarApp();
-  await app.inject({
-    method: "POST",
-    url: "/api/orgao/primeiro-atendimento",
-    payload: { idPessoa: 1, idAssunto: 2, complemento: "urbano" },
-  });
-  await app.close();
+  await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2, complemento: "urbano" });
 
   assert.match(urlChamada, /idPessoa=1/);
   assert.match(urlChamada, /idAssunto=2/);
   assert.match(urlChamada, /complemento=urbano/);
+});
+
+test("unidade-detalhe: resolve por índice (1-based) contra o JSON de /primeiro-atendimento", async () => {
+  const orgaoResultado = JSON.stringify({
+    presencial: {
+      unidades: [
+        {
+          id: 10,
+          nome: "Núcleo A",
+          bairro: "Méier",
+          municipio: "Rio de Janeiro",
+          vagas: [{ data: "18/08/2026", horarios: [{ idIntervalo: 1, hora: "08:00" }] }],
+        },
+        {
+          id: 20,
+          nome: "Núcleo B",
+          bairro: "Madureira",
+          municipio: "Rio de Janeiro",
+          vagas: [{ data: "19/08/2026", horarios: [{ idIntervalo: 2, hora: "09:00" }] }],
+        },
+      ],
+    },
+  });
+  const app = await montarApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/orgao/unidade-detalhe",
+    payload: { unidade_sel: "2", orgao_resultado: orgaoResultado },
+  });
+  await app.close();
+
+  const body = res.json();
+  assert.equal(body.encontrada, true);
+  assert.equal(body.id, 20);
+  assert.equal(body.nome, "Núcleo B");
+  assert.equal(body.vagas.length, 1);
+});
+
+test("unidade-detalhe: só resolve por índice — 'id' numérico da unidade que colide com a faixa de índice NÃO é usado como fallback (evita ambiguidade)", async () => {
+  const orgaoResultado = JSON.stringify({
+    presencial: { unidades: [{ id: 20, nome: "Núcleo B", bairro: null, municipio: null, vagas: [] }] },
+  });
+  const app = await montarApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/orgao/unidade-detalhe",
+    payload: { unidade_sel: "20", orgao_resultado: orgaoResultado }, // não é índice válido (só 1 unidade na lista) nem deve casar por id
+  });
+  await app.close();
+
+  assert.equal(res.json().encontrada, false);
+});
+
+test("unidade-detalhe: seleção fora do range → encontrada false, sem lançar", async () => {
+  const orgaoResultado = JSON.stringify({
+    presencial: { unidades: [{ id: 10, nome: "A", bairro: null, municipio: null, vagas: [] }] },
+  });
+  const app = await montarApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/orgao/unidade-detalhe",
+    payload: { unidade_sel: "9", orgao_resultado: orgaoResultado },
+  });
+  await app.close();
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().encontrada, false);
+});
+
+test("unidade-detalhe: orgao_resultado ausente/inválido → encontrada false, sem lançar", async () => {
+  const app = await montarApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/orgao/unidade-detalhe",
+    payload: { unidade_sel: "1" },
+  });
+  await app.close();
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.json().encontrada, false);
 });
