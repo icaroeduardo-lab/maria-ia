@@ -45,4 +45,20 @@ resource "aws_s3_bucket_lifecycle_configuration" "documentos" {
       days = var.documentos_retencao_dias
     }
   }
+
+  # Resultado da extração automática por Textract AnalyzeID (lambda em
+  # lambda-ocr-documento-textract.tf) — também é PII (nome/cpf/data de
+  # nascimento), mesma retenção do documento original que o gerou.
+  rule {
+    id     = "expirar-extraidos-textract"
+    status = "Enabled"
+
+    filter {
+      prefix = "extraidos-textract/"
+    }
+
+    expiration {
+      days = var.documentos_retencao_dias
+    }
+  }
 }

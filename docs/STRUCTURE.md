@@ -53,6 +53,11 @@ src/
 - `src/worker/worker.ts` — consome a fila e processa (`processarMensagemWhatsApp`).
 - `src/jobs/jobs.ts` — jobs (`node dist/jobs/jobs.js <job>`).
 - `src/core/**` — tudo que api/worker/jobs compartilham. Fronteira explícita no disco.
+- `src/lambdas/**` — funções AWS Lambda nativas (deploy separado de api/worker/jobs, que
+  são containers ECS Fargate). Cada subpasta é um handler independente, empacotado com
+  esbuild (`pnpm run build:lambda:<nome>` → zip em `dist-lambda/`) e provisionado por um
+  `infra/terraform/lambda-<nome>.tf` dedicado. Primeiro caso: `ocr-documento-textract`
+  (evento de upload no S3 → Textract AnalyzeID → JSON de dados extraídos).
 - Build: `dist/api`, `dist/worker`, `dist/jobs`, `dist/core` (paths dos scripts/infra já batem).
 - `src/queue.ts` — produtor/consumidor SQS FIFO (grupo por conversa, dedupe por msg id).
 - Webhook: com `SQS_QUEUE_URL` a api **enfileira**; sem fila (dev) processa inline.
