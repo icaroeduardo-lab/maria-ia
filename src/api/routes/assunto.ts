@@ -10,6 +10,12 @@ import { gatewayVerdeGet } from "../../core/gateway-verde.js";
 //
 // Também expõe metadados do assunto já identificado (card #20260153, issue
 // #132) — urgência e documentos necessários, uma vez que idAssunto é conhecido.
+//
+// E, pra mensagem de sucesso do agendamento em "Primeiro Atendimento (Órgão)"
+// (`cms3obaj90001mk0jl806kbr5`), uma lista formatada dos documentos exigidos
+// a partir do array estruturado `documentosNecessarios` (POST /documentos,
+// abaixo) — o campo que o comentário de /metadados dizia "adicionar quando
+// um fluxo precisar renderizar item a item": chegou a hora.
 
 interface RespostaArvore {
   id?: number;
@@ -41,6 +47,22 @@ interface AssuntoMetadadosVerdeRaw {
     complemento?: { tipo?: string; nome?: string; maximoDiasAteBloqueio?: number | null };
     documentosNecessarios?: { id?: number; nomeDocumento?: string; basico?: boolean }[];
   };
+}
+
+// Documento estruturado do array `documentosNecessarios` do Verde (mesmo
+// endpoint de /metadados). "basico:true" = obrigatório; false/ausente =
+// condicional ("se aplicável" — ex: só se tiver filhos). Ordem preservada
+// como o Verde devolve (não reordena obrigatório-primeiro).
+function formatarListaDocumentos(docs?: { nomeDocumento?: string; basico?: boolean }[]): string {
+  const validos = (docs ?? []).filter(
+    (d): d is { nomeDocumento: string; basico?: boolean } => !!d.nomeDocumento
+  );
+  if (validos.length === 0) {
+    return "Nenhum documento específico informado — leve RG e CPF.";
+  }
+  return validos
+    .map((d, i) => `${i + 1}. ${d.nomeDocumento}${d.basico ? " (obrigatório)" : " (se aplicável)"}`)
+    .join("\n");
 }
 
 export async function assuntoFlowRoutes(app: FastifyInstance) {
@@ -116,11 +138,8 @@ export async function assuntoFlowRoutes(app: FastifyInstance) {
   // pronto de documentos necessários pro fluxo mostrar ao assistido;
   // "plantao" fica fora de escopo (não expor). Minimização LGPD: não repassa
   // "descricao"/"complemento" (texto livre da matéria, não relevante ainda
-  // pro fluxo) nem o array cru "documentosNecessarios" — txDocumentosNecessarios
-  // já vem como texto formatado pronto pra exibir, então o array estruturado
-  // seria uma segunda fonte de verdade redundante; se um fluxo precisar
-  // renderizar checklist item a item no futuro, adicionar um campo próprio
-  // então (decisão registrada aqui, não implementado especulativamente).
+  // pro fluxo). O array estruturado "documentosNecessarios" tem uso próprio
+  // agora em POST /api/assunto/documentos (abaixo) — não duplicado aqui.
   app.get("/api/assunto/metadados", async (req) => {
     const idAssunto = Number((req.query as { idAssunto?: string | number })?.idAssunto);
     if (!idAssunto) {
@@ -141,5 +160,34 @@ export async function assuntoFlowRoutes(app: FastifyInstance) {
       urgente: d.urgente ?? false,
       documentos_necessarios: d.txDocumentosNecessarios ?? null,
     };
+  });
+
+  // POST /api/assunto/documentos — { idAssunto } → { encontrado, listaDocumentos }
+  // Mesmo proxy GET api/assunto/{idAssunto} de /metadados, mas usa o array
+  // estruturado "documentosNecessarios" pra montar uma lista numerada
+  // distinguindo obrigatório (basico:true) de condicional (basico:false/
+  // ausente) — pronta pra interpolar na mensagem de sucesso do agendamento
+  // (fluxo "Primeiro Atendimento (Órgão)"). POST (não GET com query) pra
+  // casar com o padrão dos outros nodes `api` deste subfluxo
+  // (consultar-item-arvore/resolver-escolha), que já leem idAssunto do body.
+  app.post("/api/assunto/documentos", async (req) => {
+    const body = (req.body ?? {}) as { idAssunto?: string | number };
+    const idAssunto = Number(body.idAssunto);
+    if (!idAssunto) {
+      console.log(`[assunto] documentos: idAssunto inválido`);
+      return { encontrado: false, listaDocumentos: formatarListaDocumentos() };
+    }
+
+    const resp = await gatewayVerdeGet<AssuntoMetadadosVerdeRaw>(`/api/assunto/${idAssunto}`);
+    const d = resp?.dados;
+    if (!d) {
+      console.log(`[assunto] documentos: idAssunto=${idAssunto} → não encontrado`);
+      return { encontrado: false, listaDocumentos: formatarListaDocumentos() };
+    }
+
+    console.log(
+      `[assunto] documentos: idAssunto=${idAssunto} → ${d.documentosNecessarios?.length ?? 0} documento(s)`
+    );
+    return { encontrado: true, listaDocumentos: formatarListaDocumentos(d.documentosNecessarios) };
   });
 }
