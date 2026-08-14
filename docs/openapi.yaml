@@ -522,19 +522,21 @@ components:
     OrgaoVagaAgrupada:
       type: object
       description: "Vagas agrupadas por data (fluxo mostra a data primeiro, depois os horários daquele dia — 2 telas, sem o fluxo precisar agrupar/computar nada)"
-      required: [data, horarios]
+      required: [data, horarios, listaHorarios]
       properties:
         data: { type: string, description: "\"DD/MM/YYYY\"" }
         horarios: { type: array, items: { $ref: '#/components/schemas/OrgaoHorario' } }
+        listaHorarios: { type: string, description: "Lista PRONTA (1 linha por horário real, numerada 1-based, sem slot vazio — mesmo padrão de resultado_agendamentos.lista/resultado_casos.lista). Fallback \"Nenhum horário disponível.\" quando vazia. Corrige bug 2026-08-14: templates do fluxo com índice fixo hardcoded (1..N) mostravam linha em branco quando tinha menos horários que o cap." }
     OrgaoUnidade:
       type: object
-      required: [id, nome, bairro, municipio, vagas]
+      required: [id, nome, bairro, municipio, vagas, listaDatas]
       properties:
         id: { type: integer }
         nome: { type: string }
         bairro: { type: string, nullable: true }
         municipio: { type: string, nullable: true }
         vagas: { type: array, items: { $ref: '#/components/schemas/OrgaoVagaAgrupada' } }
+        listaDatas: { type: string, description: "Lista PRONTA de datas (1 linha por data real, numerada 1-based, par de `vagas`) — mesmo motivo/fallback de OrgaoVagaAgrupada.listaHorarios." }
     OrgaoPrimeiroAtendimentoResp:
       type: object
       description: >
@@ -551,15 +553,16 @@ components:
         tipoDefault: { type: string, nullable: true, description: "\"presencial\" | \"remoto\" | null — preenchido quando perguntarTipo=false e algum grupo tem vaga" }
         presencial:
           type: object
-          required: [temOpcao, perguntarUnidade, unidades, vagasUnicaUnidade]
+          required: [temOpcao, perguntarUnidade, unidades, vagasUnicaUnidade, listaDatasUnicaUnidade]
           properties:
             temOpcao: { type: boolean }
             perguntarUnidade: { type: boolean, description: "true quando há mais de 1 unidade presencial com vaga" }
             unidades: { type: array, items: { $ref: '#/components/schemas/OrgaoUnidade' }, description: "sempre embutida (com vagas) quando temOpcao=true, mesmo com 1 unidade só" }
             vagasUnicaUnidade: { type: array, items: { $ref: '#/components/schemas/OrgaoVagaAgrupada' }, description: "atalho == unidades[0].vagas, só não-vazio quando perguntarUnidade=false e temOpcao=true" }
+            listaDatasUnicaUnidade: { type: string, description: "Lista PRONTA de datas de vagasUnicaUnidade — mesmo padrão/fallback de OrgaoUnidade.listaDatas." }
         remoto:
           type: object
-          required: [temOpcao, unidadeEscolhida, vagas]
+          required: [temOpcao, unidadeEscolhida, vagas, listaDatas]
           properties:
             temOpcao: { type: boolean }
             unidadeEscolhida:
@@ -568,6 +571,7 @@ components:
               required: [id, nome]
               properties: { id: { type: integer }, nome: { type: string } }
             vagas: { type: array, items: { $ref: '#/components/schemas/OrgaoVagaAgrupada' } }
+            listaDatas: { type: string, description: "Lista PRONTA de datas de `vagas` — mesmo padrão/fallback de OrgaoUnidade.listaDatas." }
         semVagaDisponivel: { type: boolean, description: "true quando nenhum grupo (presencial ou remoto) tem vaga — fluxo trata como handoff" }
     OrgaoUnidadeDetalheReq:
       type: object
@@ -585,6 +589,7 @@ components:
         bairro: { type: string, nullable: true }
         municipio: { type: string, nullable: true }
         vagas: { type: array, items: { $ref: '#/components/schemas/OrgaoVagaAgrupada' } }
+        listaDatas: { type: string, description: "Lista PRONTA de datas de `vagas` — repassada de OrgaoUnidade.listaDatas (recalculada como fallback defensivo se ausente no orgao_resultado recebido)." }
     BloqueioVerificarReq:
       type: object
       required: [idPessoa, idAssunto, idOrgao]
