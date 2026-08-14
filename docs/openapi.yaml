@@ -513,18 +513,78 @@ components:
         idPessoa: { type: integer }
         idAssunto: { type: integer }
         complemento: { type: string }
+    OrgaoHorario:
+      type: object
+      required: [idIntervalo, hora]
+      properties:
+        idIntervalo: { type: integer }
+        hora: { type: string, description: "\"HH:mm\"" }
+    OrgaoVagaAgrupada:
+      type: object
+      description: "Vagas agrupadas por data (fluxo mostra a data primeiro, depois os horários daquele dia — 2 telas, sem o fluxo precisar agrupar/computar nada)"
+      required: [data, horarios]
+      properties:
+        data: { type: string, description: "\"DD/MM/YYYY\"" }
+        horarios: { type: array, items: { $ref: '#/components/schemas/OrgaoHorario' } }
+    OrgaoUnidade:
+      type: object
+      required: [id, nome, bairro, municipio, vagas]
+      properties:
+        id: { type: integer }
+        nome: { type: string }
+        bairro: { type: string, nullable: true }
+        municipio: { type: string, nullable: true }
+        vagas: { type: array, items: { $ref: '#/components/schemas/OrgaoVagaAgrupada' } }
     OrgaoPrimeiroAtendimentoResp:
       type: object
-      required: [tem_orgao]
+      description: >
+        Regra de negócio (reescrita 2026-08): backend decide o máximo possível,
+        fluxo só executa. Agrupa por (unidade, tipoAtendimento) descartando
+        entradas sem vaga; só pergunta remoto-vs-presencial se os dois
+        grupos tiverem opção; presencial pergunta unidade só se houver mais
+        de 1; remoto nunca pergunta unidade (auto-escolhe a de mais
+        horários no total). Vagas embutidas por unidade (zero 2ª chamada ao
+        Verde) — resolver unidade escolhida via POST /api/orgao/unidade-detalhe.
+      required: [perguntarTipo, tipoDefault, presencial, remoto, semVagaDisponivel]
       properties:
-        tem_orgao: { type: boolean }
-        orgao_id: { type: integer }
-        orgao_nome: { type: string }
-        tipo_atendimento: { type: string, description: "\"agendamento\" | \"encaminhamento\" | \"outros\" — normalizado do tipoAtendimento bruto do Verde" }
-        idLocalAtendimento: { type: integer, nullable: true }
-        primeira_vaga_intervalo: { type: integer, nullable: true }
-        primeira_vaga_data: { type: string, nullable: true }
-        primeira_vaga_hora: { type: string, nullable: true }
+        perguntarTipo: { type: boolean, description: "true só quando presencial E remoto têm vaga" }
+        tipoDefault: { type: string, nullable: true, description: "\"presencial\" | \"remoto\" | null — preenchido quando perguntarTipo=false e algum grupo tem vaga" }
+        presencial:
+          type: object
+          required: [temOpcao, perguntarUnidade, unidades, vagasUnicaUnidade]
+          properties:
+            temOpcao: { type: boolean }
+            perguntarUnidade: { type: boolean, description: "true quando há mais de 1 unidade presencial com vaga" }
+            unidades: { type: array, items: { $ref: '#/components/schemas/OrgaoUnidade' }, description: "sempre embutida (com vagas) quando temOpcao=true, mesmo com 1 unidade só" }
+            vagasUnicaUnidade: { type: array, items: { $ref: '#/components/schemas/OrgaoVagaAgrupada' }, description: "atalho == unidades[0].vagas, só não-vazio quando perguntarUnidade=false e temOpcao=true" }
+        remoto:
+          type: object
+          required: [temOpcao, unidadeEscolhida, vagas]
+          properties:
+            temOpcao: { type: boolean }
+            unidadeEscolhida:
+              type: object
+              nullable: true
+              required: [id, nome]
+              properties: { id: { type: integer }, nome: { type: string } }
+            vagas: { type: array, items: { $ref: '#/components/schemas/OrgaoVagaAgrupada' } }
+        semVagaDisponivel: { type: boolean, description: "true quando nenhum grupo (presencial ou remoto) tem vaga — fluxo trata como handoff" }
+    OrgaoUnidadeDetalheReq:
+      type: object
+      required: [unidade_sel, orgao_resultado]
+      properties:
+        unidade_sel: { type: string, description: "índice 1-based na lista presencial.unidades, ou o id direto" }
+        orgao_resultado: { type: string, description: "JSON cru devolvido por POST /api/orgao/primeiro-atendimento (mesma chave de dadosColetados, sem wrapper) — zero chamada nova ao Verde" }
+    OrgaoUnidadeDetalheResp:
+      type: object
+      required: [encontrada]
+      properties:
+        encontrada: { type: boolean }
+        id: { type: integer }
+        nome: { type: string }
+        bairro: { type: string, nullable: true }
+        municipio: { type: string, nullable: true }
+        vagas: { type: array, items: { $ref: '#/components/schemas/OrgaoVagaAgrupada' } }
     BloqueioVerificarReq:
       type: object
       required: [idPessoa, idAssunto, idOrgao]
@@ -1500,11 +1560,19 @@ paths:
   /api/orgao/primeiro-atendimento:
     post:
       tags: [Interno (fluxo)]
-      summary: "Consulta o órgão responsável pelo primeiro atendimento — decide agendamento (hora) vs encaminhamento (sem hora) via tipo_atendimento"
+      summary: "Consulta as unidades/horários do primeiro atendimento — flags prontas pro fluxo decidir o mínimo (perguntar tipo?, perguntar unidade?, listar vagas por data)"
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/OrgaoPrimeiroAtendimentoReq' } } } }
       responses:
         "200": { content: { application/json: { schema: { $ref: '#/components/schemas/OrgaoPrimeiroAtendimentoResp' } } } }
+  /api/orgao/unidade-detalhe:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Resolve a unidade presencial escolhida (índice ou id) contra o JSON de /api/orgao/primeiro-atendimento — zero chamada nova ao Verde"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/OrgaoUnidadeDetalheReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/OrgaoUnidadeDetalheResp' } } } }
   /api/bloqueio/verificar:
     post:
       tags: [Interno (fluxo)]
