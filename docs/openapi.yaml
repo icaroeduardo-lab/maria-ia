@@ -657,6 +657,19 @@ components:
           type: string
           nullable: true
           description: "txDocumentosNecessarios do Verde — texto pronto (markdown-like) pra exibir ao assistido. \"plantao\" do Verde é ignorado de propósito (fora de escopo, issue #132)."
+    AssuntoDocumentosReq:
+      type: object
+      required: [idAssunto]
+      properties:
+        idAssunto: { type: integer }
+    AssuntoDocumentosResp:
+      type: object
+      required: [encontrado, listaDocumentos]
+      properties:
+        encontrado: { type: boolean }
+        listaDocumentos:
+          type: string
+          description: "Lista numerada a partir de documentosNecessarios do Verde, ex: \"1. Certidão de Nascimento ou Casamento (obrigatório)\\n2. ... (se aplicável)\". Vazio/idAssunto não encontrado → fallback \"Nenhum documento específico informado — leve RG e CPF.\""
     ConfigIA:
       type: object
       description: Configuração global da IA (singleton id=default)
@@ -1622,6 +1635,14 @@ paths:
           schema: { type: integer }
       responses:
         "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AssuntoMetadadosResp' } } } }
+  /api/assunto/documentos:
+    post:
+      tags: [Interno (fluxo)]
+      summary: "Lista numerada de documentos necessários (obrigatório/se aplicável) a partir de documentosNecessarios — proxy GET api/assunto/{idAssunto} do gateway"
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/AssuntoDocumentosReq' } } } }
+      responses:
+        "200": { content: { application/json: { schema: { $ref: '#/components/schemas/AssuntoDocumentosResp' } } } }
   /api/processos/consultar:
     post:
       tags: [Interno (fluxo)]

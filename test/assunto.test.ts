@@ -183,3 +183,80 @@ test("metadados: gateway não encontra o assunto → encontrado false", async ()
 
   assert.equal(res.json().encontrado, false);
 });
+
+test("documentos: idAssunto inválido → encontrado false, fallback, sem chamar o gateway", async () => {
+  const fetchMock = mockarFetch(() => {
+    throw new Error("não deveria chamar o gateway");
+  });
+  const app = await montarApp();
+  const res = await app.inject({ method: "POST", url: "/api/assunto/documentos", payload: {} });
+  await app.close();
+
+  assert.deepEqual(res.json(), {
+    encontrado: false,
+    listaDocumentos: "Nenhum documento específico informado — leve RG e CPF.",
+  });
+  assert.equal(fetchMock.mock.callCount(), 0);
+});
+
+test("documentos: idAssunto 3151 → lista numerada distinguindo obrigatório de condicional", async () => {
+  mockarFetch(() =>
+    Response.json({
+      dados: {
+        documentosNecessarios: [
+          { id: 133, nomeDocumento: "Certidão de Nascimento ou Casamento", basico: true },
+          { id: 136, nomeDocumento: "Última declaração de Imposto de Renda", basico: true },
+          { id: 140, nomeDocumento: "Certidão de nascimento da criança ou adolescente", basico: false },
+        ],
+      },
+    })
+  );
+  const app = await montarApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/assunto/documentos",
+    payload: { idAssunto: 3151 },
+  });
+  await app.close();
+
+  assert.deepEqual(res.json(), {
+    encontrado: true,
+    listaDocumentos:
+      "1. Certidão de Nascimento ou Casamento (obrigatório)\n" +
+      "2. Última declaração de Imposto de Renda (obrigatório)\n" +
+      "3. Certidão de nascimento da criança ou adolescente (se aplicável)",
+  });
+});
+
+test("documentos: assunto encontrado mas sem documentosNecessarios → fallback", async () => {
+  mockarFetch(() => Response.json({ dados: { nome: "Assunto sem documentos" } }));
+  const app = await montarApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/assunto/documentos",
+    payload: { idAssunto: 4242 },
+  });
+  await app.close();
+
+  assert.deepEqual(res.json(), {
+    encontrado: true,
+    listaDocumentos: "Nenhum documento específico informado — leve RG e CPF.",
+  });
+});
+
+test("documentos: gateway fora do ar → encontrado false, fallback (sem 502 — não é o node que decide erro de fluxo aqui)", async () => {
+  mockarFetch(() => new Response(null, { status: 500 }));
+  const app = await montarApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/assunto/documentos",
+    payload: { idAssunto: 3151 },
+  });
+  await app.close();
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.json(), {
+    encontrado: false,
+    listaDocumentos: "Nenhum documento específico informado — leve RG e CPF.",
+  });
+});
