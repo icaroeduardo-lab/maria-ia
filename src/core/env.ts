@@ -57,6 +57,12 @@ export const env = {
   s3Bucket: () => process.env.S3_BUCKET ?? "maria-ia",
   s3BucketDocumentos: () => process.env.S3_BUCKET_DOCUMENTOS ?? "maria-ia-documentos",
   redisUrl: () => process.env.REDIS_URL ?? "",
+  // Orçamento (ms) que a rota POST /api/documentos/verificar espera pelo
+  // resultado da lambda de OCR (src/core/ocr-resultado-textract.ts) antes de
+  // devolver status "ainda_processando" — ver decisão de timeout no topo
+  // daquele módulo. Precisa caber com folga no timeoutMs (default 10s) do
+  // node "api" do builder que chama essa rota.
+  ocrTextractOrcamentoMs: () => num(process.env.OCR_TEXTRACT_ORCAMENTO_MS, 8000),
 
   // Timers / limites
   conversaTtlDias: () => num(process.env.CONVERSA_TTL_DIAS, 30),

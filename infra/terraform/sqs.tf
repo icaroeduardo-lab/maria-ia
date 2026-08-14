@@ -18,7 +18,19 @@ resource "aws_sqs_queue" "msgs" {
   deduplication_scope         = "messageGroup"
   fifo_throughput_limit       = "perMessageGroupId" # alta vazão em FIFO
 
-  visibility_timeout_seconds = 120    # cobre o processamento (Bedrock/Transcribe)
+  # 240s: cobre o processamento (Bedrock/Transcribe) + o pior caso do node
+  # "api" de verificação de documento (POST /api/documentos/verificar, PDF
+  # via lambda Textract assíncrona) — orcamentoMs desse node agora pode
+  # chegar a 95s (ver ORCAMENTO_MAX_MS em src/api/routes/documentos.ts),
+  # deixado alto de propósito pra caber o polling de ~90s da lambda
+  # (timeout dela é 120s). O worker (src/core/queue.ts#consumir) não
+  # estende visibilidade em runtime (sem heartbeat) — só apaga a mensagem
+  # no fim do processamento — então o teto tem que cobrir os 95s do node
+  # MAIS o resto do turno (transcrição de áudio, outros nodes/Bedrock,
+  # round-trip da Graph API) com folga, senão o SQS reentrega a mensagem
+  # no meio do processamento e duplica a resposta pro assistido. 240s dá
+  # ~145s de folga sobre o pior caso do node isolado.
+  visibility_timeout_seconds = 240
   message_retention_seconds  = 345600 # 4 dias
   receive_wait_time_seconds  = 20     # long polling
 
