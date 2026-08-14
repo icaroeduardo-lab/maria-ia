@@ -117,8 +117,9 @@ test("primeiro-atendimento: só presencial, 1 unidade → pula pergunta de tipo 
   assert.equal(body.presencial.unidades[0].id, 30);
   assert.equal(body.presencial.unidades[0].bairro, "Méier");
   assert.deepEqual(body.presencial.vagasUnicaUnidade, [
-    { data: "20/08/2026", horarios: [{ idIntervalo: 555, hora: "10:00" }] },
+    { data: "20/08/2026", horarios: [{ idIntervalo: 555, hora: "10:00" }], listaHorarios: "1. 10:00" },
   ]);
+  assert.equal(body.presencial.listaDatasUnicaUnidade, "1. 20/08/2026");
   assert.equal(body.remoto.temOpcao, false);
 });
 
@@ -151,9 +152,14 @@ test("primeiro-atendimento: vagas vêm agrupadas por data (2 telas: escolhe data
         { idIntervalo: 1, hora: "08:30" },
         { idIntervalo: 2, hora: "10:00" },
       ],
+      listaHorarios: "1. 08:30\n2. 10:00",
     },
-    { data: "19/08/2026", horarios: [{ idIntervalo: 3, hora: "08:30" }] },
+    { data: "19/08/2026", horarios: [{ idIntervalo: 3, hora: "08:30" }], listaHorarios: "1. 08:30" },
   ]);
+  // Lista de DATAS pronta (bug relatado 2026-08-14: template hardcoded do
+  // fluxo mostrava slots vazios quando tinha menos itens que o cap fixo) —
+  // 1 linha por data real, numerada, sem linha em branco.
+  assert.equal(body.presencial.listaDatasUnicaUnidade, "1. 18/08/2026\n2. 19/08/2026");
 });
 
 test("primeiro-atendimento: só presencial, várias unidades → pula pergunta de tipo, PERGUNTA unidade, lista embutida com vagas", async () => {
@@ -265,8 +271,10 @@ test("primeiro-atendimento: só remoto, várias unidades → NÃO pergunta unida
         { idIntervalo: 4, hora: "09:00" },
         { idIntervalo: 5, hora: "10:00" },
       ],
+      listaHorarios: "1. 08:00\n2. 09:00\n3. 10:00",
     },
   ]);
+  assert.equal(body.remoto.listaDatas, "1. 20/08/2026");
 });
 
 test("primeiro-atendimento: presencial E remoto com vaga → PERGUNTA tipo, tipoDefault null, ambos os ramos resolvidos", async () => {
@@ -346,6 +354,80 @@ test("primeiro-atendimento: envia complemento na query quando informado", async 
   assert.match(urlChamada, /complemento=urbano/);
 });
 
+test("primeiro-atendimento: listaDatas com 3 datas reais → 3 linhas, sem linha vazia (bug relatado 2026-08-14 — template do fluxo mostrava '4.'/'5.' em branco quando tinha menos datas que o cap fixo)", async () => {
+  mockarFetch(() =>
+    Response.json({
+      dados: [
+        {
+          id: 30,
+          nome: "Núcleo Único",
+          tipoAtendimento: "Agendamento Presencial",
+          vagasDisponiveis: {
+            vagasDisponiveis: [
+              { idIntervalo: 1, data: "18/08/2026", hora: "08:30" },
+              { idIntervalo: 2, data: "19/08/2026", hora: "09:00" },
+              { idIntervalo: 3, data: "20/08/2026", hora: "11:00" },
+            ],
+          },
+        },
+      ],
+    })
+  );
+  const res = await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2 });
+
+  const body = res.json();
+  const linhas = body.presencial.listaDatasUnicaUnidade.split("\n");
+  assert.equal(linhas.length, 3);
+  assert.deepEqual(linhas, ["1. 18/08/2026", "2. 19/08/2026", "3. 20/08/2026"]);
+  assert.ok(
+    linhas.every((l: string) => l.trim().length > 0),
+    "nenhuma linha vazia"
+  );
+
+  const horariosLinhas = body.presencial.unidades[0].vagas[0].listaHorarios.split("\n");
+  assert.deepEqual(horariosLinhas, ["1. 08:30"]);
+});
+
+test("primeiro-atendimento: 0 datas (unidade sem vaga descartada) → listaDatas com fallback textual, não string vazia nem linha em branco", async () => {
+  mockarFetch(() => Response.json({ dados: [] }));
+  const res = await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2 });
+
+  const body = res.json();
+  assert.equal(body.presencial.listaDatasUnicaUnidade, "Nenhuma data disponível.");
+  assert.equal(body.remoto.listaDatas, "Nenhuma data disponível.");
+});
+
+test("primeiro-atendimento: várias unidades presenciais → cada unidade carrega sua própria listaDatas (não só a agregada)", async () => {
+  mockarFetch(() =>
+    Response.json({
+      dados: [
+        {
+          id: 10,
+          nome: "Núcleo A",
+          tipoAtendimento: "Agendamento Presencial",
+          vagasDisponiveis: { vagasDisponiveis: [{ idIntervalo: 1, data: "18/08/2026", hora: "08:00" }] },
+        },
+        {
+          id: 20,
+          nome: "Núcleo B",
+          tipoAtendimento: "Agendamento Presencial",
+          vagasDisponiveis: {
+            vagasDisponiveis: [
+              { idIntervalo: 2, data: "19/08/2026", hora: "09:00" },
+              { idIntervalo: 3, data: "20/08/2026", hora: "09:00" },
+            ],
+          },
+        },
+      ],
+    })
+  );
+  const res = await chamarPrimeiroAtendimento({ idPessoa: 1, idAssunto: 2 });
+
+  const body = res.json();
+  assert.equal(body.presencial.unidades[0].listaDatas, "1. 18/08/2026");
+  assert.equal(body.presencial.unidades[1].listaDatas, "1. 19/08/2026\n2. 20/08/2026");
+});
+
 test("unidade-detalhe: resolve por índice (1-based) contra o JSON de /primeiro-atendimento", async () => {
   const orgaoResultado = JSON.stringify({
     presencial: {
@@ -380,6 +462,37 @@ test("unidade-detalhe: resolve por índice (1-based) contra o JSON de /primeiro-
   assert.equal(body.id, 20);
   assert.equal(body.nome, "Núcleo B");
   assert.equal(body.vagas.length, 1);
+  // orgao_resultado acima é um payload "antigo" (sem listaDatas na unidade,
+  // simulando cache de antes desta mudança) — fallback recalcula na hora.
+  assert.equal(body.listaDatas, "1. 19/08/2026");
+});
+
+test("unidade-detalhe: repassa listaDatas já pronta quando o JSON de origem já veio com o campo (caso normal pós-fix)", async () => {
+  const orgaoResultado = JSON.stringify({
+    presencial: {
+      unidades: [
+        {
+          id: 10,
+          nome: "Núcleo A",
+          bairro: "Méier",
+          municipio: "Rio de Janeiro",
+          vagas: [
+            { data: "18/08/2026", horarios: [{ idIntervalo: 1, hora: "08:00" }], listaHorarios: "1. 08:00" },
+          ],
+          listaDatas: "1. 18/08/2026",
+        },
+      ],
+    },
+  });
+  const app = await montarApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/orgao/unidade-detalhe",
+    payload: { unidade_sel: "1", orgao_resultado: orgaoResultado },
+  });
+  await app.close();
+
+  assert.equal(res.json().listaDatas, "1. 18/08/2026");
 });
 
 test("unidade-detalhe: só resolve por índice — 'id' numérico da unidade que colide com a faixa de índice NÃO é usado como fallback (evita ambiguidade)", async () => {

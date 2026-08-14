@@ -79,6 +79,13 @@ interface HorarioEnxuto {
 interface VagaAgrupada {
   data: string;
   horarios: HorarioEnxuto[];
+  // Lista PRONTA (1 linha por horário real, numerada, sem slot vazio) —
+  // mesmo padrão de resultado_agendamentos.lista/resultado_casos.lista.
+  // Precomputada aqui (por data) porque o motor de fluxo não itera array em
+  // {{...}}: os nodes de mensagem hoje usavam índice fixo hardcoded
+  // (1..N), sobrando linha vazia quando tinha menos itens que o cap (bug
+  // relatado 2026-08-14, screenshot com "4." e "5." em branco).
+  listaHorarios: string;
 }
 
 interface UnidadeEnxuta {
@@ -87,6 +94,21 @@ interface UnidadeEnxuta {
   bairro: string | null;
   municipio: string | null;
   vagas: VagaAgrupada[];
+  // Lista PRONTA de datas (1 linha por data real, numerada) — par de `vagas`
+  // pro mesmo motivo de `listaHorarios` acima.
+  listaDatas: string;
+}
+
+// Fallback pra lista vazia — mesma convenção de resultado_casos.lista
+// ("Não há mais casos pra mostrar.").
+function formatarListaDatas(vagas: VagaAgrupada[]): string {
+  if (vagas.length === 0) return "Nenhuma data disponível.";
+  return vagas.map((v, i) => `${i + 1}. ${v.data}`).join("\n");
+}
+
+function formatarListaHorarios(horarios: HorarioEnxuto[]): string {
+  if (horarios.length === 0) return "Nenhum horário disponível.";
+  return horarios.map((h, i) => `${i + 1}. ${h.hora}`).join("\n");
 }
 
 // tipoAtendimento vem em texto livre do Verde ("Agendamento Presencial",
@@ -116,7 +138,11 @@ function agruparPorData(flat: VagaFlat[]): VagaAgrupada[] {
     horarios.push({ idIntervalo: v.idIntervalo, hora: v.hora });
     porData.set(v.data, horarios);
   }
-  return [...porData.entries()].map(([data, horarios]) => ({ data, horarios }));
+  return [...porData.entries()].map(([data, horarios]) => ({
+    data,
+    horarios,
+    listaHorarios: formatarListaHorarios(horarios),
+  }));
 }
 
 function totalHorarios(vagas: VagaAgrupada[]): number {
@@ -149,13 +175,17 @@ function agruparUnidades(entradas: NonNullable<OrgaoVerdeRaw["dados"]>): Unidade
       });
     }
   }
-  return [...porId.values()].map((u) => ({
-    id: u.id,
-    nome: u.nome,
-    bairro: u.bairro,
-    municipio: u.municipio,
-    vagas: agruparPorData(u.vagasFlat),
-  }));
+  return [...porId.values()].map((u) => {
+    const vagas = agruparPorData(u.vagasFlat);
+    return {
+      id: u.id,
+      nome: u.nome,
+      bairro: u.bairro,
+      municipio: u.municipio,
+      vagas,
+      listaDatas: formatarListaDatas(vagas),
+    };
+  });
 }
 
 interface OrgaoPrimeiroAtendimentoResp {
@@ -166,11 +196,16 @@ interface OrgaoPrimeiroAtendimentoResp {
     perguntarUnidade: boolean;
     unidades: UnidadeEnxuta[];
     vagasUnicaUnidade: VagaAgrupada[];
+    // Par de vagasUnicaUnidade — string pronta, mesmo motivo de
+    // UnidadeEnxuta.listaDatas.
+    listaDatasUnicaUnidade: string;
   };
   remoto: {
     temOpcao: boolean;
     unidadeEscolhida: { id: number; nome: string } | null;
     vagas: VagaAgrupada[];
+    // Par de vagas — string pronta, mesmo motivo de UnidadeEnxuta.listaDatas.
+    listaDatas: string;
   };
   semVagaDisponivel: boolean;
 }
@@ -179,8 +214,14 @@ function respostaVazia(): OrgaoPrimeiroAtendimentoResp {
   return {
     perguntarTipo: false,
     tipoDefault: null,
-    presencial: { temOpcao: false, perguntarUnidade: false, unidades: [], vagasUnicaUnidade: [] },
-    remoto: { temOpcao: false, unidadeEscolhida: null, vagas: [] },
+    presencial: {
+      temOpcao: false,
+      perguntarUnidade: false,
+      unidades: [],
+      vagasUnicaUnidade: [],
+      listaDatasUnicaUnidade: formatarListaDatas([]),
+    },
+    remoto: { temOpcao: false, unidadeEscolhida: null, vagas: [], listaDatas: formatarListaDatas([]) },
     semVagaDisponivel: true,
   };
 }
@@ -235,6 +276,9 @@ export async function orgaoFlowRoutes(app: FastifyInstance) {
         )
       : null;
 
+    const vagasUnicaUnidade = presenciais.length === 1 ? presenciais[0].vagas : [];
+    const vagasRemoto = remotoEscolhida?.vagas ?? [];
+
     const resposta: OrgaoPrimeiroAtendimentoResp = {
       perguntarTipo,
       tipoDefault,
@@ -242,12 +286,14 @@ export async function orgaoFlowRoutes(app: FastifyInstance) {
         temOpcao: temPresencial,
         perguntarUnidade: presenciais.length > 1,
         unidades: presenciais,
-        vagasUnicaUnidade: presenciais.length === 1 ? presenciais[0].vagas : [],
+        vagasUnicaUnidade,
+        listaDatasUnicaUnidade: formatarListaDatas(vagasUnicaUnidade),
       },
       remoto: {
         temOpcao: temRemoto,
         unidadeEscolhida: remotoEscolhida ? { id: remotoEscolhida.id, nome: remotoEscolhida.nome } : null,
-        vagas: remotoEscolhida?.vagas ?? [],
+        vagas: vagasRemoto,
+        listaDatas: formatarListaDatas(vagasRemoto),
       },
       semVagaDisponivel: !temPresencial && !temRemoto,
     };
@@ -287,6 +333,9 @@ export async function orgaoFlowRoutes(app: FastifyInstance) {
       return { encontrada: false };
     }
     console.log(`[orgao] unidade-detalhe: "${sel}" → unidade ${unidade.id}`);
+    // listaDatas normalmente já vem no JSON (unidade.listaDatas, calculada
+    // em /primeiro-atendimento) — recalcula como fallback defensivo se o
+    // fluxo estiver com um orgao_resultado antigo em cache (sem o campo).
     return {
       encontrada: true,
       id: unidade.id,
@@ -294,6 +343,7 @@ export async function orgaoFlowRoutes(app: FastifyInstance) {
       bairro: unidade.bairro,
       municipio: unidade.municipio,
       vagas: unidade.vagas,
+      listaDatas: unidade.listaDatas ?? formatarListaDatas(unidade.vagas ?? []),
     };
   });
 }
