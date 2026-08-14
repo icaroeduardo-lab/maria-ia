@@ -151,6 +151,10 @@ data/
 infra/terraform/tfplan
 infra/terraform/*.tfplan
 
+# Artefato de build das lambdas (gerado por `pnpm run build:lambda:*`,
+# empacotado pelo esbuild — ver infra/terraform/lambda-*.tf)
+dist-lambda/
+
 # graphify: grafo de conhecimento (graph.json/graph.html/GRAPH_REPORT versionados)
 graphify-out/cost.json
 graphify-out/cache/

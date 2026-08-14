@@ -171,6 +171,12 @@ variable "documentos_retencao_dias" {
   description = "Dias até expirar documentos enviados pelo assistido (bucket privado, issue #74)."
 }
 
+variable "ocr_textract_concorrencia_maxima" {
+  type        = number
+  default     = 2
+  description = "reserved_concurrent_executions da lambda de extração via Textract AnalyzeID (lambda-ocr-documento-textract.tf) — limite conservador de custo/TPS pra um recurso ainda em avaliação, sem volume de produção esperado."
+}
+
 variable "elasticache_node_type" {
   type        = string
   default     = "cache.t4g.micro"

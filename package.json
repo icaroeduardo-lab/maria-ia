@@ -13,6 +13,7 @@
     "start:worker": "node dist/worker/worker.js",
     "worker": "tsx src/worker/worker.ts",
     "jobs": "node dist/jobs/jobs.js",
+    "build:lambda:ocr-textract": "esbuild src/lambdas/ocr-documento-textract/handler.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist-lambda/ocr-documento-textract/index.js",
     "studio": "npx @langchain/langgraph-cli dev",
     "seed": "tsx prisma/seed.ts",
     "flows:export": "tsx scripts/export-flows.ts",
@@ -28,13 +29,16 @@
   "packageManager": "pnpm@10.33.0",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3"
+      "better-sqlite3",
+      "esbuild"
     ]
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.2",
+    "@types/aws-lambda": "^8.10.162",
     "@types/node": "^25.9.2",
     "@types/pg": "^8.20.0",
+    "esbuild": "^0.28.2",
     "prisma": "^6.19.3",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
