@@ -398,6 +398,10 @@ components:
         local: { type: string, nullable: true }
         status: { type: string }
         assistido: { type: string }
+        idAssunto:
+          type: integer
+          nullable: true
+          description: "id numérico do assunto (Verde) — presente quando o agendamento veio do Verde; permite passar direto pra /api/assunto/documentos sem nova consulta ao Verde (issue maria-ia#20260234)."
     AgendamentoDetalheRicoReq:
       type: object
       required: [idEvento]

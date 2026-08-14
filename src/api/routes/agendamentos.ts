@@ -17,6 +17,9 @@ interface AgendamentoEnxuto {
   data: string; // DD/MM/YYYY — já vem assim do Verde; formatamos igual no fallback local
   local: string | null;
   status: string;
+  idAssunto?: number; // id numérico do assunto (Verde) — permite reusar /api/assunto/documentos
+  // no detalhe, sem bater de novo no Verde (issue maria-ia#20260234). Ausente
+  // no fallback local (tabela Agendamento não guarda id de assunto do Verde).
 }
 
 // Shape crua do Gateway Verde (GET /api/agendamentos/{cpf}) — issue #108.
@@ -27,7 +30,7 @@ interface AgendamentosVerdeRaw {
       status?: string;
       dataAgendamento?: string;
       orgao?: { nome?: string };
-      assunto?: { nome?: string };
+      assunto?: { id?: number; nome?: string };
     }[];
   };
 }
@@ -45,6 +48,7 @@ export async function consultarAgendamentosVerde(cpf: string): Promise<Agendamen
     data: a.dataAgendamento ?? "",
     local: a.orgao?.nome ?? null,
     status: a.status ?? "aberto",
+    idAssunto: a.assunto?.id,
   }));
 }
 
@@ -123,6 +127,7 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
       data: item.data,
       local: item.local,
       status: item.status,
+      idAssunto: item.idAssunto ?? null,
     };
   });
 
