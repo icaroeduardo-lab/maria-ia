@@ -132,15 +132,19 @@ export function cpfsCompativeis(digitado?: string | null, extraido?: string | nu
 // qualquer formato (dd/MM/yyyy, "12 de março de 1990" etc). Comparação
 // tolerante: reduz os dois a só dígitos e casa contra a permutação
 // dia-mês-ano OU ano-mês-dia (cobre OCR que já devolveu em ISO por engano).
-// null = documento não trouxe data de nascimento — "não aplicável", não é
-// uma divergência (ver compararComCadastro).
+// null = "não aplicável", não é uma divergência (ver compararComCadastro) —
+// vale pros dois lados: documento sem data de nascimento (ex: RG que não
+// traz o campo) OU cadastro sem data de nascimento (ex: fluxo "Atualizar
+// Dados" deriva o cadastro de uma API do Gateway Verde que não devolve esse
+// campo). Bug real 2026-08-14: cadastro vazio caía no branch de "false"
+// (divergência), derrubando o match mesmo com nome/CPF batendo.
 export function datasCompativeis(digitadoIso?: string | null, extraido?: string | null): boolean | null {
   if (!extraido) return null;
   const extraidoDigitos = soDigitos(extraido);
   if (extraidoDigitos.length !== 8) return null; // não deu pra ler uma data completa
 
   const [ano, mes, dia] = (digitadoIso ?? "").split("-");
-  if (!ano || !mes || !dia) return false;
+  if (!ano || !mes || !dia) return null; // cadastro não tem a data — não é divergência, é ausência
   const diaMesAno = `${dia.padStart(2, "0")}${mes.padStart(2, "0")}${ano}`;
   const anoMesDia = `${ano}${mes.padStart(2, "0")}${dia.padStart(2, "0")}`;
   return extraidoDigitos === diaMesAno || extraidoDigitos === anoMesDia;

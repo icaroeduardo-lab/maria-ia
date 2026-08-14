@@ -5,7 +5,12 @@ process.env.DATABASE_URL = "";
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { nomesCompativeis, cpfsCompativeis, compararComCadastro } from "../src/core/ocr-documento.js";
+import {
+  nomesCompativeis,
+  cpfsCompativeis,
+  compararComCadastro,
+  datasCompativeis,
+} from "../src/core/ocr-documento.js";
 
 // Card #20260203 — comparação tolerante de nome (normaliza acento/caixa,
 // tolera abreviação/erro pequeno) e exata de CPF (só dígitos). Puro, sem
@@ -119,6 +124,27 @@ test("compararComCadastro: documento sem data de nascimento não derruba match",
     "Joao Pereira",
     "11144477735",
     "1990-03-15"
+  );
+  assert.equal(r.match, true);
+  assert.deepEqual(r.detalhes, { nome_ok: true, cpf_ok: true, dataNascimento_ok: null });
+});
+
+test("datasCompativeis: cadastro sem data de nascimento retorna null (não é divergência)", () => {
+  // bug real 2026-08-14 (achado pelo agente `fluxos`): cadastro sem
+  // dataNascimento (ex: fluxo "Atualizar Dados" derivado de API do Gateway
+  // Verde que não devolve o campo) caía no branch de "false", derrubando o
+  // match mesmo com documento trazendo data legível e nome/CPF batendo.
+  assert.equal(datasCompativeis(undefined, "15/03/1990"), null);
+  assert.equal(datasCompativeis(null, "15/03/1990"), null);
+  assert.equal(datasCompativeis("", "15/03/1990"), null);
+});
+
+test("compararComCadastro: cadastro sem data de nascimento não derruba match", () => {
+  const r = compararComCadastro(
+    { nome: "João Pereira", cpf: "11144477735", dataNascimento: "15/03/1990" },
+    "Joao Pereira",
+    "11144477735",
+    undefined
   );
   assert.equal(r.match, true);
   assert.deepEqual(r.detalhes, { nome_ok: true, cpf_ok: true, dataNascimento_ok: null });
