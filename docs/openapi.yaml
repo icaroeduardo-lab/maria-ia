@@ -1782,14 +1782,24 @@ paths:
   /api/documentos/verificar:
     post:
       tags: [Interno (fluxo)]
-      summary: Verifica documento de identidade por OCR (compara nome/CPF extraídos com o cadastro)
+      summary: Verifica documento de identidade por OCR (compara nome/CPF/data de nascimento extraídos com o cadastro)
       description: >
-        Busca o documento mais recente enviado nessa sessão (bucket privado —
-        ver /api/upload-documento), roda OCR via Bedrock multimodal e compara
-        nome/CPF extraídos com o que o assistido já digitou no cadastro
-        (dadosColetados.nome/cpf da mesma sessão). Sem JWT: autenticação é por
-        posse do sessionId. Nunca retorna nome/CPF extraído bruto (LGPD) — só
-        os booleans de match.
+        Acha a key do documento mais recente enviado nessa sessão (bucket
+        privado — ver /api/upload-documento) e lê o resultado já pronto da
+        lambda assíncrona de OCR (Textract, dispara sozinha no upload) —
+        NÃO roda mais OCR ao vivo via Bedrock. Compara nome/CPF/data de
+        nascimento extraídos (só campos com confiança "alta" contam) com o
+        que o assistido já digitou no cadastro (dadosColetados da mesma
+        sessão). Sem JWT: autenticação é por posse do sessionId. Nunca
+        retorna nome/CPF extraído bruto (LGPD) — só os booleans de match.
+        Se a lambda ainda não terminou (comum em PDF, que processa
+        assíncrono no Textract), a rota espera com retry/backoff dentro de
+        um orçamento próprio (default 8s, override via `orcamentoMs` no
+        corpo, clamped entre 1s e 95s — teto cobre o polling de até ~90s da
+        lambda pra PDF) e, se estourar, devolve 200 com `status:"processando"` e
+        `match:false` em vez de travar a conversa — o orçamento só tem
+        efeito prático se o `timeoutMs` do nó `api` do fluxo também for
+        alto o suficiente para não abortar a conexão antes.
       security: []
       requestBody:
         content:
@@ -1801,12 +1811,14 @@ paths:
                 sessionId: { type: string, description: "sessionId/thread_id da conversa (aceita também _sessao, mandado automaticamente pelo nó api)" }
                 nome: { type: string, description: "nome já digitado no cadastro — mandado pelo nó api via camposCorpo; sem isso, cai pro snapshot em Postgres" }
                 cpf: { type: string, description: "cpf já digitado no cadastro — mesmo racional do nome" }
+                dataNascimento: { type: string, description: "data de nascimento já digitada no cadastro (ISO yyyy-MM-dd) — opcional, mesmo racional do nome" }
+                orcamentoMs: { type: number, description: "quanto esperar (ms) pelo resultado da lambda antes de devolver status processando — default 8000, clamped entre 1000 e 95000" }
       responses:
-        "200": { description: "{ match, detalhes: { nome_ok, cpf_ok } }" }
+        "200": { description: "{ match, detalhes: { nome_ok, cpf_ok, dataNascimento_ok }, status: \"concluido\" | \"processando\" }" }
         "400": { description: "sessionId ausente" }
         "404": { description: "nenhum documento encontrado para essa sessão no bucket" }
         "422": { description: "nome/cpf ainda não coletados nesta sessão" }
-        "500": { description: "falha ao processar o documento (OCR/Bedrock)", content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+        "500": { description: "falha ao processar o documento (resultado da lambda ausente/malformado)", content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
 
   # ── Mock (teste) ───────────────────────────────────────────
   /mock/verificar-cpf:

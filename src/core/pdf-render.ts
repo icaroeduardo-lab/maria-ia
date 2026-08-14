@@ -17,8 +17,17 @@ const execFileAsync = promisify(execFile);
 // mesma página como PNG a 300dpi e mandando como bloco `image`, a extração
 // (nome, CPF, data de nascimento) veio correta em 3/3 execuções repetidas —
 // a 200dpi o resultado ainda variava entre execuções, só 300dpi foi estável.
-// Por isso `extrairDadosDocumento` (ocr-documento.ts) rasteriza PDF antes de
-// mandar pro Bedrock; imagem (jpeg/png) enviada direto não passa por aqui.
+// Por isso a extração via Bedrock rasterizava PDF antes de mandar pro
+// modelo; imagem (jpeg/png) enviada direto não passava por aqui.
+//
+// ÓRFÃO desde a issue #20260214: `extrairDadosDocumento` (o único chamador
+// deste módulo, em src/core/ocr-documento.ts) foi removida quando a rota
+// POST /api/documentos/verificar trocou OCR ao vivo via Bedrock por leitura
+// do resultado pronto da lambda de Textract (que lê PDF nativamente, sem
+// rasterizar). Módulo mantido — não removido — porque é uma utilidade
+// genérica (PDF → PNG) sem custo de manutenção e pode voltar a ser útil se
+// o Bedrock for reavaliado; se ninguém precisar dele por um tempo, avaliar
+// remoção junto com test/pdf-render.test.ts.
 //
 // Usa o binário `pdftoppm` (poppler-utils) via child_process em vez de uma
 // lib npm de rasterização: `sharp` (já dependência do projeto) não tem

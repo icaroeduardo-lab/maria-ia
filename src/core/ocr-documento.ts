@@ -1,58 +1,51 @@
-import { GetObjectCommand, ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
-import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
+import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
 import { env } from "./env.js";
-import { mimeReal, type MimeAceito } from "./documentos.js";
-import { renderizarPrimeiraPaginaComoPng } from "./pdf-render.js";
+import type { MimeAceito } from "./documentos.js";
 
 // Verificação de documento por OCR (card #20260203). Fase anterior (#20260129,
 // src/core/documentos.ts) já sobe foto/PDF do documento pro bucket privado
 // durante o cadastro (node `pergunta` tipoPergunta:"documento") — mas só grava
 // metadado (nome/tamanho/mimeType) em dadosColetados, NUNCA a key/URL do S3
-// (LGPD). Este módulo faz o outro lado: acha o arquivo de volta por
-// ListObjectsV2 no prefixo da sessão, roda OCR via Bedrock multimodal (Claude
-// com visão — sem Textract, reaproveita a mesma infra de IA do resto do
-// projeto) e compara nome/CPF extraídos com o que o assistido já digitou.
+// (LGPD). Este módulo faz o outro lado: acha a KEY do documento mais recente
+// da sessão por ListObjectsV2 (usada só pra derivar a key do resultado da
+// lambda de OCR, ver ocr-resultado-textract.ts) e compara nome/CPF/data de
+// nascimento extraídos com o que o assistido já digitou.
+//
+// HISTÓRICO (issue #20260214): até aqui, esta rota rodava OCR AO VIVO via
+// Bedrock multimodal (extrairDadosDocumento, chamada síncrona no meio do
+// turno de conversa) toda vez que o fluxo chegava no node `api` de
+// verificação. Trocado por leitura do resultado já pronto da lambda
+// assíncrona de Textract (src/lambdas/ocr-documento-textract/handler.ts),
+// que roda automaticamente no upload — normalmente já terminou antes do
+// fluxo chegar aqui. `extrairDadosDocumento`/Bedrock foi removida (sem
+// outro call site) — se for necessário reavaliar OCR via Bedrock no futuro,
+// ver histórico do git deste arquivo (era só o pipeline usado por esta
+// rota, nada mais dependia dele).
 //
 // LGPD: nenhuma função aqui loga nome/CPF em texto claro — só booleans de
 // match saem pro chamador (rota em src/api/routes/documentos.ts).
-//
-// Chama o AWS SDK direto (BedrockRuntimeClient/ConverseCommand), NÃO
-// @langchain/aws (usado no resto do engine) — achado ao vivo 2026-08-12,
-// testando com PDF real (CNH-e do governo, ~290KB): a tradução de bloco de
-// arquivo do @langchain/aws (ChatBedrockConverse.withStructuredOutput) falha
-// silenciosamente pra esse documento específico (devolve texto tipo "não há
-// informação", sem erro) — funcionava certinho num PDF sintético pequeno
-// (gerado localmente pra teste), só quebrava no documento real. A mesma
-// chamada via SDK puro (bytes idênticos, tool-calling) lê o documento
-// corretamente. Não investigamos a causa raiz exata dentro do @langchain/aws
-// (não é código nosso) — só confirmamos que bypassar resolve.
-//
-// PDF nunca vai como bloco "document" do Converse (issue #196) — é
-// rasterizado em imagem antes (ver pdf-render.ts e o comentário em
-// extrairDadosDocumento abaixo).
 
 const s3 = new S3Client({ region: env.awsRegion() });
-const bedrock = new BedrockRuntimeClient({ region: env.awsRegion() });
 
-const FORMATO_IMAGEM: Record<string, "jpeg" | "png"> = { "image/jpeg": "jpeg", "image/png": "png" };
-
+// Mantido pra tipar o protótipo histórico do Textract AnalyzeID (issue #194,
+// src/core/ocr-documento-textract.ts) — não tem mais consumidor no pipeline
+// ativo (ele já não baixa bytes, só a key), mas remover quebraria a
+// assinatura daquele módulo (mantido só como registro, ver comentário lá).
 export interface DocumentoBaixado {
   buffer: Buffer;
   mimeType: MimeAceito;
 }
 
-async function streamParaBuffer(stream: AsyncIterable<Uint8Array>): Promise<Buffer> {
-  const partes: Buffer[] = [];
-  for await (const trecho of stream) partes.push(Buffer.isBuffer(trecho) ? trecho : Buffer.from(trecho));
-  return Buffer.concat(partes);
-}
-
-// Busca o documento mais recente enviado nessa sessão (pode haver mais de 1
-// upload — ex: retry depois de um arquivo ilegível). null = nenhum documento
-// encontrado (sessão nunca fez upload, ou já expirou pela retenção do bucket
-// — infra/terraform/s3-documentos.tf, var.documentos_retencao_dias) ou o
-// objeto encontrado não bate nenhuma assinatura conhecida.
-export async function buscarDocumentoMaisRecente(sessionId: string): Promise<DocumentoBaixado | null> {
+// Acha a KEY (não os bytes) do documento mais recente enviado nessa sessão
+// (pode haver mais de 1 upload — ex: retry depois de um arquivo ilegível).
+// null = nenhum documento encontrado (sessão nunca fez upload, ou já expirou
+// pela retenção do bucket — infra/terraform/s3-documentos.tf, var.
+// documentos_retencao_dias). Não baixa/sniffa o conteúdo — a leitura do
+// resultado (ocr-resultado-textract.ts) só precisa da key pra derivar onde a
+// lambda gravou o JSON extraído; quem valida o tipo de arquivo na origem é a
+// própria lambda (grava `{erro: "assinatura não reconhecida"}` quando não é
+// PDF/JPEG/PNG).
+export async function buscarKeyDocumentoMaisRecente(sessionId: string): Promise<string | null> {
   const prefixo = `documentos/${sessionId}/`;
   const lista = await s3.send(
     new ListObjectsV2Command({ Bucket: env.s3BucketDocumentos(), Prefix: prefixo })
@@ -63,122 +56,13 @@ export async function buscarDocumentoMaisRecente(sessionId: string): Promise<Doc
   const maisRecente = objetos.reduce((a, b) =>
     (b.LastModified?.getTime() ?? 0) > (a.LastModified?.getTime() ?? 0) ? b : a
   );
-  if (!maisRecente.Key) return null;
-
-  const obj = await s3.send(new GetObjectCommand({ Bucket: env.s3BucketDocumentos(), Key: maisRecente.Key }));
-  if (!obj.Body) return null;
-  const buffer = await streamParaBuffer(obj.Body as AsyncIterable<Uint8Array>);
-
-  // magic bytes, nunca confia no metadado do S3 — mesmo racional de
-  // src/core/documentos.ts (Content-Type é gravado a partir do upload
-  // original, mas re-sniffar aqui evita depender dessa garantia).
-  const tipoReal = mimeReal(buffer);
-  if (!tipoReal) return null;
-  return { buffer, mimeType: tipoReal };
+  return maisRecente.Key ?? null;
 }
 
 export interface DadosExtraidos {
   nome: string | null;
   cpf: string | null;
   dataNascimento: string | null;
-}
-
-// Curto de propósito — achado ao vivo 2026-08-12 testando com PDF real (CNH-e
-// do governo): um system prompt longo com lista de "não confunda X com Y"
-// combinado com o campo `raciocinio` do schema (abaixo) fazia o modelo
-// concluir erroneamente que o documento "só tem cabeçalho de assinatura
-// digital, sem dados pessoais" — 4/4 tentativas reproduziram isso de forma
-// determinística (mesmo em temperature 0). Prompt curto + raciocinio juntos
-// leram o documento certo em 3/3 tentativas seguidas. Não investigamos por
-// que a combinação longa quebra — só confirmamos empiricamente qual
-// combinação funciona nesse documento real.
-const SYSTEM_PROMPT =
-  "Você lê documentos de identidade brasileiros (RG, CNH, certidão de nascimento). Extraia nome completo, CPF e data de nascimento exatamente como aparecem no documento. Nunca invente um valor.";
-
-const FERRAMENTA_EXTRACAO = {
-  toolSpec: {
-    name: "extrair_dados_documento",
-    description: "Registra os dados de identidade lidos do documento.",
-    inputSchema: {
-      json: {
-        type: "object",
-        properties: {
-          raciocinio: {
-            type: "string",
-            description: "Cite o rótulo exato de cada campo que você leu no documento, 1-3 frases curtas.",
-          },
-          nome: {
-            type: ["string", "null"],
-            description:
-              "Nome completo da pessoa exatamente como está impresso no documento. null se não conseguir ler com segurança.",
-          },
-          cpf: {
-            type: ["string", "null"],
-            description:
-              "Número do CPF como está impresso no documento (com ou sem pontuação). null se não conseguir ler com segurança.",
-          },
-          dataNascimento: {
-            type: ["string", "null"],
-            description:
-              "Data de nascimento exatamente como está impressa no documento (qualquer formato). null se o documento não trouxer essa informação ou não conseguir ler com segurança.",
-          },
-        },
-        required: ["raciocinio", "nome", "cpf", "dataNascimento"],
-      },
-    },
-  },
-};
-
-// OCR via Bedrock multimodal — sem Textract: o modelo lê o documento com
-// visão e devolve nome/CPF/data de nascimento via tool-calling (saída
-// estruturada). Chama BedrockRuntimeClient/ConverseCommand direto (ver
-// comentário no topo do arquivo — não usa @langchain/aws pra este caso).
-//
-// PDF SEMPRE vira imagem antes de ir pro Bedrock (issue #196, ver
-// pdf-render.ts): o bloco "document" do Converse, testado ao vivo contra
-// documento real, lia dígitos do CPF errados de forma determinística —
-// rasterizar a 300dpi e mandar como bloco "image" resolveu (3/3 execuções
-// corretas). Imagem (jpeg/png) enviada direto pelo assistido não passa por
-// rasterização, só pelo bloco "image" de sempre.
-export async function extrairDadosDocumento(doc: DocumentoBaixado): Promise<DadosExtraidos> {
-  const ehPdf = doc.mimeType === "application/pdf";
-  const bytes = ehPdf ? await renderizarPrimeiraPaginaComoPng(doc.buffer) : doc.buffer;
-  const formatoImagem = ehPdf ? "png" : (FORMATO_IMAGEM[doc.mimeType] ?? "jpeg");
-  const conteudo = [{ image: { format: formatoImagem, source: { bytes } } }];
-
-  const resp = await bedrock.send(
-    new ConverseCommand({
-      modelId: env.bedrockOcrModelId(),
-      system: [{ text: SYSTEM_PROMPT }],
-      messages: [
-        {
-          role: "user",
-          content: [
-            { text: "Extraia o nome completo, o CPF e a data de nascimento deste documento." },
-            ...conteudo,
-          ],
-        },
-      ],
-      toolConfig: {
-        tools: [FERRAMENTA_EXTRACAO],
-        toolChoice: { tool: { name: "extrair_dados_documento" } },
-      },
-      inferenceConfig: { temperature: 0 },
-    })
-  );
-
-  const toolUse = resp.output?.message?.content?.find((b) => b.toolUse)?.toolUse;
-  const input = (toolUse?.input ?? {}) as {
-    nome?: string | null;
-    cpf?: string | null;
-    dataNascimento?: string | null;
-  };
-
-  return {
-    nome: input.nome?.trim() || null,
-    cpf: input.cpf?.trim() || null,
-    dataNascimento: input.dataNascimento?.trim() || null,
-  };
 }
 
 // ── Comparação tolerante ────────────────────────────────────────────────
