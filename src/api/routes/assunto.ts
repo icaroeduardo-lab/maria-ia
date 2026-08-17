@@ -136,22 +136,41 @@ export async function assuntoFlowRoutes(app: FastifyInstance) {
   // GET /api/assunto/metadados?idAssunto=... — proxy GET api/assunto/{idAssunto}
   // do gateway (issue #132). Decisão de produto: expor urgência e o texto
   // pronto de documentos necessários pro fluxo mostrar ao assistido;
-  // "plantao" fica fora de escopo (não expor). Minimização LGPD: não repassa
-  // "descricao"/"complemento" (texto livre da matéria, não relevante ainda
-  // pro fluxo). O array estruturado "documentosNecessarios" tem uso próprio
-  // agora em POST /api/assunto/documentos (abaixo) — não duplicado aqui.
+  // "plantao" fica fora de escopo (não expor). "complemento" segue de fora
+  // (não relevante pro fluxo). "nomeMateria"/"descricao" agora SÃO expostos
+  // (achado 2026-08-17, testando "Pessoa Presa" ao vivo): alguns idAssunto
+  // resolvem pra item-folha do tipo ORIENTAÇÃO (ex: idAssunto 3281,
+  // "ENCAMINHAR DEFENSOR DA VARA/JUIZADO/CÂMARA" — usuário já tem processo
+  // em andamento, não é atendimento agendável) — o subfluxo compartilhado
+  // "Identificar Assunto (Árvore Verde)" precisa de nomeMateria pra
+  // detectar esse caso de forma genérica (não hardcode de idAssunto) e de
+  // descricao pro texto de orientação que o Verde já manda pronto. O array
+  // estruturado "documentosNecessarios" tem uso próprio em
+  // POST /api/assunto/documentos (abaixo) — não duplicado aqui.
   app.get("/api/assunto/metadados", async (req) => {
     const idAssunto = Number((req.query as { idAssunto?: string | number })?.idAssunto);
     if (!idAssunto) {
       console.log(`[assunto] metadados: idAssunto inválido`);
-      return { encontrado: false, urgente: false, documentos_necessarios: null };
+      return {
+        encontrado: false,
+        urgente: false,
+        documentos_necessarios: null,
+        nomeMateria: null,
+        descricao: null,
+      };
     }
 
     const resp = await gatewayVerdeGet<AssuntoMetadadosVerdeRaw>(`/api/assunto/${idAssunto}`);
     const d = resp?.dados;
     if (!d) {
       console.log(`[assunto] metadados: idAssunto=${idAssunto} → não encontrado`);
-      return { encontrado: false, urgente: false, documentos_necessarios: null };
+      return {
+        encontrado: false,
+        urgente: false,
+        documentos_necessarios: null,
+        nomeMateria: null,
+        descricao: null,
+      };
     }
 
     console.log(`[assunto] metadados: idAssunto=${idAssunto} → urgente=${!!d.urgente}`);
@@ -159,6 +178,8 @@ export async function assuntoFlowRoutes(app: FastifyInstance) {
       encontrado: true,
       urgente: d.urgente ?? false,
       documentos_necessarios: d.txDocumentosNecessarios ?? null,
+      nomeMateria: d.nomeMateria ?? null,
+      descricao: d.descricao ?? null,
     };
   });
 

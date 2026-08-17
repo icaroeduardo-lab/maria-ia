@@ -172,6 +172,8 @@ test("metadados: idAssunto conhecido → urgente e documentos_necessarios mapead
     encontrado: true,
     urgente: true,
     documentos_necessarios: "RG, CPF, comprovante de residência",
+    nomeMateria: null,
+    descricao: null,
   });
 });
 
@@ -182,6 +184,31 @@ test("metadados: gateway não encontra o assunto → encontrado false", async ()
   await app.close();
 
   assert.equal(res.json().encontrado, false);
+});
+
+test("metadados: idAssunto do tipo ORIENTAÇÃO (item-folha informativo, ex: 3281) → nomeMateria e descricao mapeados", async () => {
+  mockarFetch(() =>
+    Response.json({
+      dados: {
+        nomeMateria: "ORIENTAÇÃO",
+        descricao:
+          "SE JÁ EXISTE UM PROCESSO SOBRE ESSE ASSUNTO, REFAÇA A BUSCA... INFORME O NÚMERO DO PROCESSO...",
+        urgente: false,
+      },
+    })
+  );
+  const app = await montarApp();
+  const res = await app.inject({ method: "GET", url: "/api/assunto/metadados?idAssunto=3281" });
+  await app.close();
+
+  assert.deepEqual(res.json(), {
+    encontrado: true,
+    urgente: false,
+    documentos_necessarios: null,
+    nomeMateria: "ORIENTAÇÃO",
+    descricao:
+      "SE JÁ EXISTE UM PROCESSO SOBRE ESSE ASSUNTO, REFAÇA A BUSCA... INFORME O NÚMERO DO PROCESSO...",
+  });
 });
 
 test("documentos: idAssunto inválido → encontrado false, fallback, sem chamar o gateway", async () => {
