@@ -41,6 +41,7 @@ resource "aws_secretsmanager_secret_version" "app" {
     WA_ACCESS_TOKEN         = "PREENCHER"
     WA_PHONE_NUMBER_ID      = "PREENCHER"
     WA_WEBHOOK_VERIFY_TOKEN = "PREENCHER"
+    TELEGRAM_BOT_TOKEN      = "PREENCHER" # gerado via @BotFather — preencher quando disponível
     PDPJ_API_TOKEN          = "PREENCHER"
     PDPJ_API_URL            = "https://api-processo.stg.data-lake.pdpj.jus.br/processo-api/api/v1"
     DPERJ_API_URL           = "" # vazio = modo mock (protocolo local)
