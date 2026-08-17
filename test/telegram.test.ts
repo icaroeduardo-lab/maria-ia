@@ -43,10 +43,10 @@ test("callback_query sem chat associado → null (não dá pra responder)", () =
   assert.equal(u, null);
 });
 
-test("mensagem sem texto (foto/sticker/etc) → null (sem suporte por enquanto)", () => {
+test("mensagem sem texto, foto nem documento (sticker/etc) → null (sem suporte)", () => {
   const u = extrairAtualizacao({
     update_id: 13,
-    message: { chat: { id: 555 } }, // sem .text
+    message: { chat: { id: 555 } }, // sem .text/.photo/.document
   });
   assert.equal(u, null);
 });

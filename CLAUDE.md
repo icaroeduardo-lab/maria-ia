@@ -69,7 +69,8 @@ __start__ → saudacao → lgpd [INTERRUPT]
 - Botão inline (`callback_query`) → responde `answerCallbackQuery` no recebimento do webhook (não espera o grafo — evita o botão ficar "carregando"), `callback_data` vira a resposta do usuário
 - Sender: `parse_mode: "Markdown"` clássico (`**` → `*`, igual WhatsApp); `options`/`boolean`/`cta_url` viram `inline_keyboard`; sem `TELEGRAM_BOT_TOKEN` só loga (modo dev)
 - Reusa a mesma fila SQS FIFO do WhatsApp (`MsgFila.canal` decide o dispatch no worker — ver `src/worker/worker.ts`)
-- Sem suporte a áudio/mídia (fora do escopo inicial — só texto e botão)
+- Foto/documento (issue #74, mesmo suporte do WhatsApp): só baixa mídia se `tipoPerguntaPendente(sessionId) === "documento"`; download via `getFile` (Bot API) → `file_path` → `GET /file/bot<TOKEN>/<file_path>` (diferente da Graph API — token na URL, não em header); grava no mesmo bucket/convenção de `src/core/documentos.ts`. Foto sempre chega como JPEG (Telegram recomprime); mimetype real do documento vem em `message.document.mime_type`.
+- Voz/áudio (`message.voice`/`message.audio`, mesmo suporte do WhatsApp): SEM gate de contexto — aceito em qualquer ponto da conversa. Baixa via o mesmo `getFile`, transcreve com AWS Transcribe (`src/core/transcribe.ts`, `transcreverAudio()` — pipeline S3→job→poll compartilhado com o WhatsApp, cada canal só baixa os bytes do seu jeito) e trata o texto como se fosse digitado. Falha/vazio → pede pra escrever de novo (mesmo fallback do WhatsApp).
 
 **Serviços:** `familia_pensao` | `trabalhista` | `inss_federal` | `penal` → `outros`
 
