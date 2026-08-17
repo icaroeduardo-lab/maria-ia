@@ -61,7 +61,7 @@ function formatarListaDocumentos(docs?: { nomeDocumento?: string; basico?: boole
     return "Nenhum documento específico informado — leve RG e CPF.";
   }
   return validos
-    .map((d, i) => `${i + 1}. ${d.nomeDocumento}${d.basico ? " (obrigatório)" : " (se aplicável)"}`)
+    .map((d) => `- ${d.nomeDocumento}${d.basico ? " (obrigatório)" : " (se aplicável)"}`)
     .join("\n");
 }
 
@@ -164,8 +164,10 @@ export async function assuntoFlowRoutes(app: FastifyInstance) {
 
   // POST /api/assunto/documentos — { idAssunto } → { encontrado, listaDocumentos }
   // Mesmo proxy GET api/assunto/{idAssunto} de /metadados, mas usa o array
-  // estruturado "documentosNecessarios" pra montar uma lista numerada
-  // distinguindo obrigatório (basico:true) de condicional (basico:false/
+  // estruturado "documentosNecessarios" pra montar uma lista não ordenada
+  // (marcador "-", pedido do usuário 2026-08-17 — não é lista de escolha
+  // por número, então não precisa índice) distinguindo obrigatório
+  // (basico:true) de condicional (basico:false/
   // ausente) — pronta pra interpolar na mensagem de sucesso do agendamento
   // (fluxo "Primeiro Atendimento (Órgão)"). POST (não GET com query) pra
   // casar com o padrão dos outros nodes `api` deste subfluxo

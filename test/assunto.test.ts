@@ -222,9 +222,9 @@ test("documentos: idAssunto 3151 → lista numerada distinguindo obrigatório de
   assert.deepEqual(res.json(), {
     encontrado: true,
     listaDocumentos:
-      "1. Certidão de Nascimento ou Casamento (obrigatório)\n" +
-      "2. Última declaração de Imposto de Renda (obrigatório)\n" +
-      "3. Certidão de nascimento da criança ou adolescente (se aplicável)",
+      "- Certidão de Nascimento ou Casamento (obrigatório)\n" +
+      "- Última declaração de Imposto de Renda (obrigatório)\n" +
+      "- Certidão de nascimento da criança ou adolescente (se aplicável)",
   });
 });
 
