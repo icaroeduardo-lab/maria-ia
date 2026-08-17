@@ -51,6 +51,14 @@ locals {
     "WA_ACCESS_TOKEN", "WA_PHONE_NUMBER_ID", "WA_WEBHOOK_VERIFY_TOKEN",
     "PDPJ_API_TOKEN", "PDPJ_API_URL", "DPERJ_API_URL", "DPERJ_API_KEY",
     "LANGSMITH_API_KEY",
+    # TEMPORÁRIO — bypass de demo de POST /api/documentos/verificar (ver
+    # comentário no topo de src/api/routes/documentos.ts). Vive no secret (não
+    # em common_env) DE PROPÓSITO: o secret_string tem lifecycle
+    # ignore_changes (secrets.tf), então depois deste apply inicial o
+    # liga/desliga é só `aws secretsmanager put-secret-value` +
+    # `aws ecs update-service --force-new-deployment` — sem novo
+    # terraform apply, sem novo deploy de imagem.
+    "DEMO_OCR_SEMPRE_PASSA",
   ]
   app_secret_env = [
     for k in local.app_secret_keys :
