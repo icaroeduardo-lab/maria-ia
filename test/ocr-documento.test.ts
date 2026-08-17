@@ -3,14 +3,20 @@ process.env.AWS_SECRET_ACCESS_KEY = "teste-invalido";
 process.env.BEDROCK_KB_ID = "";
 process.env.DATABASE_URL = "";
 
-import { test } from "node:test";
+import { test, mock, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import {
   nomesCompativeis,
   cpfsCompativeis,
   compararComCadastro,
   datasCompativeis,
+  buscarKeyDocumentoMaisRecente,
 } from "../src/core/ocr-documento.js";
+
+afterEach(() => {
+  mock.reset();
+});
 
 // Card #20260203 — comparação tolerante de nome (normaliza acento/caixa,
 // tolera abreviação/erro pequeno) e exata de CPF (só dígitos). Puro, sem
@@ -148,4 +154,58 @@ test("compararComCadastro: cadastro sem data de nascimento não derruba match", 
   );
   assert.equal(r.match, true);
   assert.deepEqual(r.detalhes, { nome_ok: true, cpf_ok: true, dataNascimento_ok: null });
+});
+
+// ── buscarKeyDocumentoMaisRecente: retry/backoff do ListObjectsV2 ──────────
+// Achado em produção 2026-08-14: política IAM confirmada correta (simulate-
+// principal-policy allowed, sem PutRolePolicy no CloudTrail) mas algumas
+// chamadas reais voltaram AccessDenied e depois passaram a funcionar
+// sozinhas — cheiro de instabilidade transitória da AWS, não bug nosso.
+// Blindagem defensiva: retry curto tratando erro transitório (AccessDenied
+// incluso), sem mascarar falha persistente. backoffMs baixo aqui só pra não
+// deixar o teste lento — o comportamento default de produção é 300ms/800ms.
+
+function erroS3(nome: string): Error {
+  const e = new Error(nome) as Error & { name: string };
+  e.name = nome;
+  return e;
+}
+
+test("buscarKeyDocumentoMaisRecente: sucesso na 2ª tentativa depois de AccessDenied transitório", async () => {
+  let chamadas = 0;
+  const sendMock = mock.method(S3Client.prototype, "send", async (cmd: unknown) => {
+    assert.ok(cmd instanceof ListObjectsV2Command);
+    chamadas++;
+    if (chamadas === 1) throw erroS3("AccessDenied");
+    return { Contents: [{ Key: "documentos/s1/doc.jpg", LastModified: new Date() }] };
+  });
+
+  const key = await buscarKeyDocumentoMaisRecente("s1", { backoffMs: [5, 5] });
+
+  assert.equal(key, "documentos/s1/doc.jpg");
+  assert.equal(sendMock.mock.callCount(), 2);
+});
+
+test("buscarKeyDocumentoMaisRecente: AccessDenied persistente esgota tentativas e propaga o erro (não mascara)", async () => {
+  const sendMock = mock.method(S3Client.prototype, "send", async () => {
+    throw erroS3("AccessDenied");
+  });
+
+  await assert.rejects(
+    buscarKeyDocumentoMaisRecente("s1", { tentativas: 3, backoffMs: [5, 5] }),
+    /AccessDenied/
+  );
+  assert.equal(sendMock.mock.callCount(), 3);
+});
+
+test("buscarKeyDocumentoMaisRecente: erro não-transitório (ex: NoSuchBucket) propaga na 1ª tentativa, sem retry", async () => {
+  const sendMock = mock.method(S3Client.prototype, "send", async () => {
+    throw erroS3("NoSuchBucket");
+  });
+
+  await assert.rejects(
+    buscarKeyDocumentoMaisRecente("s1", { tentativas: 3, backoffMs: [5, 5] }),
+    /NoSuchBucket/
+  );
+  assert.equal(sendMock.mock.callCount(), 1);
 });
