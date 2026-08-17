@@ -661,6 +661,14 @@ components:
           type: string
           nullable: true
           description: "txDocumentosNecessarios do Verde — texto pronto (markdown-like) pra exibir ao assistido. \"plantao\" do Verde é ignorado de propósito (fora de escopo, issue #132)."
+        nomeMateria:
+          type: string
+          nullable: true
+          description: "nomeMateria do Verde — quando \"ORIENTAÇÃO\", o idAssunto é um item-folha informativo/redirecionamento (ex: usuário já tem processo em andamento), não um atendimento agendável. Usado pelo subfluxo compartilhado \"Identificar Assunto (Árvore Verde)\" pra detectar esse caso de forma genérica."
+        descricao:
+          type: string
+          nullable: true
+          description: "descricao do Verde — texto livre da matéria; relevante quando nomeMateria é \"ORIENTAÇÃO\" (traz a instrução pronta pro assistido, ex: informar número do processo)."
     AssuntoDocumentosReq:
       type: object
       required: [idAssunto]
