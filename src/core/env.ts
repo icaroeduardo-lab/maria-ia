@@ -36,6 +36,12 @@ export const env = {
   // rate limit do webhook — mensagens/min por número (card #20260122)
   waRateLimitMsgsMin: () => num(process.env.WA_RATE_LIMIT_MSGS_MIN, 20),
 
+  // Telegram (Bot API) — canal de teste alternativo ao WhatsApp: sem token
+  // de 24h, mais simples de operar em dev. Sem TELEGRAM_BOT_TOKEN, o sender
+  // só loga o payload (modo dev), mesmo padrão do WhatsApp sem WA_ACCESS_TOKEN.
+  telegramBotToken: () => process.env.TELEGRAM_BOT_TOKEN,
+  telegramApiUrl: () => process.env.TELEGRAM_API_URL ?? "https://api.telegram.org",
+
   // PDPJ (processos)
   pdpjApiUrl: () => semBarra(process.env.PDPJ_API_URL ?? ""),
   pdpjApiToken: () => process.env.PDPJ_API_TOKEN ?? "",

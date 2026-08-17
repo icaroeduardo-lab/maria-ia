@@ -879,6 +879,17 @@ paths:
       responses:
         "200": { description: Aceito }
 
+  /webhook/telegram:
+    post:
+      tags: [Webhook]
+      summary: >-
+        Recebe updates do Telegram Bot API (mensagem de texto ou callback_query de
+        botão inline). Responde 200 imediato, processa async. Sem verificação tipo
+        Meta — ativado via setWebhook (ver comentário em core/channels/telegram.ts).
+      security: []
+      responses:
+        "200": { description: Aceito }
+
   # ── Chat público ───────────────────────────────────────────
   /api/chat:
     post:

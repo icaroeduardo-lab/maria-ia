@@ -137,13 +137,14 @@ export async function tipoPerguntaPendente(sessionId: string): Promise<TipoPergu
   return resolverTipoPergunta(chave, flowNodes);
 }
 
-// Processa uma mensagem de qualquer canal (web ou whatsapp), preservando o
-// padrão crítico de multi-turn: thread novo → invoke(estado inicial);
-// resume → updateState + invoke(null). NUNCA invoke(input não-nulo) em thread existente.
+// Processa uma mensagem de qualquer canal (web, whatsapp ou telegram),
+// preservando o padrão crítico de multi-turn: thread novo → invoke(estado
+// inicial); resume → updateState + invoke(null). NUNCA invoke(input
+// não-nulo) em thread existente.
 export async function processarMensagem(
   sessionId: string,
   message: string | undefined,
-  canal: "web" | "whatsapp"
+  canal: "web" | "whatsapp" | "telegram"
 ) {
   const { graph, flowId } = await obterGraph();
   const config = { configurable: { thread_id: sessionId } };
