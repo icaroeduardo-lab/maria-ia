@@ -19,9 +19,13 @@ const QUEUE_URL = () => env.sqsQueueUrl();
 const client = new SQSClient({ region: env.awsRegion() });
 
 // Payload que trafega na fila (uma mensagem recebida de qualquer canal) —
-// mesmo shape de MensagemRecebida (channels/whatsapp.ts); mantido espelhado
-// aqui porque o worker desserializa via JSON.parse(...) as MsgFila (sem
-// import direto do tipo, para não acoplar queue.ts aos canais).
+// mesmo shape de MensagemRecebida (channels/whatsapp.ts) e
+// MensagemRecebidaTelegram (channels/telegram.ts); mantido espelhado aqui
+// porque o worker desserializa via JSON.parse(...) as MsgFila (sem import
+// direto do tipo, para não acoplar queue.ts aos canais). mediaId/mediaMimeType/
+// mediaNomeOriginal são compartilhados entre os dois canais (foto/documento,
+// issue #74) — cada canal preenche com o id de mídia do seu próprio provedor
+// (media_id da Graph API ou file_id da Bot API).
 // `canal` decide o dispatch no worker (../worker/worker.ts); ausente = trata
 // como "whatsapp" (compat com mensagens enfileiradas antes do canal existir).
 export interface MsgFila {

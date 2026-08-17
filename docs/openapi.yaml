@@ -883,9 +883,10 @@ paths:
     post:
       tags: [Webhook]
       summary: >-
-        Recebe updates do Telegram Bot API (mensagem de texto ou callback_query de
-        botão inline). Responde 200 imediato, processa async. Sem verificação tipo
-        Meta — ativado via setWebhook (ver comentário em core/channels/telegram.ts).
+        Recebe updates do Telegram Bot API (mensagem de texto, callback_query de
+        botão inline, foto, documento ou voz/áudio). Responde 200 imediato,
+        processa async. Sem verificação tipo Meta — ativado via setWebhook (ver
+        comentário em core/channels/telegram.ts).
       security: []
       responses:
         "200": { description: Aceito }
