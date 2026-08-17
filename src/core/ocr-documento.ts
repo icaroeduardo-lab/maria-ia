@@ -1,4 +1,4 @@
-import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
+import { ListObjectsV2Command, S3Client, type ListObjectsV2CommandOutput } from "@aws-sdk/client-s3";
 import { env } from "./env.js";
 import type { MimeAceito } from "./documentos.js";
 
@@ -36,6 +36,53 @@ export interface DocumentoBaixado {
   mimeType: MimeAceito;
 }
 
+// Retry/backoff pra ListObjectsV2 — achado em produção (2026-08-14): a role
+// `maria-chat-prod-ecs-task` tem `s3:ListBucket` corretamente concedida
+// (confirmado via `aws iam simulate-principal-policy`, incluindo
+// OrganizationsDecisionDetail.AllowedByOrganizations:true) e o CloudTrail não
+// mostra NENHUMA mudança de política — mas algumas chamadas reais (mesma
+// task ECS, minutos de diferença) voltaram AccessDenied e depois passaram a
+// funcionar sozinhas, sem qualquer alteração. Cheiro de instabilidade
+// transitória do lado da AWS (S3/IAM eventual consistency), não bug de
+// configuração nossa — mas sem acesso a CloudTrail data events de S3 nem
+// suporte AWS pra confirmar 100% a causa raiz. Blindagem defensiva: só
+// re-tenta erro que parece transitório (AccessDenied incluído de propósito,
+// dado o padrão observado); erro persistente esgota as tentativas e propaga
+// normal (rota devolve 500 como já fazia).
+const RETRY_TENTATIVAS_PADRAO = 3;
+const RETRY_BACKOFF_MS_PADRAO = [300, 800];
+
+function ehErroTransitorioS3(err: unknown): boolean {
+  const e = err as { name?: string; code?: string; $metadata?: { httpStatusCode?: number } };
+  const nome = e?.name ?? e?.code ?? "";
+  if (["AccessDenied", "ServiceUnavailable", "SlowDown", "RequestTimeout", "TimeoutError"].includes(nome)) {
+    return true;
+  }
+  // erros de rede do Node não vêm com `name` do SDK — vêm com `code` do socket
+  if (["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN"].includes(e?.code ?? "")) return true;
+  if (e?.$metadata?.httpStatusCode === 503) return true;
+  return false;
+}
+
+async function listarComRetry(
+  prefixo: string,
+  opts?: { tentativas?: number; backoffMs?: number[] }
+): Promise<ListObjectsV2CommandOutput> {
+  const tentativas = opts?.tentativas ?? RETRY_TENTATIVAS_PADRAO;
+  const backoffMs = opts?.backoffMs ?? RETRY_BACKOFF_MS_PADRAO;
+
+  for (let tentativa = 0; ; tentativa++) {
+    try {
+      return await s3.send(new ListObjectsV2Command({ Bucket: env.s3BucketDocumentos(), Prefix: prefixo }));
+    } catch (err) {
+      const esgotou = tentativa >= tentativas - 1;
+      if (!ehErroTransitorioS3(err) || esgotou) throw err;
+      const espera = backoffMs[tentativa] ?? backoffMs[backoffMs.length - 1];
+      await new Promise((resolve) => setTimeout(resolve, espera));
+    }
+  }
+}
+
 // Acha a KEY (não os bytes) do documento mais recente enviado nessa sessão
 // (pode haver mais de 1 upload — ex: retry depois de um arquivo ilegível).
 // null = nenhum documento encontrado (sessão nunca fez upload, ou já expirou
@@ -45,11 +92,16 @@ export interface DocumentoBaixado {
 // lambda gravou o JSON extraído; quem valida o tipo de arquivo na origem é a
 // própria lambda (grava `{erro: "assinatura não reconhecida"}` quando não é
 // PDF/JPEG/PNG).
-export async function buscarKeyDocumentoMaisRecente(sessionId: string): Promise<string | null> {
+//
+// `opts` (tentativas/backoffMs) só existe pra teste conseguir exercitar o
+// retry sem esperar o backoff de verdade — chamador de produção (rota) usa o
+// default.
+export async function buscarKeyDocumentoMaisRecente(
+  sessionId: string,
+  opts?: { tentativas?: number; backoffMs?: number[] }
+): Promise<string | null> {
   const prefixo = `documentos/${sessionId}/`;
-  const lista = await s3.send(
-    new ListObjectsV2Command({ Bucket: env.s3BucketDocumentos(), Prefix: prefixo })
-  );
+  const lista = await listarComRetry(prefixo, opts);
   const objetos = lista.Contents ?? [];
   if (!objetos.length) return null;
 
