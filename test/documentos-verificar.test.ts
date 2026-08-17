@@ -19,6 +19,7 @@ import { montarApp } from "../src/api/app.js";
 
 afterEach(() => {
   mock.reset();
+  delete process.env.DEMO_OCR_SEMPRE_PASSA;
 });
 
 // Mocka a listagem (buscarKeyDocumentoMaisRecente) e a leitura do JSON
@@ -142,6 +143,59 @@ test("lambda gravou erro de extração (ex: arquivo não reconhecido) → 500, m
   await app.close();
   assert.equal(res.statusCode, 500);
   assert.equal(res.json().erro, "falha ao processar o documento");
+});
+
+// ── Bypass temporário de demo (DEMO_OCR_SEMPRE_PASSA) ──────────────────────
+// Ver comentário no topo de src/api/routes/documentos.ts e env.ts —
+// pedido 2026-08-17, só pra apresentação, tem que ser fácil desligar depois.
+
+test("DEMO_OCR_SEMPRE_PASSA=true → sempre match true, mesmo sem documento/nome/cpf batendo, sem tocar S3", async () => {
+  process.env.DEMO_OCR_SEMPRE_PASSA = "true";
+  // S3 mockado pra ESTOURAR se for chamado — bypass tem que ser total (nem
+  // ListObjectsV2 nem GetObjectCommand podem ser tentados).
+  mock.method(S3Client.prototype, "send", async () => {
+    throw new Error("não deveria tocar S3 com DEMO_OCR_SEMPRE_PASSA ativo");
+  });
+  const app = await montarApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/documentos/verificar",
+    // nome/cpf propositalmente ausentes e sem Postgres — caso que normalmente
+    // daria 422, mas o bypass deve responder 200 match:true de qualquer jeito.
+    payload: { sessionId: `teste-demo-bypass-${Date.now()}` },
+  });
+  await app.close();
+  assert.equal(res.statusCode, 200);
+  const corpo = res.json();
+  assert.deepEqual(corpo, {
+    match: true,
+    detalhes: { nome_ok: true, cpf_ok: true, dataNascimento_ok: true },
+    status: "concluido",
+  });
+});
+
+test("DEMO_OCR_SEMPRE_PASSA=false (explícito) → comportamento real preservado", async () => {
+  process.env.DEMO_OCR_SEMPRE_PASSA = "false";
+  mockarS3({
+    key: "documentos/teste-demo-off/doc.jpg",
+    jsonResultado: {
+      extraido: {
+        nome: { valor: "Outra Pessoa", confianca: "alta" },
+        cpf: { valor: "00000000000", confianca: "alta" },
+        dataNascimento: { valor: null, confianca: "nao_encontrado" },
+      },
+    },
+  });
+  const app = await montarApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/documentos/verificar",
+    payload: { sessionId: "teste-demo-off", nome: "Maria Silva", cpf: "11144477735" },
+  });
+  await app.close();
+  assert.equal(res.statusCode, 200);
+  const corpo = res.json();
+  assert.equal(corpo.match, false, "sem a flag, não-match real deve continuar sendo reportado");
 });
 
 // ── Guard estático: cenários que precisam de S3/Bedrock reais ──────────────

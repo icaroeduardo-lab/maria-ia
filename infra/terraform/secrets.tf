@@ -46,6 +46,11 @@ resource "aws_secretsmanager_secret_version" "app" {
     DPERJ_API_URL           = "" # vazio = modo mock (protocolo local)
     DPERJ_API_KEY           = ""
     LANGSMITH_API_KEY       = "PREENCHER" # tracing — ver CLAUDE.md "Observabilidade"
+    # TEMPORÁRIO — bypass de demo, ver src/api/routes/documentos.ts. "true" =
+    # /api/documentos/verificar sempre aprova. Default "false" — só valor
+    # inicial, real toggle é via put-secret-value (lifecycle ignore_changes
+    # abaixo bloqueia terraform apply de tocar o valor já em produção).
+    DEMO_OCR_SEMPRE_PASSA = "false"
   })
 
   lifecycle {
