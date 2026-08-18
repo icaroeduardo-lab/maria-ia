@@ -155,6 +155,24 @@ export async function processarMensagem(
     await checkpointer
       .deleteThread(sessionId)
       .catch((err) => console.error("[chat] falha ao reiniciar thread:", err));
+    // BUG 2026-08-18 (relatado pelo usuário no Telegram): #sair só limpava o
+    // checkpoint do LangGraph, nunca o handoffStatus da Conversation — se a
+    // sessão tinha entrado em handoff (transferir_humano) antes, o flag
+    // ficava preso no banco e toda mensagem seguinte (ex: "oi") caía
+    // silenciosamente na regra de "handoff ativo, sem resposta automática"
+    // (linha ~173 abaixo), fazendo o bot parecer mudo mesmo após reiniciar.
+    // #sair agora libera o handoff também, igual à ação manual do atendente
+    // (POST /admin/conversations/:sessionId/handoff/liberar).
+    if (prisma) {
+      await prisma.conversation
+        .update({
+          where: { sessionId },
+          data: { handoffStatus: null, handoffOperador: null, handoffDesde: null },
+        })
+        .catch(() => {
+          /* conversa pode não existir ainda (ex: 1ª mensagem já é #sair) — ok ignorar */
+        });
+    }
     const aviso = new AIMessage(
       "Conversa reiniciada. 🔄 Quando quiser, é só mandar uma mensagem que começamos de novo."
     );
