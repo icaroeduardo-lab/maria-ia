@@ -6,7 +6,7 @@ import { gatewayVerdeGet, gatewayVerdePost } from "../../core/gateway-verde.js";
 // O nó `api` do builder faz POST com body = dadosColetados (que contém o cpf).
 // Respostas no mesmo formato dos mocks antigos p/ as condições continuarem valendo.
 
-const so_digitos = (s?: string) => (s ?? "").replace(/\D/g, "");
+export const so_digitos = (s?: string) => (s ?? "").replace(/\D/g, "");
 
 // Shape crua do Gateway Verde (GET /api/assistido/{cpf}) — issue #108.
 // dataNascimento adicionada (maria-ia#20260202): a API real SEMPRE devolveu
@@ -285,6 +285,41 @@ function dadosPublicos(a: Record<string, unknown>) {
   return resto;
 }
 
+export interface ResultadoAtualizacaoAssistido {
+  sucesso: boolean;
+  erro?: string;
+  dados?: Record<string, unknown>;
+}
+
+// Atualização parcial de assistido (Verde primeiro, fallback local) —
+// extraída do handler de /api/assistidos/atualizar pra ser reaproveitada
+// também pela rota da Tykhe (src/api/routes/tykhe/), sem duplicar a lógica
+// de negócio nem o comportamento (mesmas funções: atualizarAssistidoVerde,
+// paraBanco, dadosPublicos). Diferente do handler original, não assume
+// `prisma` não-nulo — quem tem o guard 503 é a rota interna (preHandler),
+// a rota da Tykhe não tem esse guard e precisa de um fallback seguro.
+export async function atualizarCampoAssistido(
+  cpf: string,
+  campos: Record<string, string>
+): Promise<ResultadoAtualizacaoAssistido> {
+  const verde = await atualizarAssistidoVerde(cpf, campos);
+  if (verde) {
+    console.log(`[assistidos] atualizar (Verde): CPF ${cpf} → campos: ${Object.keys(campos).join(", ")}`);
+    return { sucesso: true, dados: { cpf, ...campos } };
+  }
+
+  if (!prisma) return { sucesso: false, erro: "assistido não encontrado" };
+
+  const existe = await prisma.assistido.findUnique({ where: { cpf } });
+  if (!existe) return { sucesso: false, erro: "assistido não encontrado" };
+
+  const a = await prisma.assistido.update({ where: { cpf }, data: paraBanco(campos) });
+  console.log(
+    `[assistidos] atualizar (local): CPF ${cpf} → campos: ${Object.keys(campos).join(", ") || "(nenhum)"}`
+  );
+  return { sucesso: true, dados: dadosPublicos(a as unknown as Record<string, unknown>) };
+}
+
 export async function assistidosFlowRoutes(app: FastifyInstance) {
   // sem banco: rotas continuam registradas (conjunto determinístico — o guard
   // do openapi depende disso), mas todas respondem 503 via preHandler
@@ -489,21 +524,9 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
     if (cpf.length !== 11) return reply.code(400).send({ sucesso: false, erro: "cpf inválido" });
 
     const campos = extrairCampos(body);
-
-    const verde = await atualizarAssistidoVerde(cpf, campos);
-    if (verde) {
-      console.log(`[assistidos] atualizar (Verde): CPF ${cpf} → campos: ${Object.keys(campos).join(", ")}`);
-      return { sucesso: true, dados: { cpf, ...campos } };
-    }
-
-    const existe = await db.assistido.findUnique({ where: { cpf } });
-    if (!existe) return reply.code(404).send({ sucesso: false, erro: "assistido não encontrado" });
-
-    const a = await db.assistido.update({ where: { cpf }, data: paraBanco(campos) });
-    console.log(
-      `[assistidos] atualizar (local): CPF ${cpf} → campos: ${Object.keys(campos).join(", ") || "(nenhum)"}`
-    );
-    return { sucesso: true, dados: dadosPublicos(a as unknown as Record<string, unknown>) };
+    const resultado = await atualizarCampoAssistido(cpf, campos);
+    if (!resultado.sucesso) return reply.code(404).send(resultado);
+    return resultado;
   });
 
   // POST /api/assistidos/campo-preenchido { valor? } → { preenchido }

@@ -23,6 +23,7 @@ tags:
   - name: Admin — Assistidos
   - name: Admin — Config/Users/Analytics/Audit
   - name: Interno (fluxo)
+  - name: Tykhe (integração)
   - name: Mock
   - name: Infra
 
@@ -326,6 +327,16 @@ components:
       required: [preenchido]
       properties:
         preenchido: { type: boolean, description: "true se valor não está vazio" }
+    TykheAtualizarReq:
+      type: object
+      required: [cpf, campo, valor]
+      properties:
+        cpf: { type: string }
+        campo:
+          type: string
+          enum: [nome, telefone, email, cep, logradouro, numero, complemento, bairro, municipio, uf]
+          description: "1 campo por vez — menu fixo da Tykhe restringe a escolha"
+        valor: { type: string }
     CasoDetalheReq:
       type: object
       properties:
@@ -875,6 +886,18 @@ paths:
     post:
       tags: [Webhook]
       summary: Recebe mensagens do WhatsApp (responde 200 imediato, processa async)
+      security: []
+      responses:
+        "200": { description: Aceito }
+
+  /webhook/telegram:
+    post:
+      tags: [Webhook]
+      summary: >-
+        Recebe updates do Telegram Bot API (mensagem de texto, callback_query de
+        botão inline, foto, documento ou voz/áudio). Responde 200 imediato,
+        processa async. Sem verificação tipo Meta — ativado via setWebhook (ver
+        comentário em core/channels/telegram.ts).
       security: []
       responses:
         "200": { description: Aceito }
@@ -1844,6 +1867,26 @@ paths:
         "404": { description: "nenhum documento encontrado para essa sessão no bucket" }
         "422": { description: "nome/cpf ainda não coletados nesta sessão" }
         "500": { description: "falha ao processar o documento (resultado da lambda ausente/malformado)", content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+
+  # ── Tykhe (integração) — API desmembrada pra Tykhe chamar ───
+  /api/tykhe/assistidos/atualizar:
+    post:
+      tags: [Tykhe (integração)]
+      summary: "Atualiza 1 campo do assistido (chamado pela Tykhe) — SEM autenticação (protótipo)"
+      description: >
+        Endpoint desmembrado especificamente pra integração Maria↔Tykhe
+        (plataforma legada, dona do número real de WhatsApp): o fluxo da
+        Tykhe pergunta "qual dado quer atualizar" via menu fixo
+        (Nome/Telefone/Email/Endereço) e manda só o campo escolhido + valor
+        novo. Reaproveita a mesma lógica de /api/assistidos/atualizar (Verde
+        primeiro, fallback local). SEM autenticação — protótipo/temporário,
+        não subir pra produção sem token.
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/TykheAtualizarReq' } } } }
+      responses:
+        "200": { description: "{ sucesso: true, dados }" }
+        "400": { description: "cpf inválido, campo fora do enum aceito, ou valor ausente", content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+        "404": { description: assistido não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
 
   # ── Mock (teste) ───────────────────────────────────────────
   /mock/verificar-cpf:
