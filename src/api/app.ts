@@ -9,7 +9,6 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { processarMensagem } from "../core/chat.js";
 import { whatsappRoutes } from "../core/channels/whatsapp.js";
-import { telegramRoutes } from "../core/channels/telegram.js";
 import { authRoutes } from "./routes/auth.js";
 import { adminRoutes } from "./routes/admin.js";
 import { verificarDb, verificarTokenWhatsApp } from "../core/health.js";
@@ -104,7 +103,6 @@ export async function montarApp(opts: MontarAppOpts = {}) {
   });
 
   await app.register(whatsappRoutes);
-  await app.register(telegramRoutes);
   await app.register(authRoutes);
   await app.register(adminRoutes, { prefix: "/admin" });
   await app.register(mockRoutes);
