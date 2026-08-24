@@ -354,6 +354,18 @@ components:
         categoria: { type: string, description: "categoria/assunto identificado, se já disponível no estado da conversa" }
         status: { type: string, enum: [em_andamento, concluido, handoff_humano] }
         migrado: { type: boolean, description: "true só quando a categoria identificada é 'pessoa_presa' ou 'violencia_domestica' (únicas 2 já reconstruídas pra Maria conduzir sozinha) — false pra qualquer outra, sinaliza a Tykhe pra assumir de volta com o fluxo legado dela" }
+    TykheIdentificarFluxoReq:
+      type: object
+      required: [relato]
+      properties:
+        relato: { type: string, description: "texto livre do que o assistido relatou" }
+    TykheIdentificarFluxoResp:
+      type: object
+      required: [categoria]
+      properties:
+        categoria:
+          type: string
+          description: "categoria identificada — mesma lista de opções do node 'classificar' do fluxo Orquestrador (divórcio, alimentação, trabalhista, pessoa_presa, violencia_domestica, falar_processo, questoes_saude, fora_competencia, outros)"
     CasoDetalheReq:
       type: object
       properties:
@@ -1915,6 +1927,27 @@ paths:
       responses:
         "200": { description: "resposta da Maria + status da conversa", content: { application/json: { schema: { $ref: '#/components/schemas/TykheMensagemResp' } } } }
         "400": { description: "chatId ausente, ou nem mensagem nem audioUrl informados", content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+  /api/tykhe/identificar-fluxo:
+    post:
+      tags: [Tykhe (integração)]
+      summary: "Identifica só a categoria/fluxo de um relato, sem rodar o motor conversacional — SEM autenticação (protótipo)"
+      description: >
+        Fatia BEM menor que /api/tykhe/mensagem: classifica um relato livre
+        numa categoria, SEM rodar o grafo LangGraph inteiro (sem saudação,
+        LGPD, multi-turn, envio de dados) — chamada direta e sem estado.
+        Reusa a mesma função de classificação (`classificarTexto`,
+        core/engine/ia.ts) que o node tipo "classificar" do engine chama,
+        com o mesmo prompt e lista de categorias do node "classificar" do
+        fluxo real "Orquestrador" (replicados no código desta rota — fonte
+        da verdade continua sendo o fluxo no banco). Sem Bedrock disponível,
+        degrada pro matcher por palavra-chave (mesmo fallback do resto do
+        engine). SEM autenticação — protótipo/temporário, não subir pra
+        produção sem token.
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/TykheIdentificarFluxoReq' } } } }
+      responses:
+        "200": { description: "categoria identificada", content: { application/json: { schema: { $ref: '#/components/schemas/TykheIdentificarFluxoResp' } } } }
+        "400": { description: "relato ausente", content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
 
   # ── Mock (teste) ───────────────────────────────────────────
   /mock/verificar-cpf:

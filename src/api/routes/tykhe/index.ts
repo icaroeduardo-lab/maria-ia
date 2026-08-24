@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { tykheAssistidosRoutes } from "./assistidos.js";
 import { tykheMensagemRoutes } from "./mensagem.js";
+import { tykheIdentificarFluxoRoutes } from "./identificar-fluxo.js";
 
 // Rotas DESMEMBRADAS especificamente pra Tykhe (plataforma legada que hoje
 // detém o número real de WhatsApp) chamar durante a integração Maria↔Tykhe —
@@ -10,4 +11,5 @@ import { tykheMensagemRoutes } from "./mensagem.js";
 export async function tykheRoutes(app: FastifyInstance) {
   await app.register(tykheAssistidosRoutes);
   await app.register(tykheMensagemRoutes);
+  await app.register(tykheIdentificarFluxoRoutes);
 }
