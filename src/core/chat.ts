@@ -137,13 +137,18 @@ export async function tipoPerguntaPendente(sessionId: string): Promise<TipoPergu
   return resolverTipoPergunta(chave, flowNodes);
 }
 
-// Processa uma mensagem de qualquer canal (web ou whatsapp), preservando o
+// Status resumido de uma conversa pra consumidores síncronos (ex: Tykhe, que
+// espera resposta + status no mesmo request/response — diferente de
+// WhatsApp, que só dispara a mensagem de saída pro canal sem esperar volta).
+export type StatusConversa = "em_andamento" | "concluido" | "handoff_humano";
+
+// Processa uma mensagem de qualquer canal (web, whatsapp ou tykhe), preservando o
 // padrão crítico de multi-turn: thread novo → invoke(estado inicial);
 // resume → updateState + invoke(null). NUNCA invoke(input não-nulo) em thread existente.
 export async function processarMensagem(
   sessionId: string,
   message: string | undefined,
-  canal: "web" | "whatsapp"
+  canal: "web" | "whatsapp" | "tykhe"
 ) {
   const { graph, flowId } = await obterGraph();
   const config = { configurable: { thread_id: sessionId } };
@@ -157,7 +162,7 @@ export async function processarMensagem(
     const aviso = new AIMessage(
       "Conversa reiniciada. 🔄 Quando quiser, é só mandar uma mensagem que começamos de novo."
     );
-    return { result: null, newMessages: [aviso] };
+    return { result: null, newMessages: [aviso], status: "em_andamento" as StatusConversa, categoria: null };
   }
 
   // handoff pra atendente humano: bot fica em silêncio (nada de resposta
@@ -167,7 +172,7 @@ export async function processarMensagem(
   if (prisma) {
     const conversa = await prisma.conversation.findUnique({
       where: { sessionId },
-      select: { handoffStatus: true },
+      select: { handoffStatus: true, categoria: true },
     });
     if (conversa?.handoffStatus === "aguardando" || conversa?.handoffStatus === "em_atendimento") {
       if (message) {
@@ -175,7 +180,12 @@ export async function processarMensagem(
           .updateState(config, { messages: [new HumanMessage(message)] })
           .catch((err) => console.error("[chat] falha ao registrar mensagem durante handoff:", err));
       }
-      return { result: null, newMessages: [] };
+      return {
+        result: null,
+        newMessages: [],
+        status: "handoff_humano" as StatusConversa,
+        categoria: conversa.categoria ?? null,
+      };
     }
   }
 
@@ -244,7 +254,7 @@ export async function processarMensagem(
     const fallback = new AIMessage(
       "Tive um probleminha técnico agora 😔. Pode me mandar a mensagem de novo? Já volto a te ajudar."
     );
-    return { result: null, newMessages: [fallback] };
+    return { result: null, newMessages: [fallback], status: "em_andamento" as StatusConversa, categoria: null };
   }
 
   const newMessages = (result.messages as BaseMessage[])
@@ -258,11 +268,24 @@ export async function processarMensagem(
     newMessages.unshift(new AIMessage(`${ola} Vamos continuar de onde paramos.`));
   }
 
-  await rastrearConversa(sessionId, canal, flowId, graph, config).catch((err) =>
+  // estado pós-invoke (mesmo padrão de done que /admin/test-chat usa —
+  // montarRespostaTeste em routes/admin.ts): next vazio = chegou num nó
+  // encerrar; state.handoff === "aguardando" = nó transferir_humano rodou
+  // neste turno. Lido 1x aqui e repassado pra rastrearConversa evitar 2
+  // getState idênticos no mesmo turno. Só leitura — não afeta o padrão
+  // crítico de multi-turn acima (nenhum invoke/updateState adicional).
+  const estadoAtual = await graph.getState(config);
+  const emAndamento = (estadoAtual.next?.length ?? 0) > 0;
+  const valoresAtuais = estadoAtual.values as Record<string, unknown>;
+  const emHandoff = valoresAtuais.handoff === "aguardando";
+  const categoriaAtual = (valoresAtuais.categoria as string) || null;
+  const status: StatusConversa = emHandoff ? "handoff_humano" : emAndamento ? "em_andamento" : "concluido";
+
+  await rastrearConversa(sessionId, canal, flowId, estadoAtual, emAndamento, emHandoff).catch((err) =>
     console.error("[tracking] falha ao registrar conversa:", err)
   );
 
-  return { result, newMessages };
+  return { result, newMessages, status, categoria: categoriaAtual };
 }
 
 // Nota de satisfação (csat, card #20260128): dadosColetados.csat vem de uma
@@ -278,24 +301,19 @@ export function csatValido(bruto: unknown): number | null {
 
 // Espelha o estado da conversa no Postgres para o painel admin/analytics.
 // Sem DATABASE_URL é no-op — o atendimento nunca depende do tracking.
+// emAndamento/emHandoff vêm já calculados de processarMensagem (mesmo
+// getState do pós-invoke — evita reler o checkpoint 2x no mesmo turno).
 async function rastrearConversa(
   sessionId: string,
   canal: string,
   flowId: string | null,
-  graph: typeof graphEstatico,
-  config: { configurable: { thread_id: string } }
+  atual: Awaited<ReturnType<typeof graphEstatico.getState>>,
+  emAndamento: boolean,
+  emHandoff: boolean
 ) {
   if (!prisma) return;
-  const atual = await graph.getState(config);
   const v = atual.values as Record<string, unknown>;
-  const emAndamento = (atual.next?.length ?? 0) > 0;
   const coletados = (v.dadosColetados as Record<string, unknown>) ?? {};
-
-  // nó transferir_humano acabou de rodar nesse invoke: entra em handoff em
-  // vez de completar normalmente. O campo `handoff` no state é resetado pelo
-  // endpoint /admin/handoff/{sessionId}/liberar (senão ficaria "sticky" no
-  // checkpoint e reabriria o handoff no próximo invoke depois de liberado).
-  const emHandoff = v.handoff === "aguardando";
 
   // no fim do atendimento: gera resumo + metadados limpos (envio/registro à DPERJ)
   let resumo: string | null = null;

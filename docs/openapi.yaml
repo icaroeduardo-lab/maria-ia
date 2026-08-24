@@ -337,6 +337,23 @@ components:
           enum: [nome, telefone, email, cep, logradouro, numero, complemento, bairro, municipio, uf]
           description: "1 campo por vez — menu fixo da Tykhe restringe a escolha"
         valor: { type: string }
+    TykheMensagemReq:
+      type: object
+      required: [chatId]
+      description: "mensagem OU audioUrl — pelo menos um dos dois é obrigatório (400 se nenhum vier)"
+      properties:
+        chatId: { type: string, description: "id do chat na Tykhe — vira sessionId/thread do LangGraph, precisa ser estável entre chamadas da mesma conversa" }
+        mensagem: { type: string, description: "texto digitado pelo assistido" }
+        audioUrl: { type: string, description: "URL de um áudio pra baixar e transcrever (AWS Transcribe, mesmo pipeline do WhatsApp) antes de rodar o motor — ignorado se `mensagem` vier preenchida" }
+        customerId: { type: string }
+    TykheMensagemResp:
+      type: object
+      required: [resposta, status, migrado]
+      properties:
+        resposta: { type: string, description: "texto concatenado das mensagens de saída da Maria" }
+        categoria: { type: string, description: "categoria/assunto identificado, se já disponível no estado da conversa" }
+        status: { type: string, enum: [em_andamento, concluido, handoff_humano] }
+        migrado: { type: boolean, description: "true só quando a categoria identificada é 'pessoa_presa' ou 'violencia_domestica' (únicas 2 já reconstruídas pra Maria conduzir sozinha) — false pra qualquer outra, sinaliza a Tykhe pra assumir de volta com o fluxo legado dela" }
     CasoDetalheReq:
       type: object
       properties:
@@ -886,18 +903,6 @@ paths:
     post:
       tags: [Webhook]
       summary: Recebe mensagens do WhatsApp (responde 200 imediato, processa async)
-      security: []
-      responses:
-        "200": { description: Aceito }
-
-  /webhook/telegram:
-    post:
-      tags: [Webhook]
-      summary: >-
-        Recebe updates do Telegram Bot API (mensagem de texto, callback_query de
-        botão inline, foto, documento ou voz/áudio). Responde 200 imediato,
-        processa async. Sem verificação tipo Meta — ativado via setWebhook (ver
-        comentário em core/channels/telegram.ts).
       security: []
       responses:
         "200": { description: Aceito }
@@ -1887,6 +1892,29 @@ paths:
         "200": { description: "{ sucesso: true, dados }" }
         "400": { description: "cpf inválido, campo fora do enum aceito, ou valor ausente", content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
         "404": { description: assistido não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+  /api/tykhe/mensagem:
+    post:
+      tags: [Tykhe (integração)]
+      summary: "Processa 1 mensagem do fluxo da Tykhe rodando o motor (LangGraph) — SEM autenticação (protótipo)"
+      description: >
+        Peça central da integração Maria↔Tykhe: recebe cada mensagem do
+        assistido (via chatId da Tykhe, que vira sessionId/thread do
+        LangGraph — precisa ser estável entre chamadas da mesma conversa,
+        chave de continuidade do checkpoint) e devolve a resposta da Maria
+        rodando processarMensagem() de verdade (mesmo motor de WhatsApp/web,
+        canal "tykhe"). Aceita texto (`mensagem`) ou áudio (`audioUrl` —
+        baixado e transcrito via AWS Transcribe, mesmo pipeline compartilhado
+        do WhatsApp, antes de rodar o motor). Devolve `migrado: boolean` —
+        true só quando a categoria identificada pelo Orquestrador já foi
+        reconstruída pra Maria conduzir sozinha
+        ("pessoa_presa"/"violencia_domestica" hoje); false faz a Tykhe assumir
+        de volta com o fluxo legado dela (changeFlowNode do lado dela). SEM
+        autenticação — protótipo/temporário, não subir pra produção sem token.
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/TykheMensagemReq' } } } }
+      responses:
+        "200": { description: "resposta da Maria + status da conversa", content: { application/json: { schema: { $ref: '#/components/schemas/TykheMensagemResp' } } } }
+        "400": { description: "chatId ausente, ou nem mensagem nem audioUrl informados", content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
 
   # ── Mock (teste) ───────────────────────────────────────────
   /mock/verificar-cpf:

@@ -8,33 +8,34 @@ import { randomUUID } from "crypto";
 import { env } from "./env.js";
 import { baixarMidia } from "./graphMedia.js";
 
-// Transcreve áudio do WhatsApp (mensagem de voz) com AWS Transcribe (pt-BR).
-// Fluxo: baixa a mídia da Meta (graphMedia.ts) → S3 → job do Transcribe → texto.
-// Áudios em audios/ expiram por lifecycle do bucket (são PII efêmera) —
-// regra real em infra/terraform/s3-audios.tf (issue #75; antes desse
-// arquivo o comentário aqui era só uma intenção, sem lifecycle de verdade).
+// Transcreve áudio (mensagem de voz) com AWS Transcribe (pt-BR). Pipeline
+// S3 → job do Transcribe → poll é canal-agnóstico (WhatsApp e, agora, Tykhe —
+// ver src/api/routes/tykhe/mensagem.ts — só diferem em COMO baixam os bytes:
+// Graph API com media-id+token vs. fetch simples de uma URL). Áudios em
+// audios/ expiram por lifecycle do bucket (são PII efêmera) — regra real em
+// infra/terraform/s3-audios.tf (issue #75; antes desse arquivo o comentário
+// aqui era só uma intenção, sem lifecycle de verdade).
 
 const BUCKET = env.s3Bucket();
 
 const s3 = new S3Client({ region: env.awsRegion() });
 const transcribe = new TranscribeClient({ region: env.awsRegion() });
 
-// Retorna o texto transcrito, ou "" em falha (o canal trata o fallback).
-export async function transcreverAudioWA(mediaId: string, token: string | undefined): Promise<string> {
-  if (!token) {
-    console.warn("[transcribe] sem WA_ACCESS_TOKEN — não dá pra baixar o áudio");
-    return "";
-  }
+// Núcleo do pipeline: recebe os BYTES já baixados pelo canal (nada de
+// mediaId/token aqui) — sobe pro S3, roda o job do Transcribe, faz poll até
+// concluir (teto 60s) e devolve o texto. "" em qualquer falha (o canal trata
+// o fallback). `jobPrefix` só identifica a origem no nome do job/logs
+// (ex: "wa"/"tykhe") — não afeta o resultado.
+export async function transcreverAudio(audio: Buffer, jobPrefix: string): Promise<string> {
   try {
-    const audio = await baixarMidia(mediaId, token);
     const key = `audios/${randomUUID()}.ogg`;
     await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: audio, ContentType: "audio/ogg" }));
 
-    const job = `wa-${randomUUID()}`;
+    const job = `${jobPrefix}-${randomUUID()}`;
     await transcribe.send(new StartTranscriptionJobCommand({
       TranscriptionJobName: job,
       LanguageCode: "pt-BR",
-      MediaFormat: "ogg", // WhatsApp envia voz em OGG/Opus
+      MediaFormat: "ogg", // WhatsApp/Tykhe enviam voz em OGG/Opus (sem conversão extra)
       Media: { MediaFileUri: `s3://${BUCKET}/${key}` },
     }));
 
@@ -61,6 +62,23 @@ export async function transcreverAudioWA(mediaId: string, token: string | undefi
     }
     console.warn("[transcribe] timeout aguardando o job");
     return "";
+  } catch (err) {
+    console.error("[transcribe] erro:", err);
+    return "";
+  }
+}
+
+// Wrapper fino pro WhatsApp: baixa a mídia da Graph API (Meta) e delega pro
+// pipeline genérico acima. Retorna o texto transcrito, ou "" em falha (o
+// canal trata o fallback).
+export async function transcreverAudioWA(mediaId: string, token: string | undefined): Promise<string> {
+  if (!token) {
+    console.warn("[transcribe] sem WA_ACCESS_TOKEN — não dá pra baixar o áudio");
+    return "";
+  }
+  try {
+    const audio = await baixarMidia(mediaId, token);
+    return await transcreverAudio(audio, "wa");
   } catch (err) {
     console.error("[transcribe] erro:", err);
     return "";
