@@ -346,6 +346,14 @@ components:
         mensagem: { type: string, description: "texto digitado pelo assistido" }
         audioUrl: { type: string, description: "URL de um áudio pra baixar e transcrever (AWS Transcribe, mesmo pipeline do WhatsApp) antes de rodar o motor — ignorado se `mensagem` vier preenchida" }
         customerId: { type: string }
+        dadosConhecidos:
+          type: object
+          description: "dados que a Tykhe já coletou (ex: consultou o CPF direto no Verde, fora do motor da Maria) — semeados em dadosColetados (resultado_cpf.dados + cpf flat) SÓ na 1ª chamada de um chatId novo (thread ainda não existe no checkpointer); em chamadas seguintes do mesmo chatId é ignorado, mesmo se vier preenchido de novo"
+          properties:
+            cpf: { type: string }
+            idPessoa: { type: number }
+            nome: { type: string }
+            email: { type: string }
     TykheMensagemResp:
       type: object
       required: [resposta, status, migrado]

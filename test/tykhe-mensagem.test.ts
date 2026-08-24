@@ -16,6 +16,7 @@ import {
   GetTranscriptionJobCommand,
 } from "@aws-sdk/client-transcribe";
 import { montarApp } from "../src/api/app.js";
+import { graph as graphEstatico } from "../src/core/graph.js";
 
 // Cobre POST /api/tykhe/mensagem (src/api/routes/tykhe/mensagem.ts) — a peça
 // central da integração Maria↔Tykhe: recebe 1 mensagem por chamada e roda o
@@ -242,4 +243,83 @@ test("audioUrl: transcrição falha (job FAILED) → fallback amigável, sem toc
   assert.match(body.resposta, /não consegui entender o áudio/);
   assert.equal(body.status, "em_andamento");
   assert.equal(body.migrado, false);
+});
+
+// ── dadosConhecidos: semeia resultado_cpf/cpf quando a TYKHE já consultou o
+// CPF no Verde por fora do motor da Maria (sem isso, node pp_set_idpessoa do
+// fluxo "Pessoa Presa" leria {{resultado_cpf.dados.idPessoa}} vazio). Só faz
+// efeito na 1ª chamada de um chatId (thread nova) — verificado direto no
+// checkpoint do grafo estático (mesmo padrão de GET /conversations/:id/historico
+// em admin.ts, que também lê graphEstatico.getState() pelo thread_id).
+
+test("dadosConhecidos: 1ª chamada de um chatId novo semeia resultado_cpf/cpf em dadosColetados", async () => {
+  const app = await montarApp();
+  const chatId = `teste-tykhe-dados-conhecidos-${Date.now()}-a`;
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/tykhe/mensagem",
+    payload: {
+      chatId,
+      mensagem: "oi",
+      dadosConhecidos: { cpf: "11122233344", idPessoa: 4242, nome: "Maria da Silva", email: "maria@example.com" },
+    },
+  });
+  await app.close();
+
+  assert.equal(res.statusCode, 200);
+
+  const st = await graphEstatico.getState({ configurable: { thread_id: `tykhe:${chatId}` } });
+  const coletados = (st.values?.dadosColetados ?? {}) as Record<string, string>;
+  assert.equal(coletados.cpf, "11122233344", "cpf flat semeado (api_encaminhar precisa dele achatado)");
+  const resultadoCpf = JSON.parse(coletados.resultado_cpf ?? "null");
+  assert.equal(resultadoCpf.encontrado, true);
+  assert.equal(
+    resultadoCpf.dados.idPessoa,
+    4242,
+    "pp_set_idpessoa lê {{resultado_cpf.dados.idPessoa}} — precisa vir preenchido"
+  );
+  assert.equal(resultadoCpf.dados.nome, "Maria da Silva");
+  assert.equal(resultadoCpf.dados.cpf, "11122233344");
+  assert.equal(resultadoCpf.dados.email, "maria@example.com");
+});
+
+test("dadosConhecidos: 2ª chamada do MESMO chatId é ignorada — não sobrescreve o que já foi semeado", async () => {
+  const app = await montarApp();
+  const chatId = `teste-tykhe-dados-conhecidos-${Date.now()}-b`;
+
+  // turno 1: thread nova, semeia idPessoa=1 / cpf original
+  const r1 = await app.inject({
+    method: "POST",
+    url: "/api/tykhe/mensagem",
+    payload: {
+      chatId,
+      mensagem: "oi",
+      dadosConhecidos: { cpf: "11111111111", idPessoa: 1, nome: "Original" },
+    },
+  });
+  assert.equal(r1.statusCode, 200);
+
+  // turno 2: MESMO chatId (thread já existe), dadosConhecidos DIFERENTE no
+  // body — deve ser ignorado (thread resume via updateState+invoke(null),
+  // dadosIniciais só é aplicado no invoke inicial de thread nova)
+  const r2 = await app.inject({
+    method: "POST",
+    url: "/api/tykhe/mensagem",
+    payload: {
+      chatId,
+      mensagem: "true", // aceita LGPD, avança o turno
+      dadosConhecidos: { cpf: "99999999999", idPessoa: 999, nome: "Outro Nome" },
+    },
+  });
+  await app.close();
+
+  assert.equal(r2.statusCode, 200);
+
+  const st = await graphEstatico.getState({ configurable: { thread_id: `tykhe:${chatId}` } });
+  const coletados = (st.values?.dadosColetados ?? {}) as Record<string, string>;
+  assert.equal(coletados.cpf, "11111111111", "cpf da 1ª chamada permanece — 2ª chamada não pode sobrescrever");
+  const resultadoCpf = JSON.parse(coletados.resultado_cpf ?? "null");
+  assert.equal(resultadoCpf.dados.idPessoa, 1, "idPessoa da 1ª chamada permanece — 999 da 2ª deve ser ignorado");
+  assert.equal(resultadoCpf.dados.nome, "Original");
 });

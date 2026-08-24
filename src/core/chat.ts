@@ -145,10 +145,19 @@ export type StatusConversa = "em_andamento" | "concluido" | "handoff_humano";
 // Processa uma mensagem de qualquer canal (web, whatsapp ou tykhe), preservando o
 // padrão crítico de multi-turn: thread novo → invoke(estado inicial);
 // resume → updateState + invoke(null). NUNCA invoke(input não-nulo) em thread existente.
+//
+// dadosIniciais: campos de dadosColetados pra semear ANTES do primeiro invoke —
+// só tem efeito quando o thread é NOVO (mesma condição isResuming abaixo já
+// usada pra telefone_whatsapp/tem_telefone_whatsapp); em thread existente é
+// ignorado silenciosamente (evita reescrever estado no meio da conversa).
+// Hoje usado pela ponte Tykhe (dadosConhecidos do body de /api/tykhe/mensagem
+// — ver tykhe/mensagem.ts) pra semear resultado_cpf/cpf quando a Tykhe já
+// consultou o CPF direto no Verde, fora do motor da Maria.
 export async function processarMensagem(
   sessionId: string,
   message: string | undefined,
-  canal: "web" | "whatsapp" | "tykhe"
+  canal: "web" | "whatsapp" | "tykhe",
+  dadosIniciais?: Record<string, string>
 ) {
   const { graph, flowId } = await obterGraph();
   const config = { configurable: { thread_id: sessionId } };
@@ -246,6 +255,7 @@ export async function processarMensagem(
       dadosColetados: {
         telefone_whatsapp: telefoneWhatsapp,
         tem_telefone_whatsapp: telefoneWhatsapp ? "true" : "false",
+        ...dadosIniciais,
       },
     };
     result = await invokeComRetry(graph, isResuming ? null : estadoInicial, config, isResuming ? 2 : 1);

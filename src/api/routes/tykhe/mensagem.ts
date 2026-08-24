@@ -92,9 +92,48 @@ function ehCategoriaMigrada(categoria: string | null): boolean {
   return CATEGORIAS_MIGRADAS.some((c) => normalizarCategoria(c) === norm);
 }
 
+// Monta dadosColetados pra semear quando a Tykhe já sabe o CPF do assistido
+// (consultou direto no Verde, fora do motor da Maria) — sem isso, node
+// pp_set_idpessoa (fluxo "Pessoa Presa") lê {{resultado_cpf.dados.idPessoa}}
+// vazio e api_encaminhar não acha dadosColetados.cpf, porque essas chaves só
+// existem hoje quando o PRÓPRIO motor roda a Consulta CPF (node no_2ulokx,
+// POST /api/assistidos/consultar) — a Tykhe nunca passa por ali.
+// Grava no MESMO shape que aquele node grava (resultado_cpf = JSON string de
+// { encontrado, dados: {...} } — ver core/engine/builder.ts case "api": a
+// resposta crua vira string, não objeto; dadosColetados é Record<string,string>
+// em state.ts, e resolverCampo/campos.ts já sabe JSON.parse esse formato).
+// Só inclui chaves realmente preenchidas (não grava undefined/null por cima
+// de nada) e só retorna algo se pelo menos um campo veio.
+function dadosIniciaisDeTykhe(d: {
+  cpf?: string;
+  idPessoa?: number;
+  nome?: string;
+  email?: string;
+}): Record<string, string> | undefined {
+  const cpf = typeof d.cpf === "string" && d.cpf.trim() ? d.cpf.trim() : undefined;
+  const idPessoa = typeof d.idPessoa === "number" && Number.isFinite(d.idPessoa) ? d.idPessoa : undefined;
+  const nome = typeof d.nome === "string" && d.nome.trim() ? d.nome.trim() : undefined;
+  const email = typeof d.email === "string" && d.email.trim() ? d.email.trim() : undefined;
+  if (cpf === undefined && idPessoa === undefined && nome === undefined && email === undefined) return undefined;
+
+  const dadosResultado: Record<string, unknown> = {};
+  if (idPessoa !== undefined) dadosResultado.idPessoa = idPessoa;
+  if (nome !== undefined) dadosResultado.nome = nome;
+  if (cpf !== undefined) dadosResultado.cpf = cpf;
+  if (email !== undefined) dadosResultado.email = email;
+
+  const dadosIniciais: Record<string, string> = {
+    resultado_cpf: JSON.stringify({ encontrado: true, dados: dadosResultado }),
+  };
+  if (cpf !== undefined) dadosIniciais.cpf = cpf;
+  return dadosIniciais;
+}
+
 export async function tykheMensagemRoutes(app: FastifyInstance) {
-  // POST /api/tykhe/mensagem — { chatId, mensagem?, audioUrl?, customerId? }
-  // → roda o motor de verdade (LangGraph, processarMensagem em core/chat.ts)
+  // POST /api/tykhe/mensagem — { chatId, mensagem?, audioUrl?, customerId?,
+  // dadosConhecidos? } → roda o motor de verdade (LangGraph, processarMensagem
+  // em core/chat.ts). dadosConhecidos (cpf/idPessoa/nome/email) só é usado na
+  // 1ª chamada de um chatId novo — ver dadosIniciaisDeTykhe() acima.
   // e devolve { resposta, categoria?, status, migrado } pra Tykhe repassar no
   // WhatsApp e decidir (via changeFlowNode do lado dela) se continua com a
   // Maria ou retoma o fluxo legado.
@@ -114,6 +153,7 @@ export async function tykheMensagemRoutes(app: FastifyInstance) {
       mensagem?: string;
       audioUrl?: string;
       customerId?: string;
+      dadosConhecidos?: { cpf?: string; idPessoa?: number; nome?: string; email?: string };
     };
     const chatId = typeof body.chatId === "string" ? body.chatId.trim() : "";
     if (!chatId) return reply.code(400).send({ erro: "chatId obrigatório" });
@@ -142,7 +182,13 @@ export async function tykheMensagemRoutes(app: FastifyInstance) {
     }
 
     const sessionId = `tykhe:${chatId}`;
-    const { newMessages, status, categoria } = await processarMensagem(sessionId, mensagem, "tykhe");
+    // dadosIniciais só faz efeito no PRIMEIRO invoke de uma thread nova
+    // (ver processarMensagem em core/chat.ts — isResuming decide) — chamadas
+    // seguintes do mesmo chatId ignoram dadosConhecidos mesmo se vier de novo,
+    // sem precisar checar aqui se a thread já existe (evita duplicar o
+    // padrão crítico de multi-turn nesta rota).
+    const dadosIniciais = dadosIniciaisDeTykhe(body.dadosConhecidos ?? {});
+    const { newMessages, status, categoria } = await processarMensagem(sessionId, mensagem, "tykhe", dadosIniciais);
 
     return {
       resposta: montarResposta(newMessages),
