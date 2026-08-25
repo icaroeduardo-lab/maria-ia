@@ -22,6 +22,11 @@ export async function limparConversasInativas(diasTtl = TTL_DIAS): Promise<numbe
   for (const { sessionId } of inativas) {
     try {
       await checkpointer.deleteThread(sessionId);
+      // apaga junto o registro SessaoFluxo (flowId da ponte Tykhe salvo pra
+      // essa sessão) — mesma limpeza que #sair/conversa-encerrada fazem em
+      // chat.ts; sem isso, uma sessão reaproveitada depois do TTL herdaria o
+      // flowId de uma conversa que nem existe mais no checkpointer.
+      await prisma.sessaoFluxo.deleteMany({ where: { sessionId } });
       await prisma.conversation.update({
         where: { sessionId },
         data: { status: "abandoned" },

@@ -146,6 +146,50 @@ async function obterGraph(flowId?: string): Promise<{
   }
 }
 
+// Resolve o flowId EFETIVO a usar nesta chamada de processarMensagem().
+// Se o chamador passou flowId explícito nesta chamada, usa esse valor E
+// grava/atualiza (upsert) SessaoFluxo pra essa sessão — cobre tanto a 1ª
+// mensagem de uma thread nova quanto uma eventual troca explícita de flow no
+// meio da conversa. Se não passou, busca o flowId salvo da 1ª chamada — sem
+// isso, uma chamada seguinte da MESMA thread sem flowId (comportamento real
+// da Tykhe: só reenvia o campo obrigatório na 1ª chamada, não nas seguintes)
+// fazia o LangGraph resumir o checkpoint (estado de um grafo específico, ex:
+// "Pessoa Presa") contra o grafo PADRÃO da MariaIA (estruturalmente
+// diferente) — na prática a conversa "reiniciava do zero" (saudação/LGPD em
+// vez de continuar a pergunta certa). Sem Prisma (sem DATABASE_URL): no-op,
+// devolve o parâmetro cru — mesmo comportamento de sempre (web/WhatsApp
+// nunca passam flowId, não têm SessaoFluxo pra buscar, não são afetados).
+async function resolverFlowId(sessionId: string, flowIdChamada?: string): Promise<string | undefined> {
+  if (flowIdChamada) {
+    if (prisma) {
+      await prisma.sessaoFluxo
+        .upsert({
+          where: { sessionId },
+          update: { flowId: flowIdChamada },
+          create: { sessionId, flowId: flowIdChamada },
+        })
+        .catch((err) => console.error("[chat] falha ao gravar SessaoFluxo:", err));
+    }
+    return flowIdChamada;
+  }
+  if (!prisma) return undefined;
+  const salvo = await prisma.sessaoFluxo.findUnique({ where: { sessionId } }).catch(() => null);
+  return salvo?.flowId ?? undefined;
+}
+
+// Apaga o registro SessaoFluxo (se houver) junto com o checkpoint do thread —
+// chamar sempre que checkpointer.deleteThread(sessionId) for chamado. Sem
+// isso, uma conversa reiniciada do zero (thread_id reaproveitado) herdaria o
+// flowId de uma conversa anterior que nem existe mais — mesma classe de bug
+// do problema original, só que na direção contrária (flowId "grudado" demais
+// em vez de "esquecido" demais).
+async function limparSessaoFluxo(sessionId: string): Promise<void> {
+  if (!prisma) return;
+  await prisma.sessaoFluxo
+    .deleteMany({ where: { sessionId } })
+    .catch((err) => console.error("[chat] falha ao limpar SessaoFluxo:", err));
+}
+
 // Resolve o tipoPergunta de uma chave contra o flow ativo (builder dinâmico —
 // flowNodes já expandido via nosExpandidos()) ou, na ausência de flow
 // dinâmico (flowNodes null, grafo estático), o registro estático
@@ -198,15 +242,16 @@ export type StatusConversa = "em_andamento" | "concluido" | "handoff_humano";
 // flowId: roda um fluxo ESPECÍFICO (ver carregarGrafoPorId acima) em vez do
 // flow ativo — pula o MariaIA inteiro e começa direto num subfluxo (ex: a
 // Tykhe já fez saudação/LGPD/CPF do lado dela e a pessoa já escolheu a
-// categoria; não faz sentido reclassificar). Resolvido via obterGraph(flowId)
-// em TODA chamada (não só na 1ª) — mesmo padrão do chat de teste
-// (/admin/test-chat): idempotente, sempre compila o mesmo grafo pro mesmo
-// flowId, então recompilar de novo num resume não muda nada (não reinicia o
-// fluxo — quem decide isso é isResuming/invoke(null) abaixo, igual sempre).
-// Se o chamador não reenviar flowId numa chamada seguinte, cai pro flow
-// ativo — por isso o flowId deve ser estável para o mesmo chatId/thread
-// durante toda a conversa (responsabilidade do chamador, mesmo contrato de
-// "não trocar o flow ativo no meio de uma conversa" que já existe hoje).
+// categoria; não faz sentido reclassificar). O valor EFETIVO usado nesta
+// chamada é resolvido por resolverFlowId() logo no topo, NÃO o parâmetro cru:
+// se passado, grava/atualiza SessaoFluxo (tabela Prisma) pra essa sessão; se
+// omitido, busca o flowId salvo da 1ª chamada dessa sessão — por isso o
+// chamador NÃO precisa reenviar flowId em toda chamada (a Tykhe só manda o
+// campo obrigatório na 1ª mensagem de um chatId; chamadas seguintes resumem
+// pro MESMO flow automaticamente, sem depender de disciplina externa). Uma
+// troca explícita de flowId no meio da conversa também é suportada — grava
+// por cima do valor salvo. SessaoFluxo é limpa junto com o checkpoint sempre
+// que a thread é apagada (#sair, conversa encerrada — ver limparSessaoFluxo).
 export async function processarMensagem(
   sessionId: string,
   message: string | undefined,
@@ -214,7 +259,8 @@ export async function processarMensagem(
   dadosIniciais?: Record<string, string>,
   flowId?: string
 ) {
-  const { graph, flowId: flowIdEfetivo } = await obterGraph(flowId);
+  const flowIdResolvido = await resolverFlowId(sessionId, flowId);
+  let { graph, flowId: flowIdEfetivo } = await obterGraph(flowIdResolvido);
   const config = { configurable: { thread_id: sessionId } };
 
   // comando #sair: reinicia a conversa — apaga o checkpoint do thread.
@@ -223,6 +269,7 @@ export async function processarMensagem(
     await checkpointer
       .deleteThread(sessionId)
       .catch((err) => console.error("[chat] falha ao reiniciar thread:", err));
+    await limparSessaoFluxo(sessionId);
     // BUG 2026-08-18 (relatado pelo usuário no Telegram): #sair só limpava o
     // checkpoint do LangGraph, nunca o handoffStatus da Conversation — se a
     // sessão tinha entrado em handoff (transferir_humano) antes, o flag
@@ -281,7 +328,19 @@ export async function processarMensagem(
     await checkpointer
       .deleteThread(sessionId)
       .catch((err) => console.error("[chat] falha ao reiniciar thread encerrado:", err));
+    await limparSessaoFluxo(sessionId);
     prevLen = 0;
+    // flowIdResolvido veio de uma SessaoFluxo que acabamos de apagar (o
+    // chamador NÃO passou flowId explícito nesta chamada) — a conversa que
+    // está reiniciando do zero não deve herdar o flow da conversa anterior
+    // que nem existe mais (mesma classe de bug do problema original, só que
+    // "grudado" demais em vez de "esquecido" demais). Recompila pro flow
+    // padrão/ativo antes do invoke inicial abaixo.
+    if (!flowId && flowIdResolvido) {
+      const recarregado = await obterGraph(undefined);
+      graph = recarregado.graph;
+      flowIdEfetivo = recarregado.flowId;
+    }
   }
 
   const isResuming = prevLen > 0;

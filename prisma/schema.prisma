@@ -101,6 +101,20 @@ model Conversation {
   @@index([handoffStatus])
 }
 
+// Lembra qual flowId uma thread/sessão usou na 1ª mensagem — hoje só a ponte
+// Tykhe (POST /api/tykhe/mensagem) passa flowId explícito pra pular o MariaIA
+// inteiro e começar direto num fluxo específico (ver processarMensagem em
+// core/chat.ts). Sem isso, uma 2ª chamada da MESMA thread SEM flowId (a Tykhe
+// só reenvia o campo obrigatório na 1ª chamada) fazia o LangGraph resumir um
+// checkpoint de um grafo específico rodando contra o grafo PADRÃO da MariaIA
+// (estruturalmente diferente) — a conversa "reiniciava do zero" na prática.
+// Metadado leve, sem versionamento — mesmo padrão de Flow.isTemplate/dadosTeste.
+model SessaoFluxo {
+  sessionId String   @id
+  flowId    String
+  criadoEm  DateTime @default(now())
+}
+
 model User {
   id    String @id @default(cuid())
   email String @unique
