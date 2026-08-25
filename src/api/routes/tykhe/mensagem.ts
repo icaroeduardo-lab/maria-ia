@@ -153,6 +153,11 @@ export async function tykheMensagemRoutes(app: FastifyInstance) {
   // contrato exato (só afeta onde a 1ª mensagem de um chatId novo começa;
   // chamadas seguintes do mesmo chatId resumem normal, flowId não reinicia
   // nada). Combina com dadosConhecidos: os dois juntos, na 1ª mensagem.
+  // Só precisa ser mandado na 1ª chamada de um chatId novo — processarMensagem()
+  // persiste o flowId usado (tabela SessaoFluxo) e reusa automaticamente nas
+  // chamadas seguintes mesmo se a Tykhe não reenviar (comportamento real dela:
+  // só manda o campo obrigatório na 1ª chamada). Reenviar num chatId já
+  // existente troca o flow salvo (troca explícita), não é ignorado.
   //
   // processarMensagem() já centraliza o padrão crítico de multi-turn (thread
   // novo → invoke(estado inicial); resume → updateState + invoke(null)) —
