@@ -63,6 +63,15 @@ __start__ → saudacao → lgpd [INTERRUPT]
 - Sender: `**` → `*` (markdown WhatsApp); texto acumulado vira body do interactive; sem `WA_ACCESS_TOKEN` só loga payload (modo dev); `WA_GRAPH_URL` sobrescrevível para teste
 - Ambos os canais usam `processarMensagem()` de `src/chat.ts` (padrão crítico preservado; canal definido no primeiro invoke)
 
+**Telegram (`src/core/channels/telegram.ts`) — canal de teste alternativo:**
+- `POST /webhook/telegram` → sem verificação tipo Meta; ativado 1x via `setWebhook` (manual, refazer quando a URL pública do tunnel mudar — mesma dor do Callback URL da Meta)
+- `sessionId = "tg:<chat_id>"`; dedupe por `update_id` (`src/core/dedupe.ts`, compartilhado com WhatsApp)
+- Botão inline (`callback_query`) → responde `answerCallbackQuery` no recebimento do webhook (não espera o grafo — evita o botão ficar "carregando"), `callback_data` vira a resposta do usuário
+- Sender: `parse_mode: "Markdown"` clássico (`**` → `*`, igual WhatsApp); `options`/`boolean`/`cta_url` viram `inline_keyboard`; sem `TELEGRAM_BOT_TOKEN` só loga (modo dev)
+- Reusa a mesma fila SQS FIFO do WhatsApp (`MsgFila.canal` decide o dispatch no worker — ver `src/worker/worker.ts`)
+- Foto/documento (issue #74, mesmo suporte do WhatsApp): só baixa mídia se `tipoPerguntaPendente(sessionId) === "documento"`; download via `getFile` (Bot API) → `file_path` → `GET /file/bot<TOKEN>/<file_path>` (diferente da Graph API — token na URL, não em header); grava no mesmo bucket/convenção de `src/core/documentos.ts`. Foto sempre chega como JPEG (Telegram recomprime); mimetype real do documento vem em `message.document.mime_type`.
+- Voz/áudio (`message.voice`/`message.audio`, mesmo suporte do WhatsApp): SEM gate de contexto — aceito em qualquer ponto da conversa. Baixa via o mesmo `getFile`, transcreve com AWS Transcribe (`src/core/transcribe.ts`, `transcreverAudio()` — pipeline S3→job→poll compartilhado com o WhatsApp, cada canal só baixa os bytes do seu jeito) e trata o texto como se fosse digitado. Falha/vazio → pede pra escrever de novo (mesmo fallback do WhatsApp).
+
 **Serviços:** `familia_pensao` | `trabalhista` | `inss_federal` | `penal` → `outros`
 
 **Extrator (`nodes/atendimento/extrator.ts`) — anti-alucinação (Haiku chuta muito):**
@@ -166,6 +175,10 @@ DPERJ_API_KEY=
 WA_PHONE_NUMBER_ID=
 WA_ACCESS_TOKEN=
 WA_WEBHOOK_VERIFY_TOKEN=
+# Telegram — canal de teste alternativo (sem token de 24h como o WA de teste).
+# Sem TELEGRAM_BOT_TOKEN o sender só loga (modo dev). Ativar com setWebhook
+# manual — ver comentário no topo de src/core/channels/telegram.ts.
+TELEGRAM_BOT_TOKEN=
 # Próximas fases:
 POSTGRES_URL=
 REDIS_URL=

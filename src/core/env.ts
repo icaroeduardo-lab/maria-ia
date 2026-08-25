@@ -36,6 +36,12 @@ export const env = {
   // rate limit do webhook — mensagens/min por número (card #20260122)
   waRateLimitMsgsMin: () => num(process.env.WA_RATE_LIMIT_MSGS_MIN, 20),
 
+  // Telegram (Bot API) — canal de teste alternativo ao WhatsApp: sem token
+  // de 24h, mais simples de operar em dev. Sem TELEGRAM_BOT_TOKEN, o sender
+  // só loga o payload (modo dev), mesmo padrão do WhatsApp sem WA_ACCESS_TOKEN.
+  telegramBotToken: () => process.env.TELEGRAM_BOT_TOKEN,
+  telegramApiUrl: () => process.env.TELEGRAM_API_URL ?? "https://api.telegram.org",
+
   // PDPJ (processos)
   pdpjApiUrl: () => semBarra(process.env.PDPJ_API_URL ?? ""),
   pdpjApiToken: () => process.env.PDPJ_API_TOKEN ?? "",
@@ -63,6 +69,15 @@ export const env = {
   // daquele módulo. Precisa caber com folga no timeoutMs (default 10s) do
   // node "api" do builder que chama essa rota.
   ocrTextractOrcamentoMs: () => num(process.env.OCR_TEXTRACT_ORCAMENTO_MS, 8000),
+  // TEMPORÁRIO — só para apresentação/demo (pedido 2026-08-17). Quando
+  // "true", POST /api/documentos/verificar SEMPRE responde match:true sem
+  // tocar S3/Textract (bypass total — contorna também o bug intermitente de
+  // AccessDenied no ListObjectsV2, ver comentário em ocr-documento.ts).
+  // Default false/ausente = comportamento real preservado. Ver instruções de
+  // ligar/desligar em produção no topo de src/api/routes/documentos.ts e em
+  // infra/terraform/secrets.tf — NUNCA deixar ligada fora do horário da
+  // apresentação.
+  demoOcrSemprePassa: () => process.env.DEMO_OCR_SEMPRE_PASSA === "true",
 
   // Timers / limites
   conversaTtlDias: () => num(process.env.CONVERSA_TTL_DIAS, 30),

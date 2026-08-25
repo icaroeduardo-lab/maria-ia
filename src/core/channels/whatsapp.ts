@@ -6,9 +6,16 @@ import { transcreverAudioWA } from "../transcribe.js";
 import { baixarMidia } from "../graphMedia.js";
 import { filaConfigurada, enfileirar } from "../queue.js";
 import { env } from "../env.js";
+import { criarDedupe } from "../dedupe.js";
 import { cacheIncr, cacheGet, cacheSet } from "../cache.js";
-import { MIME_ACEITOS, TAMANHO_MAX_BYTES, salvarDocumento, mimeReal, type MimeAceito } from "../documentos.js";
-import { toWhatsAppPayloads, } from "./payloads.js";
+import {
+  MIME_ACEITOS,
+  TAMANHO_MAX_BYTES,
+  salvarDocumento,
+  mimeReal,
+  type MimeAceito,
+} from "../documentos.js";
+import { toWhatsAppPayloads } from "./payloads.js";
 
 export { toWhatsAppPayloads } from "./payloads.js";
 
@@ -25,7 +32,7 @@ const API_VERSION = () => env.waApiVersion();
 
 export interface MensagemRecebida {
   id: string;
-  from: string;   // wa_id, ex: "5521999990000"
+  from: string; // wa_id, ex: "5521999990000"
   texto?: string;
   audioId?: string; // mensagem de voz → transcrita via AWS Transcribe
   // imagem/documento (issue #74) — mirror de audioId: só guarda o id aqui,
@@ -176,19 +183,8 @@ export async function enviarWhatsApp(to: string, messages: BaseMessage[]): Promi
 
 // ── Rotas ────────────────────────────────────────────────────────────────────
 
-// dedupe de entregas repetidas da Meta (retry de webhook)
-const processados = new Set<string>();
-function jaProcessado(id: string): boolean {
-  if (processados.has(id)) return true;
-  processados.add(id);
-  if (processados.size > 1000) {
-    for (const antigo of processados) {
-      processados.delete(antigo);
-      if (processados.size <= 500) break;
-    }
-  }
-  return false;
-}
+// dedupe de entregas repetidas da Meta (retry de webhook) — ver ../dedupe.ts
+const jaProcessado = criarDedupe();
 
 // Rate limit por número (card #20260122) — janela fixa de 60s, via cacheIncr
 // (Redis com fallback em memória; NUNCA bloqueia por falha do limiter).
@@ -209,7 +205,9 @@ async function avisarLimiteExcedido(numero: string): Promise<void> {
   await cacheSet(chaveAviso, true, 60);
   console.warn(`[whatsapp] rate limit excedido — número ${mascararNumero(numero)}`);
   await enviarWhatsApp(numero, [
-    new AIMessage("Recebi muitas mensagens suas bem rapidinho! 🙏 Me dá um instante e manda de novo em instantes."),
+    new AIMessage(
+      "Recebi muitas mensagens suas bem rapidinho! 🙏 Me dá um instante e manda de novo em instantes."
+    ),
   ]).catch((err) => console.error("[whatsapp] falha ao avisar rate limit:", err));
 }
 
@@ -240,7 +238,9 @@ export async function processarMensagemWhatsApp(msg: MensagemRecebida): Promise<
     });
     if (tipoPendente !== "documento") {
       await enviarWhatsApp(msg.from, [
-        new AIMessage("Não estou esperando um documento agora. Se precisar, é só me contar o que você precisa. 🙂"),
+        new AIMessage(
+          "Não estou esperando um documento agora. Se precisar, é só me contar o que você precisa. 🙂"
+        ),
       ]);
       return;
     }
@@ -319,7 +319,9 @@ export async function whatsappRoutes(app: FastifyInstance) {
               const e = st.errors?.[0];
               console.error(`[whatsapp] entrega falhou para ${st.recipient_id}: ${e?.code} ${e?.title}`);
             }
-    } catch { /* ignora */ }
+    } catch {
+      /* ignora */
+    }
 
     (async () => {
       for (const msg of extrairMensagens(req.body)) {
@@ -331,7 +333,7 @@ export async function whatsappRoutes(app: FastifyInstance) {
         // com fila (produção): a api só enfileira; o worker processa.
         // sem fila (dev): processa inline aqui mesmo.
         if (filaConfigurada()) {
-          await enfileirar(msg);
+          await enfileirar({ ...msg, canal: "whatsapp" });
         } else {
           await processarMensagemWhatsApp(msg);
         }

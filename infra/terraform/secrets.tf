@@ -41,11 +41,17 @@ resource "aws_secretsmanager_secret_version" "app" {
     WA_ACCESS_TOKEN         = "PREENCHER"
     WA_PHONE_NUMBER_ID      = "PREENCHER"
     WA_WEBHOOK_VERIFY_TOKEN = "PREENCHER"
+    TELEGRAM_BOT_TOKEN      = "PREENCHER" # gerado via @BotFather — preencher quando disponível
     PDPJ_API_TOKEN          = "PREENCHER"
     PDPJ_API_URL            = "https://api-processo.stg.data-lake.pdpj.jus.br/processo-api/api/v1"
     DPERJ_API_URL           = "" # vazio = modo mock (protocolo local)
     DPERJ_API_KEY           = ""
     LANGSMITH_API_KEY       = "PREENCHER" # tracing — ver CLAUDE.md "Observabilidade"
+    # TEMPORÁRIO — bypass de demo, ver src/api/routes/documentos.ts. "true" =
+    # /api/documentos/verificar sempre aprova. Default "false" — só valor
+    # inicial, real toggle é via put-secret-value (lifecycle ignore_changes
+    # abaixo bloqueia terraform apply de tocar o valor já em produção).
+    DEMO_OCR_SEMPRE_PASSA = "false"
   })
 
   lifecycle {

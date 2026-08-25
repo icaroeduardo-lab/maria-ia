@@ -41,6 +41,27 @@ import { env } from "../../core/env.js";
 //
 // LGPD: a resposta nunca inclui nome/cpf cru — só os booleans de
 // src/core/ocr-documento.ts#compararComCadastro. Nenhum log aqui imprime PII.
+//
+// ⚠️ BYPASS TEMPORÁRIO DE DEMO (pedido 2026-08-17, ver env.demoOcrSemprePassa
+// em src/core/env.ts) — NÃO é comportamento real, só existe pra apresentação
+// não travar por causa do bug intermitente de infra do S3 (AccessDenied
+// esporádico no ListObjectsV2, PR #212 ainda não mergeado) ou por qualquer
+// outro não-match. Com DEMO_OCR_SEMPRE_PASSA=true, a rota responde
+// match:true ANTES de tentar S3/Textract (bypass total).
+//
+// Como ligar/desligar em produção SEM novo deploy (task def já injeta essa
+// chave via Secrets Manager, ver infra/terraform/ecs.tf `app_secret_keys` +
+// infra/terraform/secrets.tf — precisa de UM `terraform apply` prévio pra
+// essa chave existir no task definition; depois disso, toggle é só CLI):
+//   1. aws secretsmanager get-secret-value --secret-id maria-chat-prod/app \
+//        --query SecretString --output text > /tmp/app-secret.json
+//   2. editar o JSON: "DEMO_OCR_SEMPRE_PASSA": "true"  (ou "false" pra desligar)
+//   3. aws secretsmanager put-secret-value --secret-id maria-chat-prod/app \
+//        --secret-string file:///tmp/app-secret.json
+//   4. aws ecs update-service --cluster maria-chat-prod --service maria-chat-prod-api \
+//        --force-new-deployment
+//   5. apagar /tmp/app-secret.json (tem outros segredos em texto claro)
+// DESLIGAR logo após a apresentação — repetir os passos com "false".
 
 const ORCAMENTO_MIN_MS = 1000;
 // Teto subido de 60s pra 95s (issue timeout PDF Textract): a lambda
@@ -64,6 +85,21 @@ export async function documentosFlowRoutes(app: FastifyInstance) {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const sessionId = String(body.sessionId ?? body._sessao ?? "").trim();
     if (!sessionId) return reply.code(400).send({ erro: "sessionId (ou _sessao) obrigatório" });
+
+    // Bypass temporário de demo — ver comentário no topo do arquivo. Sai
+    // ANTES de qualquer leitura de nome/cpf/S3/Textract de propósito: nem o
+    // bug intermitente de infra do S3 nem um não-match real conseguem
+    // atrapalhar a apresentação.
+    if (env.demoOcrSemprePassa()) {
+      console.warn(
+        `[documentos] ⚠️ DEMO_OCR_SEMPRE_PASSA ativo — verificação de documento SEMPRE aprova, NÃO é comportamento real (sessão ${sessionId})`
+      );
+      return {
+        match: true,
+        detalhes: { nome_ok: true, cpf_ok: true, dataNascimento_ok: true },
+        status: "concluido",
+      };
+    }
 
     let nomeCadastro = typeof body.nome === "string" ? body.nome : undefined;
     let cpfCadastro = typeof body.cpf === "string" ? body.cpf : undefined;

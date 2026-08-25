@@ -33,6 +33,18 @@ test("port respeita override numérico", () => {
   delete process.env.PORT;
 });
 
+test('demoOcrSemprePassa: default false/ausente, só "true" liga o bypass de demo', () => {
+  delete process.env.DEMO_OCR_SEMPRE_PASSA;
+  assert.equal(env.demoOcrSemprePassa(), false);
+  process.env.DEMO_OCR_SEMPRE_PASSA = "false";
+  assert.equal(env.demoOcrSemprePassa(), false);
+  process.env.DEMO_OCR_SEMPRE_PASSA = "qualquer-outra-coisa";
+  assert.equal(env.demoOcrSemprePassa(), false);
+  process.env.DEMO_OCR_SEMPRE_PASSA = "true";
+  assert.equal(env.demoOcrSemprePassa(), true);
+  delete process.env.DEMO_OCR_SEMPRE_PASSA;
+});
+
 test("validarEnv passa com env válido e falha em PORT malformado", () => {
   delete process.env.PORT;
   assert.doesNotThrow(() => validarEnv());

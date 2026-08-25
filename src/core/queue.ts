@@ -5,10 +5,12 @@ import {
   DeleteMessageCommand,
 } from "@aws-sdk/client-sqs";
 
-// Fila SQS FIFO entre a api (produz) e o worker (consome).
-// MessageGroupId = número do WhatsApp → mensagens do mesmo cidadão processadas
-// em ordem, nunca em paralelo. MessageDeduplicationId = id da mensagem da Meta
-// → reentregas são descartadas nativamente pela fila FIFO.
+// Fila SQS FIFO única, compartilhada entre os canais (WhatsApp + Telegram),
+// entre a api (produz) e o worker (consome).
+// MessageGroupId = id da conversa no canal (wa_id ou chat_id) → mensagens do
+// mesmo cidadão processadas em ordem, nunca em paralelo. MessageDeduplicationId
+// = id da mensagem/update do provedor → reentregas descartadas nativamente
+// pela fila FIFO.
 
 import { env } from "./env.js";
 
@@ -16,13 +18,20 @@ const QUEUE_URL = () => env.sqsQueueUrl();
 
 const client = new SQSClient({ region: env.awsRegion() });
 
-// Payload que trafega na fila (uma mensagem recebida do WhatsApp) — mesmo
-// shape de MensagemRecebida (channels/whatsapp.ts); mantido espelhado aqui
+// Payload que trafega na fila (uma mensagem recebida de qualquer canal) —
+// mesmo shape de MensagemRecebida (channels/whatsapp.ts) e
+// MensagemRecebidaTelegram (channels/telegram.ts); mantido espelhado aqui
 // porque o worker desserializa via JSON.parse(...) as MsgFila (sem import
-// direto do tipo, para não acoplar queue.ts ao canal).
+// direto do tipo, para não acoplar queue.ts aos canais). mediaId/mediaMimeType/
+// mediaNomeOriginal são compartilhados entre os dois canais (foto/documento,
+// issue #74) — cada canal preenche com o id de mídia do seu próprio provedor
+// (media_id da Graph API ou file_id da Bot API).
+// `canal` decide o dispatch no worker (../worker/worker.ts); ausente = trata
+// como "whatsapp" (compat com mensagens enfileiradas antes do canal existir).
 export interface MsgFila {
   id: string;
   from: string;
+  canal?: "whatsapp" | "telegram";
   texto?: string;
   audioId?: string;
   mediaId?: string;

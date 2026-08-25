@@ -178,12 +178,14 @@ export async function tipoPerguntaPendente(sessionId: string): Promise<TipoPergu
 
 // Status resumido de uma conversa pra consumidores síncronos (ex: Tykhe, que
 // espera resposta + status no mesmo request/response — diferente de
-// WhatsApp, que só dispara a mensagem de saída pro canal sem esperar volta).
+// WhatsApp/Telegram, que só disparam a mensagem de saída pro canal sem
+// esperar volta).
 export type StatusConversa = "em_andamento" | "concluido" | "handoff_humano";
 
-// Processa uma mensagem de qualquer canal (web, whatsapp ou tykhe), preservando o
-// padrão crítico de multi-turn: thread novo → invoke(estado inicial);
-// resume → updateState + invoke(null). NUNCA invoke(input não-nulo) em thread existente.
+// Processa uma mensagem de qualquer canal (web, whatsapp, telegram ou tykhe),
+// preservando o padrão crítico de multi-turn: thread novo → invoke(estado
+// inicial); resume → updateState + invoke(null). NUNCA invoke(input
+// não-nulo) em thread existente.
 //
 // dadosIniciais: campos de dadosColetados pra semear ANTES do primeiro invoke —
 // só tem efeito quando o thread é NOVO (mesma condição isResuming abaixo já
@@ -208,7 +210,7 @@ export type StatusConversa = "em_andamento" | "concluido" | "handoff_humano";
 export async function processarMensagem(
   sessionId: string,
   message: string | undefined,
-  canal: "web" | "whatsapp" | "tykhe",
+  canal: "web" | "whatsapp" | "telegram" | "tykhe",
   dadosIniciais?: Record<string, string>,
   flowId?: string
 ) {
@@ -221,6 +223,24 @@ export async function processarMensagem(
     await checkpointer
       .deleteThread(sessionId)
       .catch((err) => console.error("[chat] falha ao reiniciar thread:", err));
+    // BUG 2026-08-18 (relatado pelo usuário no Telegram): #sair só limpava o
+    // checkpoint do LangGraph, nunca o handoffStatus da Conversation — se a
+    // sessão tinha entrado em handoff (transferir_humano) antes, o flag
+    // ficava preso no banco e toda mensagem seguinte (ex: "oi") caía
+    // silenciosamente na regra de "handoff ativo, sem resposta automática"
+    // (linha ~173 abaixo), fazendo o bot parecer mudo mesmo após reiniciar.
+    // #sair agora libera o handoff também, igual à ação manual do atendente
+    // (POST /admin/conversations/:sessionId/handoff/liberar).
+    if (prisma) {
+      await prisma.conversation
+        .update({
+          where: { sessionId },
+          data: { handoffStatus: null, handoffOperador: null, handoffDesde: null },
+        })
+        .catch(() => {
+          /* conversa pode não existir ainda (ex: 1ª mensagem já é #sair) — ok ignorar */
+        });
+    }
     const aviso = new AIMessage(
       "Conversa reiniciada. 🔄 Quando quiser, é só mandar uma mensagem que começamos de novo."
     );
