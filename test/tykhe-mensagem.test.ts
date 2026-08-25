@@ -46,6 +46,12 @@ test("1ª mensagem de um chatId novo inicia o fluxo (saudação + pergunta LGPD)
   assert.match(body.resposta, /Maria/);
   assert.match(body.resposta, /aceita os termos/);
   assert.equal(body.status, "em_andamento");
+  assert.equal(
+    body.tipoResposta,
+    "sim_nao",
+    "prompt de aceite da LGPD emite bloco boolean (lgpd.ts) — tipoEOpcoes deve achar esse bloco"
+  );
+  assert.deepEqual(body.opcoes, ["Sim", "Não"]);
 });
 
 test("2ª mensagem do MESMO chatId continua a MESMA conversa — não reinicia do zero", async () => {
@@ -87,6 +93,12 @@ test("2ª mensagem do MESMO chatId continua a MESMA conversa — não reinicia d
     "2º turno resume do checkpoint (updateState + invoke(null)) — só o node primeira_mensagem roda, nada de saudacao/lgpd de novo"
   );
   assert.equal(body2.status, "em_andamento");
+  assert.equal(
+    body2.tipoResposta,
+    "texto",
+    "'Me conte um pouco sobre o seu caso.' é pergunta de texto livre — sem bloco boolean/options, tipoEOpcoes deve cair no fallback 'texto'"
+  );
+  assert.equal("opcoes" in body2, false, "tipoResposta:'texto' não deve vir acompanhado de opcoes");
 });
 
 test("shape da resposta: { resposta, status, migrado } sempre presentes, categoria omitida quando ainda não há", async () => {
@@ -105,6 +117,11 @@ test("shape da resposta: { resposta, status, migrado } sempre presentes, categor
   assert.equal(typeof body.migrado, "boolean");
   assert.equal(body.migrado, false, "sem categoria pessoa_presa/violencia_domestica ainda, migrado deve ser false");
   assert.equal("categoria" in body, false, "sem categoria coletada ainda, campo deve ser omitido");
+  assert.equal(
+    ["sim_nao", "opcoes", "texto"].includes(body.tipoResposta),
+    true,
+    "tipoResposta sempre presente numa resposta de conversa normal"
+  );
 });
 
 test("400: chatId ausente", async () => {
@@ -243,6 +260,8 @@ test("audioUrl: transcrição falha (job FAILED) → fallback amigável, sem toc
   assert.match(body.resposta, /não consegui entender o áudio/);
   assert.equal(body.status, "em_andamento");
   assert.equal(body.migrado, false);
+  assert.equal(body.tipoResposta, "texto", "fallback de falha de transcrição pede reenvio em texto livre");
+  assert.equal("opcoes" in body, false);
 });
 
 // ── dadosConhecidos: semeia resultado_cpf/cpf quando a TYKHE já consultou o

@@ -362,6 +362,8 @@ components:
       required: [resposta, status, migrado]
       properties:
         resposta: { type: string, description: "texto concatenado das mensagens de saída da Maria" }
+        tipoResposta: { type: string, enum: [sim_nao, opcoes, texto], description: "o que a Maria está esperando como próxima resposta do assistido — permite a Tykhe renderizar botões de verdade (dynamicOptionsNode) em vez de depender do texto achatado em `resposta`" }
+        opcoes: { type: array, items: { type: string }, description: "lista de opções pra mostrar como botões — presente só quando tipoResposta é 'sim_nao' (fixo [\"Sim\",\"Não\"]) ou 'opcoes' (lista real da pergunta de múltipla escolha); ausente em 'texto' (pergunta de texto livre, sem lista pra mostrar)" }
         categoria: { type: string, description: "categoria/assunto identificado, se já disponível no estado da conversa" }
         status: { type: string, enum: [em_andamento, concluido, handoff_humano] }
         migrado: { type: boolean, description: "true só quando a categoria identificada é 'pessoa_presa' ou 'violencia_domestica' (únicas 2 já reconstruídas pra Maria conduzir sozinha) — false pra qualquer outra, sinaliza a Tykhe pra assumir de volta com o fluxo legado dela" }

@@ -46,6 +46,30 @@ function montarResposta(mensagens: BaseMessage[]): string {
     .join("\n\n");
 }
 
+type TipoResposta = "sim_nao" | "opcoes" | "texto";
+
+// Acha a pergunta PENDENTE de verdade pra Tykhe renderizar via dynamicOptionsNode
+// (em vez de achatar em texto, ver montarResposta/textoDoConteudo acima) —
+// varre `mensagens` da mais recente pra trás e, dentro de cada uma, os blocos
+// do content de trás pra frente (último bloco interativo primeiro), porque
+// mensagens/blocos anteriores no array costumam ser só texto informativo; a
+// pergunta real é o ÚLTIMO bloco boolean/options emitido. Mesmo vocabulário
+// de blocos de perguntas.ts (sim_nao → boolean, opcoes → options com
+// options: string[]) e do builder do engine (ver core/engine/builder.ts).
+function tipoEOpcoes(mensagens: BaseMessage[]): { tipoResposta: TipoResposta; opcoes?: string[] } {
+  for (let i = mensagens.length - 1; i >= 0; i--) {
+    const content = mensagens[i].content;
+    if (typeof content === "string") continue;
+    const blocos = content as Array<{ type: string; options?: string[] }>;
+    for (let j = blocos.length - 1; j >= 0; j--) {
+      const b = blocos[j];
+      if (b.type === "boolean") return { tipoResposta: "sim_nao", opcoes: ["Sim", "Não"] };
+      if (b.type === "options" && b.options?.length) return { tipoResposta: "opcoes", opcoes: b.options };
+    }
+  }
+  return { tipoResposta: "texto" };
+}
+
 // Baixa (fetch simples — a Tykhe manda uma URL, não um id de mídia com token
 // como o WhatsApp) + transcreve via o MESMO pipeline compartilhado
 // (transcreverAudio em core/transcribe.ts, canal-agnóstico — usado pelo
@@ -135,9 +159,14 @@ export async function tykheMensagemRoutes(app: FastifyInstance) {
   // processarMensagem em core/chat.ts). dadosConhecidos (cpf/idPessoa/nome/
   // email) só é usado na 1ª chamada de um chatId novo — ver
   // dadosIniciaisDeTykhe() acima.
-  // e devolve { resposta, categoria?, status, migrado } pra Tykhe repassar no
-  // WhatsApp e decidir (via changeFlowNode do lado dela) se continua com a
-  // Maria ou retoma o fluxo legado.
+  // e devolve { resposta, tipoResposta, opcoes?, categoria?, status, migrado }
+  // pra Tykhe repassar no WhatsApp e decidir (via changeFlowNode do lado
+  // dela) se continua com a Maria ou retoma o fluxo legado. tipoResposta/
+  // opcoes (ver tipoEOpcoes() acima) são NOVOS e OPCIONAIS: permitem o lado
+  // Tykhe trocar o textNode final por um dynamicOptionsNode (renderiza
+  // botões de verdade a partir de uma lista) em vez de achatar sim/não e
+  // múltipla escolha em texto puro dentro de `resposta` — que continua sendo
+  // enviado sempre, inalterado, pra não quebrar quem só consome ele.
   //
   // chatId da Tykhe = sessionId/thread do LangGraph — precisa ser ESTÁVEL
   // entre chamadas da MESMA conversa (chave de continuidade do checkpoint).
@@ -191,6 +220,7 @@ export async function tykheMensagemRoutes(app: FastifyInstance) {
           resposta: montarResposta([
             new AIMessage("Desculpe, não consegui entender o áudio. Pode escrever ou enviar novamente? 🎤"),
           ]),
+          tipoResposta: "texto" as const,
           status: "em_andamento",
           migrado: false,
         };
@@ -215,6 +245,7 @@ export async function tykheMensagemRoutes(app: FastifyInstance) {
 
     return {
       resposta: montarResposta(newMessages),
+      ...tipoEOpcoes(newMessages),
       status,
       migrado: ehCategoriaMigrada(categoria),
       ...(categoria ? { categoria } : {}),
