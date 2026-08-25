@@ -217,6 +217,92 @@ test(
   }
 );
 
+test(
+  "BUG 2026-08-25: conversa encerrada + flowId explícito na chamada seguinte NÃO apaga a SessaoFluxo que acabou de ser gravada",
+  { skip: SEM_BANCO },
+  async () => {
+    // Reproduz o cenário real de produção: um chatId da ponte Tykhe com
+    // MUITO histórico de teste acumulado — o checkpoint já está "encerrado"
+    // (next.length === 0) quando a Tykhe reconecta mandando flowId explícito
+    // de novo (não só na 1ª mensagem "de verdade"). Antes do fix,
+    // limparSessaoFluxo(sessionId) rodava incondicionalmente no branch
+    // "conversa anterior já encerrou" e apagava o registro que
+    // resolverFlowId() tinha acabado de upsertar no TOPO da mesma chamada
+    // (porque desta vez o chamador passou flowId). A 2ª chamada seguinte
+    // (sem flowId, como a Tykhe realmente manda) não achava nada salvo e
+    // caía pro flow padrão.
+    await garantirFlowTeste();
+    const app = await montarApp();
+    const chatId = `teste-sessao-fluxo-e-${Date.now()}`;
+    const sessionId = `tykhe:${chatId}`;
+
+    // turno 1: flowId explícito — pergunta única do flow de teste.
+    const r1 = await app.inject({
+      method: "POST",
+      url: "/api/tykhe/mensagem",
+      payload: { chatId, mensagem: "oi", flowId: FLOW_ID_TESTE },
+    });
+    assert.equal(r1.statusCode, 200);
+    assert.equal(r1.json().resposta, TEXTO_PERGUNTA);
+
+    // turno 2: responde a única pergunta — sem saídas configuradas, o flow
+    // termina (cap_ → END) neste mesmo turno (checkpoint fica com next=[]).
+    const r2 = await app.inject({
+      method: "POST",
+      url: "/api/tykhe/mensagem",
+      payload: { chatId, mensagem: "irmã da pessoa presa" },
+    });
+    assert.equal(r2.statusCode, 200);
+    assert.equal(r2.json().status, "concluido");
+
+    // turno 3: MESMO sessionId, conversa já ENCERRADA, mas desta vez o
+    // chamador manda flowId EXPLÍCITO de novo (o caso que faltava cobertura)
+    // — dispara o branch "conversa anterior já encerrou" com flowId presente
+    // nesta chamada específica.
+    const r3 = await app.inject({
+      method: "POST",
+      url: "/api/tykhe/mensagem",
+      payload: { chatId, mensagem: "oi de novo", flowId: FLOW_ID_TESTE },
+    });
+    assert.equal(r3.statusCode, 200);
+    assert.equal(
+      r3.json().resposta,
+      TEXTO_PERGUNTA,
+      "flow reiniciado do zero (checkpoint anterior apagado) deve mostrar a pergunta do flow de teste de novo"
+    );
+
+    // A SessaoFluxo gravada no TOPO do turno 3 (resolverFlowId, porque o
+    // chamador passou flowId) tem que SOBREVIVER à limpeza do branch
+    // "conversa encerrada" — antes do fix, era apagada aqui.
+    const salvoLogoApos = await prisma!.sessaoFluxo.findUnique({ where: { sessionId } });
+    assert.ok(salvoLogoApos, "SessaoFluxo não devia ter sido apagada quando o chamador passou flowId nesta chamada");
+    assert.equal(salvoLogoApos!.flowId, FLOW_ID_TESTE);
+
+    // turno 4: MESMO sessionId, SEM flowId (comportamento real da Tykhe nas
+    // chamadas seguintes) — tem que resolver pro flow certo (salvo no turno
+    // 3), não cair pro flow padrão.
+    const r4 = await app.inject({
+      method: "POST",
+      url: "/api/tykhe/mensagem",
+      payload: { chatId, mensagem: "irmã da pessoa presa de novo" },
+    });
+    await app.close();
+
+    assert.equal(r4.statusCode, 200);
+    const st = await graphEstatico.getState({ configurable: { thread_id: sessionId } });
+    const coletados = (st.values?.dadosColetados ?? {}) as Record<string, string>;
+    assert.equal(
+      coletados[CHAVE_PERGUNTA],
+      "irmã da pessoa presa de novo",
+      "turno 4 (sem flowId) só captura a resposta se resumiu contra o flow de teste — se tivesse caído no " +
+        "flow padrão (o bug), esse campo nunca seria preenchido"
+    );
+
+    const salvoFinal = await prisma!.sessaoFluxo.findUnique({ where: { sessionId } });
+    assert.equal(salvoFinal?.flowId, FLOW_ID_TESTE, "SessaoFluxo continua apontando pro flow certo até o fim");
+  }
+);
+
 after(async () => {
   if (!prisma) return;
   await prisma.flow.deleteMany({ where: { id: FLOW_ID_TESTE } });

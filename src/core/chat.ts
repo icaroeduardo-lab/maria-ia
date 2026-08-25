@@ -328,15 +328,23 @@ export async function processarMensagem(
     await checkpointer
       .deleteThread(sessionId)
       .catch((err) => console.error("[chat] falha ao reiniciar thread encerrado:", err));
-    await limparSessaoFluxo(sessionId);
     prevLen = 0;
-    // flowIdResolvido veio de uma SessaoFluxo que acabamos de apagar (o
-    // chamador NÃO passou flowId explícito nesta chamada) — a conversa que
-    // está reiniciando do zero não deve herdar o flow da conversa anterior
-    // que nem existe mais (mesma classe de bug do problema original, só que
-    // "grudado" demais em vez de "esquecido" demais). Recompila pro flow
-    // padrão/ativo antes do invoke inicial abaixo.
+    // Só limpa SessaoFluxo/recarrega pro flow padrão quando o CHAMADOR não
+    // passou flowId explícito nesta chamada — nesse caso flowIdResolvido veio
+    // de uma SessaoFluxo de uma conversa anterior que já não existe mais, e
+    // não deve ser herdado por uma conversa reiniciando do zero (mesma classe
+    // do bug original, só que "grudado" demais em vez de "esquecido" demais).
+    // BUG 2026-08-25 corrigido aqui: antes, limparSessaoFluxo(sessionId) rodava
+    // incondicionalmente nesse branch — se o chamador TINHA passado flowId
+    // nesta mesma chamada (resolverFlowId já fez upsert no topo da função),
+    // essa limpeza apagava o registro que acabou de ser gravado. Resultado
+    // real observado: 1ª chamada com flowId parecia funcionar (mostrava a
+    // 1ª pergunta do flow), mas a SessaoFluxo ficava apagada mesmo assim — a
+    // 2ª chamada (sem flowId, como a Tykhe manda) não achava nada salvo e
+    // caía pro flow padrão, resetando a conversa (o mesmo bug que esse
+    // mecanismo inteiro foi criado pra resolver).
     if (!flowId && flowIdResolvido) {
+      await limparSessaoFluxo(sessionId);
       const recarregado = await obterGraph(undefined);
       graph = recarregado.graph;
       flowIdEfetivo = recarregado.flowId;
