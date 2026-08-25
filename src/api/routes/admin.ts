@@ -10,9 +10,9 @@ import { enviarWhatsApp } from "../../core/channels/whatsapp.js";
 import { prisma } from "../../core/db.js";
 import { env } from "../../core/env.js";
 import { autenticar, exigirAdmin } from "./auth.js";
-import { graphDoFlow, graphEstatico, subfluxosReferenciados, nosExpandidos, type FlowNode, type FlowEdge } from "../../core/engine/builder.js";
+import { graphDoFlow, graphEstatico, subfluxosReferenciados, type FlowNode, type FlowEdge } from "../../core/engine/builder.js";
 import { checkpointer } from "../../core/graph.js";
-import { COMANDO_REINICIAR, carregarSubflowsRecursivo, resolverTipoPergunta } from "../../core/chat.js";
+import { COMANDO_REINICIAR, carregarSubflowsRecursivo, carregarGrafoPorId, resolverTipoPergunta } from "../../core/chat.js";
 import { validarFlow } from "../../core/engine/validar.js";
 import { ESTILO_DEFAULT, invalidarEstilo } from "../../core/config.js";
 import { montarMetadados, gerarResumoTexto, type Metadados } from "../../core/resumo.js";
@@ -706,18 +706,13 @@ export async function adminRoutes(app: FastifyInstance) {
     | { ok: true; graph: ReturnType<typeof graphDoFlow>; flowNodes: FlowNode[] | null }
     | { ok: false; status: 404 | 422; erro: string };
 
+  // carregarGrafoPorId (core/chat.ts) faz o trabalho de fato (find flow +
+  // carregarSubflowsRecursivo + graphDoFlow + nosExpandidos, com o mesmo
+  // ok/404/422) — reaproveitado aqui e por processarMensagem() quando um
+  // canal passa flowId explícito (hoje só a ponte Tykhe). Não duplicar.
   async function carregarGrafoDeTeste(flowId: string | undefined): Promise<GrafoDeTeste> {
     if (!flowId) return { ok: true, graph: graphEstatico as ReturnType<typeof graphDoFlow>, flowNodes: null };
-    const flow = await db.flow.findUnique({ where: { id: flowId } });
-    if (!flow) return { ok: false, status: 404, erro: "fluxo não encontrado" };
-    const subflows = await carregarSubflowsRecursivo(flow.nodes);
-    try {
-      const graph = graphDoFlow(flow, subflows) as ReturnType<typeof graphDoFlow>;
-      const flowNodes = nosExpandidos(flow, subflows);
-      return { ok: true, graph, flowNodes };
-    } catch (err) {
-      return { ok: false, status: 422, erro: `flow inválido: ${String(err)}` };
-    }
+    return (await carregarGrafoPorId(flowId)) as GrafoDeTeste;
   }
 
   // Monta a resposta final do chat de teste a partir do estado do grafo após

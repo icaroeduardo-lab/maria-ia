@@ -10,11 +10,12 @@ import { baixarMidia } from "./graphMedia.js";
 
 // Transcreve áudio (mensagem de voz) com AWS Transcribe (pt-BR). Pipeline
 // S3 → job do Transcribe → poll → texto é canal-agnóstico (usado por
-// WhatsApp e Telegram, que só diferem em COMO baixam os bytes — Graph API
-// vs Bot API `getFile`). Áudios em audios/ expiram por lifecycle do bucket
-// (são PII efêmera) — regra real em infra/terraform/s3-audios.tf (issue #75;
-// antes desse arquivo o comentário aqui era só uma intenção, sem lifecycle
-// de verdade).
+// WhatsApp, Telegram e, agora, Tykhe — ver src/api/routes/tykhe/mensagem.ts
+// — só diferem em COMO baixam os bytes: Graph API com media-id+token, Bot
+// API `getFile`, ou fetch simples de uma URL). Áudios em audios/ expiram por
+// lifecycle do bucket (são PII efêmera) — regra real em
+// infra/terraform/s3-audios.tf (issue #75; antes desse arquivo o comentário
+// aqui era só uma intenção, sem lifecycle de verdade).
 
 const BUCKET = env.s3Bucket();
 
@@ -25,7 +26,7 @@ const transcribe = new TranscribeClient({ region: env.awsRegion() });
 // mediaId/token aqui) — sobe pro S3, roda o job do Transcribe, faz poll até
 // concluir (teto 60s) e devolve o texto. "" em qualquer falha (o canal trata
 // o fallback). `jobPrefix` só identifica a origem no nome do job/logs
-// (ex: "wa"/"tg") — não afeta o resultado.
+// (ex: "wa"/"tg"/"tykhe") — não afeta o resultado.
 export async function transcreverAudio(audio: Buffer, jobPrefix: string): Promise<string> {
   try {
     const key = `audios/${randomUUID()}.ogg`;
@@ -36,7 +37,7 @@ export async function transcreverAudio(audio: Buffer, jobPrefix: string): Promis
       new StartTranscriptionJobCommand({
         TranscriptionJobName: job,
         LanguageCode: "pt-BR",
-        MediaFormat: "ogg", // WhatsApp e Telegram enviam voz em OGG/Opus (sem conversão extra)
+        MediaFormat: "ogg", // WhatsApp/Telegram/Tykhe enviam voz em OGG/Opus (sem conversão extra)
         Media: { MediaFileUri: `s3://${BUCKET}/${key}` },
       })
     );

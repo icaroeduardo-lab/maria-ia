@@ -29,6 +29,7 @@ import { kycRoutes } from "./routes/kyc.js";
 import { processosRoutes } from "./routes/processos.js";
 import { uploadDocumentoRoutes } from "./routes/upload-documento.js";
 import { documentosFlowRoutes } from "./routes/documentos.js";
+import { tykheRoutes } from "./routes/tykhe/index.js";
 import { env } from "../core/env.js";
 
 // Monta a app Fastify com todas as rotas registradas, SEM listen e sem jobs de
@@ -122,6 +123,7 @@ export async function montarApp(opts: MontarAppOpts = {}) {
   await app.register(processosRoutes);
   await app.register(uploadDocumentoRoutes);
   await app.register(documentosFlowRoutes);
+  await app.register(tykheRoutes);
 
   return app;
 }

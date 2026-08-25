@@ -23,6 +23,7 @@ tags:
   - name: Admin — Assistidos
   - name: Admin — Config/Users/Analytics/Audit
   - name: Interno (fluxo)
+  - name: Tykhe (integração)
   - name: Mock
   - name: Infra
 
@@ -326,6 +327,56 @@ components:
       required: [preenchido]
       properties:
         preenchido: { type: boolean, description: "true se valor não está vazio" }
+    TykheAtualizarReq:
+      type: object
+      required: [cpf, campo, valor]
+      properties:
+        cpf: { type: string }
+        campo:
+          type: string
+          enum: [nome, telefone, email, cep, logradouro, numero, complemento, bairro, municipio, uf]
+          description: "1 campo por vez — menu fixo da Tykhe restringe a escolha"
+        valor: { type: string }
+    TykheMensagemReq:
+      type: object
+      required: [chatId]
+      description: "mensagem OU audioUrl — pelo menos um dos dois é obrigatório (400 se nenhum vier)"
+      properties:
+        chatId: { type: string, description: "id do chat na Tykhe — vira sessionId/thread do LangGraph, precisa ser estável entre chamadas da mesma conversa" }
+        mensagem: { type: string, description: "texto digitado pelo assistido" }
+        audioUrl: { type: string, description: "URL de um áudio pra baixar e transcrever (AWS Transcribe, mesmo pipeline do WhatsApp) antes de rodar o motor — ignorado se `mensagem` vier preenchida" }
+        customerId: { type: string }
+        dadosConhecidos:
+          type: object
+          description: "dados que a Tykhe já coletou (ex: consultou o CPF direto no Verde, fora do motor da Maria) — semeados em dadosColetados (resultado_cpf.dados + cpf flat) SÓ na 1ª chamada de um chatId novo (thread ainda não existe no checkpointer); em chamadas seguintes do mesmo chatId é ignorado, mesmo se vier preenchido de novo"
+          properties:
+            cpf: { type: string }
+            idPessoa: { type: number }
+            nome: { type: string }
+            email: { type: string }
+        flowId:
+          type: string
+          description: "roda um fluxo ESPECÍFICO (id de um Flow no banco) em vez do MariaIA completo — pula saudação/LGPD/CPF/relato quando a Tykhe já fez tudo isso do lado dela e a pessoa já escolheu a categoria num menu (ex: 'Pessoa Presa'). Só tem efeito na 1ª chamada de um chatId novo (mesma condição de dadosConhecidos); em chamadas seguintes do mesmo chatId é ignorado — a thread já resume no grafo certo. Combina com dadosConhecidos: os dois se aplicam juntos na 1ª mensagem. Mesmo mecanismo do chat de teste do painel (/admin/test-chat)."
+    TykheMensagemResp:
+      type: object
+      required: [resposta, status, migrado]
+      properties:
+        resposta: { type: string, description: "texto concatenado das mensagens de saída da Maria" }
+        categoria: { type: string, description: "categoria/assunto identificado, se já disponível no estado da conversa" }
+        status: { type: string, enum: [em_andamento, concluido, handoff_humano] }
+        migrado: { type: boolean, description: "true só quando a categoria identificada é 'pessoa_presa' ou 'violencia_domestica' (únicas 2 já reconstruídas pra Maria conduzir sozinha) — false pra qualquer outra, sinaliza a Tykhe pra assumir de volta com o fluxo legado dela" }
+    TykheIdentificarFluxoReq:
+      type: object
+      required: [relato]
+      properties:
+        relato: { type: string, description: "texto livre do que o assistido relatou" }
+    TykheIdentificarFluxoResp:
+      type: object
+      required: [categoria]
+      properties:
+        categoria:
+          type: string
+          description: "categoria identificada — mesma lista de opções do node 'classificar' do fluxo Orquestrador (divórcio, alimentação, trabalhista, pessoa_presa, violencia_domestica, falar_processo, questoes_saude, fora_competencia, outros)"
     CasoDetalheReq:
       type: object
       properties:
@@ -1864,6 +1915,74 @@ paths:
         "404": { description: "nenhum documento encontrado para essa sessão no bucket" }
         "422": { description: "nome/cpf ainda não coletados nesta sessão" }
         "500": { description: "falha ao processar o documento (resultado da lambda ausente/malformado)", content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+
+  # ── Tykhe (integração) — API desmembrada pra Tykhe chamar ───
+  /api/tykhe/assistidos/atualizar:
+    post:
+      tags: [Tykhe (integração)]
+      summary: "Atualiza 1 campo do assistido (chamado pela Tykhe) — SEM autenticação (protótipo)"
+      description: >
+        Endpoint desmembrado especificamente pra integração Maria↔Tykhe
+        (plataforma legada, dona do número real de WhatsApp): o fluxo da
+        Tykhe pergunta "qual dado quer atualizar" via menu fixo
+        (Nome/Telefone/Email/Endereço) e manda só o campo escolhido + valor
+        novo. Reaproveita a mesma lógica de /api/assistidos/atualizar (Verde
+        primeiro, fallback local). SEM autenticação — protótipo/temporário,
+        não subir pra produção sem token.
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/TykheAtualizarReq' } } } }
+      responses:
+        "200": { description: "{ sucesso: true, dados }" }
+        "400": { description: "cpf inválido, campo fora do enum aceito, ou valor ausente", content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+        "404": { description: assistido não encontrado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+  /api/tykhe/mensagem:
+    post:
+      tags: [Tykhe (integração)]
+      summary: "Processa 1 mensagem do fluxo da Tykhe rodando o motor (LangGraph) — SEM autenticação (protótipo)"
+      description: >
+        Peça central da integração Maria↔Tykhe: recebe cada mensagem do
+        assistido (via chatId da Tykhe, que vira sessionId/thread do
+        LangGraph — precisa ser estável entre chamadas da mesma conversa,
+        chave de continuidade do checkpoint) e devolve a resposta da Maria
+        rodando processarMensagem() de verdade (mesmo motor de WhatsApp/web,
+        canal "tykhe"). Aceita texto (`mensagem`) ou áudio (`audioUrl` —
+        baixado e transcrito via AWS Transcribe, mesmo pipeline compartilhado
+        do WhatsApp, antes de rodar o motor). Devolve `migrado: boolean` —
+        true só quando a categoria identificada pelo Orquestrador já foi
+        reconstruída pra Maria conduzir sozinha
+        ("pessoa_presa"/"violencia_domestica" hoje); false faz a Tykhe assumir
+        de volta com o fluxo legado dela (changeFlowNode do lado dela).
+        `flowId` (opcional): pula o MariaIA inteiro e começa DIRETO num fluxo
+        específico — caso "Pessoa Presa", a Tykhe já fez saudação/LGPD/CPF do
+        lado dela e a pessoa já escolheu a categoria num menu, não faz
+        sentido reclassificar via relato. SEM autenticação —
+        protótipo/temporário, não subir pra produção sem token.
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/TykheMensagemReq' } } } }
+      responses:
+        "200": { description: "resposta da Maria + status da conversa", content: { application/json: { schema: { $ref: '#/components/schemas/TykheMensagemResp' } } } }
+        "400": { description: "chatId ausente, ou nem mensagem nem audioUrl informados", content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
+  /api/tykhe/identificar-fluxo:
+    post:
+      tags: [Tykhe (integração)]
+      summary: "Identifica só a categoria/fluxo de um relato, sem rodar o motor conversacional — SEM autenticação (protótipo)"
+      description: >
+        Fatia BEM menor que /api/tykhe/mensagem: classifica um relato livre
+        numa categoria, SEM rodar o grafo LangGraph inteiro (sem saudação,
+        LGPD, multi-turn, envio de dados) — chamada direta e sem estado.
+        Reusa a mesma função de classificação (`classificarTexto`,
+        core/engine/ia.ts) que o node tipo "classificar" do engine chama,
+        com o mesmo prompt e lista de categorias do node "classificar" do
+        fluxo real "Orquestrador" (replicados no código desta rota — fonte
+        da verdade continua sendo o fluxo no banco). Sem Bedrock disponível,
+        degrada pro matcher por palavra-chave (mesmo fallback do resto do
+        engine). SEM autenticação — protótipo/temporário, não subir pra
+        produção sem token.
+      security: []
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/TykheIdentificarFluxoReq' } } } }
+      responses:
+        "200": { description: "categoria identificada", content: { application/json: { schema: { $ref: '#/components/schemas/TykheIdentificarFluxoResp' } } } }
+        "400": { description: "relato ausente", content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
 
   # ── Mock (teste) ───────────────────────────────────────────
   /mock/verificar-cpf:
