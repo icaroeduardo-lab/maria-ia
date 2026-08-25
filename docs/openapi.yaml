@@ -354,6 +354,9 @@ components:
             idPessoa: { type: number }
             nome: { type: string }
             email: { type: string }
+        flowId:
+          type: string
+          description: "roda um fluxo ESPECÍFICO (id de um Flow no banco) em vez do MariaIA completo — pula saudação/LGPD/CPF/relato quando a Tykhe já fez tudo isso do lado dela e a pessoa já escolheu a categoria num menu (ex: 'Pessoa Presa'). Só tem efeito na 1ª chamada de um chatId novo (mesma condição de dadosConhecidos); em chamadas seguintes do mesmo chatId é ignorado — a thread já resume no grafo certo. Combina com dadosConhecidos: os dois se aplicam juntos na 1ª mensagem. Mesmo mecanismo do chat de teste do painel (/admin/test-chat)."
     TykheMensagemResp:
       type: object
       required: [resposta, status, migrado]
@@ -1928,8 +1931,12 @@ paths:
         true só quando a categoria identificada pelo Orquestrador já foi
         reconstruída pra Maria conduzir sozinha
         ("pessoa_presa"/"violencia_domestica" hoje); false faz a Tykhe assumir
-        de volta com o fluxo legado dela (changeFlowNode do lado dela). SEM
-        autenticação — protótipo/temporário, não subir pra produção sem token.
+        de volta com o fluxo legado dela (changeFlowNode do lado dela).
+        `flowId` (opcional): pula o MariaIA inteiro e começa DIRETO num fluxo
+        específico — caso "Pessoa Presa", a Tykhe já fez saudação/LGPD/CPF do
+        lado dela e a pessoa já escolheu a categoria num menu, não faz
+        sentido reclassificar via relato. SEM autenticação —
+        protótipo/temporário, não subir pra produção sem token.
       security: []
       requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/TykheMensagemReq' } } } }
       responses:

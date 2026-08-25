@@ -81,16 +81,55 @@ export async function carregarSubflowsRecursivo(nodesIniciais: unknown): Promise
   return resultado;
 }
 
-// Grafo a usar: flow ativo (compilado dinamicamente, com cache) ou o grafo
-// estático padrão. Troca de flow ativo afeta conversas novas.
-// flowNodes: nós (principal + sub-flows carregados) do flow ativo, usados por
-// tipoPerguntaPendente() abaixo para resolver o tipoPergunta de uma chave —
-// null quando é o grafo estático (usa o registro PERGUNTAS_POR_CHAVE).
-async function obterGraph(): Promise<{
+// Compila um flow ESPECÍFICO do banco (por id) em grafo executável — mesma
+// expansão de subfluxos (carregarSubflowsRecursivo + nosExpandidos) que
+// obterGraph() usa pro flow ativo, mas pra um id explícito em vez do flow
+// marcado active. Reaproveitada por:
+//  - POST /admin/test-chat (routes/admin.ts): testar um subfluxo isolado no
+//    builder, sem depender do flow ativo do painel
+//  - obterGraph() abaixo, quando processarMensagem() recebe um flowId
+//    explícito (hoje só a ponte Tykhe — pula o MariaIA inteiro e começa
+//    direto num fluxo específico, ex: "Pessoa Presa (protótipo IA)", sem
+//    precisar tornar aquele fluxo o flow ativo global)
+// ok:false distingue 404 (flow não existe) de 422 (existe mas não compila) —
+// o chamador HTTP decide o status; processarMensagem() só loga e cai pro
+// flow ativo (nunca deixa o assistido travado por um flowId ruim).
+export type GrafoPorId =
+  | { ok: true; graph: typeof graphEstatico; flowNodes: FlowNode[] | null }
+  | { ok: false; status: 404 | 422; erro: string };
+
+export async function carregarGrafoPorId(flowId: string): Promise<GrafoPorId> {
+  if (!prisma) return { ok: false, status: 404, erro: "fluxo não encontrado" };
+  const flow = await prisma.flow.findUnique({ where: { id: flowId } });
+  if (!flow) return { ok: false, status: 404, erro: "fluxo não encontrado" };
+  const subflows = await carregarSubflowsRecursivo(flow.nodes);
+  try {
+    const graph = graphDoFlow(flow, subflows) as typeof graphEstatico;
+    const flowNodes = nosExpandidos(flow, subflows);
+    return { ok: true, graph, flowNodes };
+  } catch (err) {
+    return { ok: false, status: 422, erro: `flow inválido: ${String(err)}` };
+  }
+}
+
+// Grafo a usar: flow explícito (flowId, quando dado — ver carregarGrafoPorId
+// acima), senão o flow ativo (compilado dinamicamente, com cache), senão o
+// grafo estático padrão. Troca de flow ativo afeta conversas novas.
+// flowNodes: nós (principal + sub-flows carregados) do flow em uso, usados
+// por tipoPerguntaPendente() abaixo para resolver o tipoPergunta de uma
+// chave — null quando é o grafo estático (usa o registro PERGUNTAS_POR_CHAVE).
+async function obterGraph(flowId?: string): Promise<{
   graph: typeof graphEstatico;
   flowId: string | null;
   flowNodes: FlowNode[] | null;
 }> {
+  if (flowId) {
+    const carregado = await carregarGrafoPorId(flowId);
+    if (carregado.ok) return { graph: carregado.graph, flowId, flowNodes: carregado.flowNodes };
+    console.error(
+      `[chat] flowId explícito "${flowId}" inválido/não encontrado (${carregado.erro}) — usando flow ativo`
+    );
+  }
   if (!prisma) return { graph: graphEstatico, flowId: null, flowNodes: null };
   try {
     const ativo = await prisma.flow.findFirst({ where: { active: true } });
@@ -153,13 +192,27 @@ export type StatusConversa = "em_andamento" | "concluido" | "handoff_humano";
 // Hoje usado pela ponte Tykhe (dadosConhecidos do body de /api/tykhe/mensagem
 // — ver tykhe/mensagem.ts) pra semear resultado_cpf/cpf quando a Tykhe já
 // consultou o CPF direto no Verde, fora do motor da Maria.
+//
+// flowId: roda um fluxo ESPECÍFICO (ver carregarGrafoPorId acima) em vez do
+// flow ativo — pula o MariaIA inteiro e começa direto num subfluxo (ex: a
+// Tykhe já fez saudação/LGPD/CPF do lado dela e a pessoa já escolheu a
+// categoria; não faz sentido reclassificar). Resolvido via obterGraph(flowId)
+// em TODA chamada (não só na 1ª) — mesmo padrão do chat de teste
+// (/admin/test-chat): idempotente, sempre compila o mesmo grafo pro mesmo
+// flowId, então recompilar de novo num resume não muda nada (não reinicia o
+// fluxo — quem decide isso é isResuming/invoke(null) abaixo, igual sempre).
+// Se o chamador não reenviar flowId numa chamada seguinte, cai pro flow
+// ativo — por isso o flowId deve ser estável para o mesmo chatId/thread
+// durante toda a conversa (responsabilidade do chamador, mesmo contrato de
+// "não trocar o flow ativo no meio de uma conversa" que já existe hoje).
 export async function processarMensagem(
   sessionId: string,
   message: string | undefined,
   canal: "web" | "whatsapp" | "tykhe",
-  dadosIniciais?: Record<string, string>
+  dadosIniciais?: Record<string, string>,
+  flowId?: string
 ) {
-  const { graph, flowId } = await obterGraph();
+  const { graph, flowId: flowIdEfetivo } = await obterGraph(flowId);
   const config = { configurable: { thread_id: sessionId } };
 
   // comando #sair: reinicia a conversa — apaga o checkpoint do thread.
@@ -291,7 +344,7 @@ export async function processarMensagem(
   const categoriaAtual = (valoresAtuais.categoria as string) || null;
   const status: StatusConversa = emHandoff ? "handoff_humano" : emAndamento ? "em_andamento" : "concluido";
 
-  await rastrearConversa(sessionId, canal, flowId, estadoAtual, emAndamento, emHandoff).catch((err) =>
+  await rastrearConversa(sessionId, canal, flowIdEfetivo, estadoAtual, emAndamento, emHandoff).catch((err) =>
     console.error("[tracking] falha ao registrar conversa:", err)
   );
 

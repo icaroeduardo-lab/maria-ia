@@ -131,9 +131,10 @@ function dadosIniciaisDeTykhe(d: {
 
 export async function tykheMensagemRoutes(app: FastifyInstance) {
   // POST /api/tykhe/mensagem — { chatId, mensagem?, audioUrl?, customerId?,
-  // dadosConhecidos? } → roda o motor de verdade (LangGraph, processarMensagem
-  // em core/chat.ts). dadosConhecidos (cpf/idPessoa/nome/email) só é usado na
-  // 1ª chamada de um chatId novo — ver dadosIniciaisDeTykhe() acima.
+  // dadosConhecidos?, flowId? } → roda o motor de verdade (LangGraph,
+  // processarMensagem em core/chat.ts). dadosConhecidos (cpf/idPessoa/nome/
+  // email) só é usado na 1ª chamada de um chatId novo — ver
+  // dadosIniciaisDeTykhe() acima.
   // e devolve { resposta, categoria?, status, migrado } pra Tykhe repassar no
   // WhatsApp e decidir (via changeFlowNode do lado dela) se continua com a
   // Maria ou retoma o fluxo legado.
@@ -143,6 +144,15 @@ export async function tykheMensagemRoutes(app: FastifyInstance) {
   // Prefixo "tykhe:" isola o thread_id dos outros canais (mesma convenção de
   // wa:/test: já usada em whatsapp.ts/admin.ts) — nunca usar o chatId cru:
   // colidiria com sessões de outro canal se a Tykhe reusar ids.
+  //
+  // flowId (opcional): roda um fluxo ESPECÍFICO em vez do MariaIA completo —
+  // pula saudação/LGPD/CPF/relato quando a Tykhe já fez tudo isso do lado
+  // dela e a pessoa já escolheu a categoria num menu (caso "Pessoa Presa").
+  // Mesmo mecanismo do chat de teste do painel (/admin/test-chat), via
+  // carregarGrafoPorId em core/chat.ts — ver processarMensagem() lá pro
+  // contrato exato (só afeta onde a 1ª mensagem de um chatId novo começa;
+  // chamadas seguintes do mesmo chatId resumem normal, flowId não reinicia
+  // nada). Combina com dadosConhecidos: os dois juntos, na 1ª mensagem.
   //
   // processarMensagem() já centraliza o padrão crítico de multi-turn (thread
   // novo → invoke(estado inicial); resume → updateState + invoke(null)) —
@@ -154,6 +164,7 @@ export async function tykheMensagemRoutes(app: FastifyInstance) {
       audioUrl?: string;
       customerId?: string;
       dadosConhecidos?: { cpf?: string; idPessoa?: number; nome?: string; email?: string };
+      flowId?: string;
     };
     const chatId = typeof body.chatId === "string" ? body.chatId.trim() : "";
     if (!chatId) return reply.code(400).send({ erro: "chatId obrigatório" });
@@ -188,7 +199,14 @@ export async function tykheMensagemRoutes(app: FastifyInstance) {
     // sem precisar checar aqui se a thread já existe (evita duplicar o
     // padrão crítico de multi-turn nesta rota).
     const dadosIniciais = dadosIniciaisDeTykhe(body.dadosConhecidos ?? {});
-    const { newMessages, status, categoria } = await processarMensagem(sessionId, mensagem, "tykhe", dadosIniciais);
+    const flowId = typeof body.flowId === "string" && body.flowId.trim() ? body.flowId.trim() : undefined;
+    const { newMessages, status, categoria } = await processarMensagem(
+      sessionId,
+      mensagem,
+      "tykhe",
+      dadosIniciais,
+      flowId
+    );
 
     return {
       resposta: montarResposta(newMessages),
