@@ -1,7 +1,12 @@
-// GATEWAY_VERDE_URL fake + mock de global.fetch: cobre src/api/routes/assunto.ts
+// VERDE_API_URL fake + mock de global.fetch: cobre src/api/routes/assunto.ts
 // (navegação da árvore de assunto, resolução de escolha por índice e
 // metadados) — nunca testado antes. Sem banco (assunto.ts não usa prisma).
-process.env.GATEWAY_VERDE_URL = "http://fake-gateway.test";
+// VERDE_JWT_TOKEN/VERDE_CLIENT_ID fake também obrigatórios — sem eles
+// gatewayVerdeGet/Post (verde-direto.ts) devolve null/not-ok sem nem tentar
+// a rede (mesmo padrão de base vazia do client antigo).
+process.env.VERDE_API_URL = "http://fake-gateway.test";
+process.env.VERDE_JWT_TOKEN = "fake-token";
+process.env.VERDE_CLIENT_ID = "fake-client";
 
 import { test, mock, afterEach } from "node:test";
 import assert from "node:assert/strict";

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../../core/db.js";
-import { gatewayVerdeGet, gatewayVerdePost } from "../../core/gateway-verde.js";
+import { gatewayVerdeGet, gatewayVerdePost } from "../../core/verde-direto.js";
 
 // Rotas de Assistido (cidadão) usadas PELO FLUXO — sem JWT, como os mocks.
 // O nó `api` do builder faz POST com body = dadosColetados (que contém o cpf).
@@ -34,9 +34,11 @@ interface AssistidoVerdeRaw {
 
 // Consulta o cadastro real no Verde; mapeia pro mesmo shape do model
 // Assistido local, pra `dadosPublicos()` continuar funcionando igual.
-// null = não encontrado/gateway fora — quem chama cai pro fallback local.
+// null = não encontrado/Verde fora — quem chama cai pro fallback local.
+// Verde real: GET /integra/pessoa?cpf=... (identifica por query, não path —
+// diferente do gateway .NET antigo que tinha /api/assistido/{cpf}).
 export async function consultarAssistidoVerde(cpf: string): Promise<Record<string, unknown> | null> {
-  const resp = await gatewayVerdeGet<AssistidoVerdeRaw>(`/api/assistido/${cpf}`);
+  const resp = await gatewayVerdeGet<AssistidoVerdeRaw>(`/pessoa?cpf=${cpf}`);
   const d = resp?.dados;
   if (!d?.nome) return null;
   const end = d.enderecoDetalhado ?? {};
@@ -119,7 +121,9 @@ function montarPayloadAssistidoVerde(cpf: string, campos: Record<string, string>
 // nem tenta, evita round-trip que sabe que vai falhar.
 async function cadastrarAssistidoVerde(cpf: string, campos: Record<string, string>): Promise<boolean> {
   if (!campos.dataNascimento || !campos.email) return false;
-  const resp = await gatewayVerdePost("/api/assistido", montarPayloadAssistidoVerde(cpf, campos));
+  // Verde real: POST /integra/pessoa (cadastro) — gateway .NET antigo expunha
+  // isso em /api/assistido, mas o Verde em si sempre foi "pessoa".
+  const resp = await gatewayVerdePost("/pessoa", montarPayloadAssistidoVerde(cpf, campos));
   return resp.ok;
 }
 
@@ -139,6 +143,11 @@ async function cadastrarAssistidoVerde(cpf: string, campos: Record<string, strin
 // reconhecida: 'dtNascimento'" (400), ou seja, esse endpoint nem aceita
 // esse campo pra preservar. Reportar pro time do Verde/DPERJ — fora do
 // nosso controle consertar por aqui.
+//
+// Verde identifica a pessoa por idPessoa (numérico), não cpf — igual ao
+// gateway .NET antigo fazia (issue gateway#31), só que agora essa resolução
+// roda aqui: busca o cadastro atual (consultarAssistidoVerde, que já traz
+// idPessoa) antes de montar o payload do PUT /integra/pessoa.
 async function atualizarAssistidoVerde(cpf: string, campos: Record<string, string>): Promise<boolean> {
   const relevante =
     campos.logradouro ||
@@ -152,11 +161,15 @@ async function atualizarAssistidoVerde(cpf: string, campos: Record<string, strin
   if (!relevante) return false;
 
   const atual = await consultarAssistidoVerde(cpf);
+  const idPessoa = atual?.idPessoa as number | null | undefined;
+  if (!idPessoa) return false; // sem idPessoa resolvido, Verde rejeita o PUT
+
   const telefone = campos.telefone || ((atual?.telefone as string | null) ?? undefined);
   const email = campos.email || ((atual?.email as string | null) ?? undefined);
   if (!telefone || !email) return false; // Verde exige os dois preenchidos mesmo corrigindo só endereço
 
   const payload = {
+    idPessoa,
     endereco: {
       logradouro: campos.logradouro ?? "",
       numero: campos.numero ?? "",
@@ -177,7 +190,7 @@ async function atualizarAssistidoVerde(cpf: string, campos: Record<string, strin
     },
     email,
   };
-  const resp = await gatewayVerdePost(`/api/assistido/${cpf}`, payload, "PUT");
+  const resp = await gatewayVerdePost("/pessoa", payload, "PUT");
   if (!resp.ok) console.log(`[assistidos] atualizar: PUT no Verde falhou, status=${resp.status}`);
   return resp.ok;
 }
@@ -210,10 +223,19 @@ interface CasoEnxuto {
   andamentos: { titulo: string; descricao: string; data: string }[];
 }
 
-// null = gateway fora/CPF não encontrado — quem chama cai pro fallback local.
+// null = Verde fora/CPF não encontrado — quem chama cai pro fallback local.
+// Verde não tem um "casos por cpf" direto: precisa resolver idPessoa
+// primeiro (GET pessoa?cpf=) e só então GET caso/consultar-casos-pessoa/
+// {idPessoa} — o gateway .NET antigo (CasosService) fazia essa indireção
+// por trás de /api/casos/{cpf}; replicada aqui. Também filtra status
+// "aberto" nós mesmos (o gateway antigo fazia isso no C# antes de devolver).
 export async function consultarCasosVerde(cpf: string): Promise<CasoEnxuto[] | null> {
-  const resp = await gatewayVerdeGet<CasosVerdeRaw>(`/api/casos/${cpf}`);
-  const lista = resp?.dados;
+  const atual = await consultarAssistidoVerde(cpf);
+  const idPessoa = atual?.idPessoa as number | null | undefined;
+  if (!idPessoa) return null;
+
+  const resp = await gatewayVerdeGet<CasosVerdeRaw>(`/caso/consultar-casos-pessoa/${idPessoa}`);
+  const lista = resp?.dados?.filter((c) => (c.status ?? "").toLowerCase() === "aberto");
   if (!lista) return null;
   return lista.map((c) => ({
     id: c.id ?? 0,
@@ -493,7 +515,7 @@ export async function assistidosFlowRoutes(app: FastifyInstance) {
 
     let processo: unknown = null;
     if (caso.numeroProcesso) {
-      processo = await gatewayVerdeGet<unknown>(`/api/processo/${caso.numeroProcesso}`);
+      processo = await gatewayVerdeGet<unknown>(`/processo/consultar/${caso.numeroProcesso}`);
     }
 
     console.log(`[casos] detalhe: ${caso.id} (${caso.tipoCaso}) — processo=${processo ? "sim" : "não"}`);

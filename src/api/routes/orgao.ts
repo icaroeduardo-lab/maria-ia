@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { gatewayVerdeGet } from "../../core/gateway-verde.js";
+import { gatewayVerdeGet } from "../../core/verde-direto.js";
 
 // Rota de Órgão usada PELO FLUXO (cards Coilab #20260146/#20260147, issue
 // gateway#39) — decide como conduzir a escolha de unidade/horário do
@@ -245,7 +245,7 @@ export async function orgaoFlowRoutes(app: FastifyInstance) {
 
     const complemento = body.complemento ? `&complemento=${encodeURIComponent(body.complemento)}` : "";
     const resp = await gatewayVerdeGet<OrgaoVerdeRaw>(
-      `/api/orgao/primeiro-atendimento?idPessoa=${idPessoa}&idAssunto=${idAssunto}${complemento}`
+      `/orgao/primeiro-atendimento?idPessoa=${idPessoa}&idAssunto=${idAssunto}${complemento}`
     );
     const lista = resp?.dados ?? [];
 

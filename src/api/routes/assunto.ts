@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { gatewayVerdeGet } from "../../core/gateway-verde.js";
+import { gatewayVerdeGet } from "../../core/verde-direto.js";
 
 // Rotas de identificação de assunto (card Coilab #20260185) — navega a
 // árvore de assuntos real do Verde (assunto/categorias → consultar-item-
@@ -80,7 +80,7 @@ export async function assuntoFlowRoutes(app: FastifyInstance) {
     }
 
     const query = idItemCategoria ? `idItemCategoria=${idItemCategoria}` : `idCategoria=${idCategoria}`;
-    const resp = await gatewayVerdeGet<ItemArvoreVerdeRaw>(`/api/assunto/consultar-item-arvore?${query}`);
+    const resp = await gatewayVerdeGet<ItemArvoreVerdeRaw>(`/assunto/consultar-item-arvore?${query}`);
     // BUG-013 (teste manual 2026-08-11): gatewayVerdeGet devolve null tanto
     // pra "sem resposta" quanto pra qualquer erro real (401/timeout/5xx) —
     // sem distinguir, esta rota sempre respondia 200 com pergunta/respostas
@@ -160,7 +160,7 @@ export async function assuntoFlowRoutes(app: FastifyInstance) {
       };
     }
 
-    const resp = await gatewayVerdeGet<AssuntoMetadadosVerdeRaw>(`/api/assunto/${idAssunto}`);
+    const resp = await gatewayVerdeGet<AssuntoMetadadosVerdeRaw>(`/assunto/${idAssunto}`);
     const d = resp?.dados;
     if (!d) {
       console.log(`[assunto] metadados: idAssunto=${idAssunto} → não encontrado`);
@@ -201,7 +201,7 @@ export async function assuntoFlowRoutes(app: FastifyInstance) {
       return { encontrado: false, listaDocumentos: formatarListaDocumentos() };
     }
 
-    const resp = await gatewayVerdeGet<AssuntoMetadadosVerdeRaw>(`/api/assunto/${idAssunto}`);
+    const resp = await gatewayVerdeGet<AssuntoMetadadosVerdeRaw>(`/assunto/${idAssunto}`);
     const d = resp?.dados;
     if (!d) {
       console.log(`[assunto] documentos: idAssunto=${idAssunto} → não encontrado`);

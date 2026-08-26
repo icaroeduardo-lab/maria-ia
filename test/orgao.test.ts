@@ -1,10 +1,12 @@
-// GATEWAY_VERDE_URL fake + mock de global.fetch: cobre a árvore de decisão
+// VERDE_API_URL fake + mock de global.fetch: cobre a árvore de decisão
 // nova de src/api/routes/orgao.ts (reescrita completa — descartou a lógica
 // antiga de "prefere agendamento sobre encaminhamento, retorna só a 1ª
-// vaga"). Sem isso, o único teste indireto seria "gateway fora do ar" via
-// GATEWAY_VERDE_URL="", que nunca exercita a regra real. Não depende de
+// vaga"). Sem isso, o único teste indireto seria "Verde fora do ar" via
+// credencial ausente, que nunca exercita a regra real. Não depende de
 // banco (orgao.ts não usa prisma).
-process.env.GATEWAY_VERDE_URL = "http://fake-gateway.test";
+process.env.VERDE_API_URL = "http://fake-gateway.test";
+process.env.VERDE_JWT_TOKEN = "fake-token";
+process.env.VERDE_CLIENT_ID = "fake-client";
 
 import { test, mock, afterEach } from "node:test";
 import assert from "node:assert/strict";

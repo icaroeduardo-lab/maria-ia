@@ -46,13 +46,17 @@ export const env = {
   pdpjApiUrl: () => semBarra(process.env.PDPJ_API_URL ?? ""),
   pdpjApiToken: () => process.env.PDPJ_API_TOKEN ?? "",
 
-  // Gateway Verde (repo GatewayConsultaApiVerde) — sem auth. Consulta real de
-  // assistido/agendamentos/processo; default já aponta pro Lambda em uso
-  // (issue #108) — sobrescrever só se o gateway mudar de URL.
-  gatewayVerdeUrl: () =>
-    semBarra(
-      process.env.GATEWAY_VERDE_URL ?? "https://3dike1m3ng.execute-api.us-east-1.amazonaws.com/default"
-    ),
+  // Verde/DPERJ direto (src/core/verde-direto.ts) — substituiu o gateway .NET
+  // (GatewayConsultaApiVerde, decisão 2026-08-26). Default já aponta pra
+  // homologação (único ambiente testado); produção do Verde ainda não foi
+  // liberada — trocar via VERDE_API_URL quando/se disponibilizarem, sem
+  // mudar código. Token/client id são credenciais reais (Secrets Manager em
+  // prod) — TEMPORÁRIOS, emitidos como app "Tykhe", expiram 2026-09-12 (ver
+  // TODO no topo de verde-direto.ts).
+  verdeApiUrl: () =>
+    semBarra(process.env.VERDE_API_URL ?? "https://homologacao.verde.rj.def.br/api/integra"),
+  verdeJwtToken: () => process.env.VERDE_JWT_TOKEN ?? "",
+  verdeClientId: () => process.env.VERDE_CLIENT_ID ?? "",
 
   // DPERJ (envio final)
   dperjApiUrl: () => process.env.DPERJ_API_URL,
@@ -106,7 +110,7 @@ const envSchema = z.object({
   PUBLIC_URL: z.string().url().optional().or(z.literal("")),
   SQS_QUEUE_URL: z.string().url().optional().or(z.literal("")),
   PDPJ_API_URL: z.string().url().optional().or(z.literal("")),
-  GATEWAY_VERDE_URL: z.string().url().optional().or(z.literal("")),
+  VERDE_API_URL: z.string().url().optional().or(z.literal("")),
   HANDOFF_WEBHOOK_URL: z.string().url().optional().or(z.literal("")),
   LANGCHAIN_TRACING_V2: z.enum(["true", "false"]).optional(),
 });
