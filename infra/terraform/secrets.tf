@@ -47,6 +47,14 @@ resource "aws_secretsmanager_secret_version" "app" {
     DPERJ_API_URL           = "" # vazio = modo mock (protocolo local)
     DPERJ_API_KEY           = ""
     LANGSMITH_API_KEY       = "PREENCHER" # tracing — ver CLAUDE.md "Observabilidade"
+    # Verde/DPERJ direto (src/core/verde-direto.ts) — substituiu o gateway
+    # .NET externo (decisão 2026-08-26). VERDE_JWT_TOKEN é TEMPORÁRIO (app
+    # "Tykhe", expira 2026-09-12) — ver TODO no topo do arquivo. Default de
+    # VERDE_API_URL já é homologação no código; só preencher aqui se
+    # precisar sobrescrever (ex: quando a DPERJ liberar produção).
+    VERDE_API_URL   = ""
+    VERDE_JWT_TOKEN = "PREENCHER"
+    VERDE_CLIENT_ID = "PREENCHER"
     # TEMPORÁRIO — bypass de demo, ver src/api/routes/documentos.ts. "true" =
     # /api/documentos/verificar sempre aprova. Default "false" — só valor
     # inicial, real toggle é via put-secret-value (lifecycle ignore_changes

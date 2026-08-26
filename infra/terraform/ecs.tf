@@ -52,6 +52,11 @@ locals {
     "TELEGRAM_BOT_TOKEN",
     "PDPJ_API_TOKEN", "PDPJ_API_URL", "DPERJ_API_URL", "DPERJ_API_KEY",
     "LANGSMITH_API_KEY",
+    # Verde/DPERJ direto (src/core/verde-direto.ts, decisão 2026-08-26) —
+    # substituiu o gateway .NET externo. VERDE_JWT_TOKEN é TEMPORÁRIO
+    # (app "Tykhe", expira 2026-09-12) — rotacionar via put-secret-value
+    # quando a DPERJ emitir credencial própria da Maria, sem novo apply.
+    "VERDE_API_URL", "VERDE_JWT_TOKEN", "VERDE_CLIENT_ID",
     # TEMPORÁRIO — bypass de demo de POST /api/documentos/verificar (ver
     # comentário no topo de src/api/routes/documentos.ts). Vive no secret (não
     # em common_env) DE PROPÓSITO: o secret_string tem lifecycle
