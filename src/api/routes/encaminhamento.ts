@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { gatewayVerdePost } from "../../core/gateway-verde.js";
+import { gatewayVerdePost } from "../../core/verde-direto.js";
 
 // Rota de Encaminhamento usada PELO FLUXO (card Coilab #20260147, issue
 // gateway#39) — "primeiro atendimento" SEM hora marcada (urgência/remoto/
@@ -35,7 +35,7 @@ export async function encaminhamentoFlowRoutes(app: FastifyInstance) {
       fluxoEncaminhamento: "PRIMEIRO_ATENDIMENTO",
       textoComplemento: body.textoComplemento ?? "",
     };
-    const resp = await gatewayVerdePost<{ dados?: { id?: number } }>("/api/encaminhamento/encaminhar", payload);
+    const resp = await gatewayVerdePost<{ dados?: { id?: number } }>("/encaminhamento/encaminhar", payload);
     console.log(`[encaminhamento] encaminhar: idPessoa=${payload.idPessoa} idOrgao=${payload.idOrgao} → ${resp.ok ? "ok" : `falha(${resp.status})`}`);
     return { sucesso: resp.ok, idEncaminhamento: resp.data?.dados?.id ?? null };
   });

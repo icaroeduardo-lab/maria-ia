@@ -1744,7 +1744,7 @@ paths:
   /api/pessoa-presa/consultar-rg:
     get:
       tags: [Interno (fluxo)]
-      summary: "Dados do apenado por RG (\"API fake\" — SEAP/apenado real ainda não existe)"
+      summary: "Dados do apenado por RG (Verde real — POST /integra/apenado; cai pro fallback local \"API fake\" sem credencial/sem resposta)"
       security: []
       parameters:
         - { in: query, name: rg, required: true, schema: { type: string }, description: "somente dígitos" }

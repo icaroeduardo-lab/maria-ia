@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { gatewayVerdeGet } from "../../core/gateway-verde.js";
+import { gatewayVerdeGet } from "../../core/verde-direto.js";
 
 // Rota de Bloqueio (carência) usada PELO FLUXO (card Coilab #20260148) —
 // checa se o assistido tem um bloqueio ativo pra aquele assunto/órgão antes
@@ -47,7 +47,7 @@ export async function bloqueioFlowRoutes(app: FastifyInstance) {
     }
 
     const resp = await gatewayVerdeGet<BloqueioVerdeRaw>(
-      `/api/bloqueio?idPessoa=${idPessoa}&idAssunto=${idAssunto}&idOrgao=${idOrgao}`,
+      `/bloqueio?idPessoa=${idPessoa}&idAssunto=${idAssunto}&idOrgao=${idOrgao}`,
     );
     const d = resp?.dados;
     const temBloqueio = d?.inAtivo === true;

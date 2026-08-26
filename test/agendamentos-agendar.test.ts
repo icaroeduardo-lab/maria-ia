@@ -1,12 +1,14 @@
 // Cobre POST /api/agendamentos/verificar-duplicados e /api/agendamentos/agendar
-// (src/api/routes/agendamentos.ts) — nunca testados antes. GATEWAY_VERDE_URL
+// (src/api/routes/agendamentos.ts) — nunca testados antes. VERDE_API_URL
 // fake + mock de global.fetch pra exercitar o mapeamento sem bater na rede.
 //
 // agendamentosFlowRoutes registra um preHandler que 503 TODA rota do arquivo
 // quando `prisma` é null (mesmo sem essas duas rotas tocarem o banco) — por
 // isso, igual test/elegibilidade.test.ts, os testes daqui são pulados (skip,
 // não falham) no modo padrão do CI (DATABASE_URL="", ver CLAUDE.md).
-process.env.GATEWAY_VERDE_URL = "http://fake-gateway.test";
+process.env.VERDE_API_URL = "http://fake-gateway.test";
+process.env.VERDE_JWT_TOKEN = "fake-token";
+process.env.VERDE_CLIENT_ID = "fake-client";
 
 import { test, mock, afterEach } from "node:test";
 import assert from "node:assert/strict";

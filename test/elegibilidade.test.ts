@@ -1,10 +1,12 @@
-// GATEWAY_VERDE_URL="" ANTES de qualquer import: gatewayVerdeGet/Post
-// (src/core/gateway-verde.ts) devolvem null/not-ok direto quando a base URL
-// está vazia — sem isso o default é um endpoint real na AWS (env.ts) e o
-// teste faria fetch de verdade. Precisamos que a consulta ao Verde "erre"
-// pra exercitar exatamente o fallback local que este arquivo testa (issue
-// #138 — card Coilab #20260195).
-process.env.GATEWAY_VERDE_URL = "";
+// VERDE_JWT_TOKEN/VERDE_CLIENT_ID NÃO setados (ficam "") ANTES de qualquer
+// import: gatewayVerdeGet/Post (src/core/verde-direto.ts) devolvem
+// null/not-ok direto sem token/client id configurados — sem isso o default
+// de VERDE_API_URL é o endpoint real de homologação (env.ts) e o teste
+// faria fetch de verdade. Precisamos que a consulta ao Verde "erre" pra
+// exercitar exatamente o fallback local que este arquivo testa (issue #138
+// — card Coilab #20260195).
+process.env.VERDE_JWT_TOKEN = "";
+process.env.VERDE_CLIENT_ID = "";
 
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
@@ -93,8 +95,9 @@ test(
 
 // POST /api/elegibilidade/tem-caso-aberto (card Coilab #20260197) — endpoint
 // enxuto pro novo desenho do gate (roda depois da ficha, sem DDD/UF). Não
-// depende de banco: GATEWAY_VERDE_URL="" (setado no topo do arquivo) já
-// garante consultarCasosVerde() determinístico (Verde "fora do ar" → null).
+// depende de banco: VERDE_JWT_TOKEN/VERDE_CLIENT_ID vazios (setado no topo
+// do arquivo) já garante consultarCasosVerde() determinístico (Verde "fora
+// do ar" → null).
 test("tem-caso-aberto: cpf inválido (tamanho errado) não chama o Verde, devolve tem_caso false", async () => {
   const app = await montarApp();
   const res = await app.inject({
@@ -108,7 +111,7 @@ test("tem-caso-aberto: cpf inválido (tamanho errado) não chama o Verde, devolv
   assert.equal(res.json().tem_caso, false);
 });
 
-test("tem-caso-aberto: cpf válido sem resposta do Verde (GATEWAY_VERDE_URL vazio) → tem_caso false, sem lançar", async () => {
+test("tem-caso-aberto: cpf válido sem resposta do Verde (credencial vazia) → tem_caso false, sem lançar", async () => {
   const app = await montarApp();
   const res = await app.inject({
     method: "POST",

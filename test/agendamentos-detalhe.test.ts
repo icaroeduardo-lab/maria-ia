@@ -2,9 +2,11 @@
 // (src/api/routes/agendamentos.ts) — foco no campo idAssunto (issue
 // maria-ia#20260234): o Verde manda assunto:{id,nome} na lista de
 // agendamentos, e o detalhe precisa repassar esse id adiante pro fluxo poder
-// chamar /api/assunto/documentos sem bater de novo no Verde. GATEWAY_VERDE_URL
+// chamar /api/assunto/documentos sem bater de novo no Verde. VERDE_API_URL
 // fake + mock de global.fetch, mesmo padrão de agendamentos-agendar.test.ts.
-process.env.GATEWAY_VERDE_URL = "http://fake-gateway.test";
+process.env.VERDE_API_URL = "http://fake-gateway.test";
+process.env.VERDE_JWT_TOKEN = "fake-token";
+process.env.VERDE_CLIENT_ID = "fake-client";
 
 import { test, mock, afterEach } from "node:test";
 import assert from "node:assert/strict";
@@ -24,8 +26,14 @@ afterEach(() => {
 });
 
 test("consultar: assunto.id do Verde vira idAssunto no agendamento enxuto", { skip: SEM_BANCO }, async () => {
-  mockarFetch(() =>
-    Response.json({
+  // consultarAgendamentosVerde resolve idPessoa primeiro (GET pessoa?cpf=),
+  // só depois lista os agendamentos (GET agendamento/listar-agendamentos-
+  // pessoa/{idPessoa}) — dois GETs em sequência, distinguidos pela URL.
+  mockarFetch((url) => {
+    if (url.includes("/pessoa?cpf=")) {
+      return Response.json({ dados: { idPessoa: 2973942, nome: "Fulano de Tal" } });
+    }
+    return Response.json({
       dados: {
         agendamentos: [
           {
@@ -37,8 +45,8 @@ test("consultar: assunto.id do Verde vira idAssunto no agendamento enxuto", { sk
           },
         ],
       },
-    })
-  );
+    });
+  });
   const app = await montarApp();
   const res = await app.inject({
     method: "POST",

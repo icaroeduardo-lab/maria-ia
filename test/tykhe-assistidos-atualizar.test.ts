@@ -1,8 +1,10 @@
 // Cobre POST /api/tykhe/assistidos/atualizar (src/api/routes/tykhe/assistidos.ts)
 // — endpoint desmembrado pra Tykhe chamar, sem autenticação (protótipo).
-// GATEWAY_VERDE_URL fake + mock de global.fetch pra exercitar o caminho feliz
+// VERDE_API_URL fake + mock de global.fetch pra exercitar o caminho feliz
 // (Verde) sem depender de banco — igual test/agendamentos-agendar.test.ts.
-process.env.GATEWAY_VERDE_URL = "http://fake-gateway.test";
+process.env.VERDE_API_URL = "http://fake-gateway.test";
+process.env.VERDE_JWT_TOKEN = "fake-token";
+process.env.VERDE_CLIENT_ID = "fake-client";
 
 import { test, mock, afterEach } from "node:test";
 import assert from "node:assert/strict";
@@ -18,17 +20,22 @@ afterEach(() => {
   mock.reset();
 });
 
-test("200: campo válido → atualiza via Verde (GET pra completar email, PUT com o novo telefone)", async () => {
+test("200: campo válido → atualiza via Verde (GET pra completar idPessoa/email, PUT com o novo telefone)", async () => {
   mockarFetch((url, init) => {
     if (!init || init.method === undefined) {
-      // GET /api/assistido/{cpf} — consultarAssistidoVerde, usado pra completar
-      // o email exigido pelo PUT (a Tykhe manda só o campo escolhido).
-      assert.match(url, /\/api\/assistido\/12345678900$/);
-      return Response.json({ dados: { nome: "Fulano de Tal", email: "fulano@teste.dperj.rj.gov.br" } });
+      // GET /pessoa?cpf={cpf} — consultarAssistidoVerde, usado pra resolver
+      // idPessoa (Verde exige no PUT) e completar o email (a Tykhe manda só
+      // o campo escolhido).
+      assert.match(url, /\/pessoa\?cpf=12345678900$/);
+      return Response.json({
+        dados: { idPessoa: 555, nome: "Fulano de Tal", email: "fulano@teste.dperj.rj.gov.br" },
+      });
     }
-    // PUT /api/assistido/{cpf} — atualizarAssistidoVerde
+    // PUT /pessoa (com idPessoa no corpo) — atualizarAssistidoVerde
     assert.equal(init.method, "PUT");
-    assert.match(url, /\/api\/assistido\/12345678900$/);
+    assert.match(url, /\/pessoa$/);
+    const corpo = JSON.parse(String(init.body));
+    assert.equal(corpo.idPessoa, 555);
     return new Response(null, { status: 204 });
   });
 

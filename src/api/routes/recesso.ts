@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { gatewayVerdeGet } from "../../core/gateway-verde.js";
+import { gatewayVerdeGet } from "../../core/verde-direto.js";
 
 // Rota de Recesso vigente usada PELO FLUXO (card Coilab #20260144) — sem JWT,
 // como orgao.ts/assunto.ts. Proxy real pro gateway (GET /api/recesso/vigente)
@@ -40,7 +40,7 @@ const SEM_RECESSO = "SEM_RECESSO_VIGENTE";
 export async function recessoFlowRoutes(app: FastifyInstance) {
   // GET /api/recesso/vigente — proxy GET api/recesso/vigente do gateway
   app.get("/api/recesso/vigente", async () => {
-    const resp = await gatewayVerdeGet<RecessoVerdeRaw>(`/api/recesso/vigente`);
+    const resp = await gatewayVerdeGet<RecessoVerdeRaw>(`/recesso/vigente`);
     const codigo = resp?.codigo ?? SEM_RECESSO;
     const emRecesso = codigo !== SEM_RECESSO;
     const d = resp?.dados;

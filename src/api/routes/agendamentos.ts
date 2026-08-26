@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../../core/db.js";
-import { gatewayVerdeGet, gatewayVerdePost } from "../../core/gateway-verde.js";
+import { gatewayVerdeGet, gatewayVerdePost } from "../../core/verde-direto.js";
+import { consultarAssistidoVerde } from "./assistidos.js";
 
 // Rotas de Agendamento usadas PELO FLUXO — sem JWT, como casos/consultar e
 // casos/detalhe (assistidos.ts). Mesmo papel de Caso, mas pra compromissos
@@ -35,11 +36,21 @@ interface AgendamentosVerdeRaw {
   };
 }
 
-// null = gateway fora/CPF não encontrado — quem chama cai pro fallback local.
+// null = Verde fora/CPF não encontrado — quem chama cai pro fallback local.
 // Exportada pro gate de elegibilidade (elegibilidade.ts) reusar — agendamento
 // em aberto prova residência RJ tanto quanto caso aberto (issue maria-ia#20260202).
+// Verde não tem "agendamentos por cpf" direto: resolve idPessoa primeiro
+// (mesma indireção de consultarCasosVerde em assistidos.ts) e só então GET
+// agendamento/listar-agendamentos-pessoa/{idPessoa} — o gateway .NET antigo
+// (AgendamentosService) fazia essa indireção por trás de /api/agendamentos/{cpf}.
 export async function consultarAgendamentosVerde(cpf: string): Promise<AgendamentoEnxuto[] | null> {
-  const resp = await gatewayVerdeGet<AgendamentosVerdeRaw>(`/api/agendamentos/${cpf}`);
+  const atual = await consultarAssistidoVerde(cpf);
+  const idPessoa = atual?.idPessoa as number | null | undefined;
+  if (!idPessoa) return null;
+
+  const resp = await gatewayVerdeGet<AgendamentosVerdeRaw>(
+    `/agendamento/listar-agendamentos-pessoa/${idPessoa}`,
+  );
   const lista = resp?.dados?.agendamentos;
   if (!lista) return null;
   return lista.map((a) => ({
@@ -141,7 +152,7 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
     const idEvento = String((req.body as { idEvento?: string | number })?.idEvento ?? "").trim();
     if (!idEvento) return { encontrado: false };
 
-    const resp = await gatewayVerdeGet<{ dados?: Record<string, unknown> }>(`/api/agendamento/${idEvento}`);
+    const resp = await gatewayVerdeGet<{ dados?: Record<string, unknown> }>(`/agendamento/${idEvento}`);
     if (!resp?.dados) {
       console.log(`[agendamentos] detalhe-rico: ${idEvento} não encontrado`);
       return { encontrado: false };
@@ -151,16 +162,18 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
   });
 
   // POST /api/agendamentos/vagas — { idEvento } → proxy GET
-  // api/agendamento/vagas/{idEvento} (issue #111). vagasDisponiveis real:
-  // [{idIntervalo, data, hora}] (não documentado no Swagger do Verde,
-  // confirmado testando ao vivo).
+  // integra/agendamento/consultar-vagas/{idEvento} (issue #111) — nome real
+  // no Verde é "consultar-vagas", não "vagas" (o gateway .NET antigo expunha
+  // como .../vagas/{idEvento} por trás, mas o path no Verde sempre foi esse).
+  // vagasDisponiveis real: [{idIntervalo, data, hora}] (não documentado no
+  // Swagger do Verde, confirmado testando ao vivo).
   app.post("/api/agendamentos/vagas", async (req) => {
     const idEvento = String((req.body as { idEvento?: string | number })?.idEvento ?? "").trim();
     if (!idEvento) return { tem_vagas: false, vagas: [], lista: "" };
 
     const resp = await gatewayVerdeGet<{
       dados?: { vagasDisponiveis?: { idIntervalo?: number; data?: string; hora?: string }[] };
-    }>(`/api/agendamento/vagas/${idEvento}`);
+    }>(`/agendamento/consultar-vagas/${idEvento}`);
     const vagas = resp?.dados?.vagasDisponiveis ?? [];
     const lista = vagas.map((v, i) => `${i + 1}. ${v.data} às ${v.hora}`).join("\n");
     console.log(`[agendamentos] vagas: ${idEvento} → ${vagas.length} vaga(s)`);
@@ -210,7 +223,7 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
       configuracaoIntervaloAgenda: Number(body.configuracaoIntervaloAgenda),
       dataNova: dataHora,
     };
-    const resp = await gatewayVerdePost("/api/agendamento/reagendar", payload);
+    const resp = await gatewayVerdePost("/agendamento/reagendar", payload);
     console.log(
       `[agendamentos] reagendar: idAgendamento=${payload.idAgendamento} → ${resp.ok ? "ok" : `falha(${resp.status})`}`
     );
@@ -224,7 +237,7 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
   app.post("/api/agendamentos/desmarcar", async (req) => {
     const body = (req.body ?? {}) as { idAgendamento?: string | number; idPessoa?: string | number };
     const payload = { idAgendamento: Number(body.idAgendamento), idPessoa: Number(body.idPessoa) };
-    const resp = await gatewayVerdePost("/api/agendamento/desmarcar", payload);
+    const resp = await gatewayVerdePost("/agendamento/desmarcar", payload);
     console.log(
       `[agendamentos] desmarcar: idAgendamento=${payload.idAgendamento} → ${resp.ok ? "ok" : `falha(${resp.status})`}`
     );
@@ -242,7 +255,7 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
 
     const resp = await gatewayVerdeGet<{
       dados?: { agendamentos?: { id?: number; dataAgendamento?: string }[] };
-    }>(`/api/agendamento/verificar-duplicados?idPessoa=${idPessoa}&idAssunto=${idAssunto}`);
+    }>(`/agendamento/verificar-duplicados?idPessoa=${idPessoa}&idAssunto=${idAssunto}`);
     const duplicados = resp?.dados?.agendamentos ?? [];
     console.log(
       `[agendamentos] verificar-duplicados: idPessoa=${idPessoa} idAssunto=${idAssunto} → ${duplicados.length} duplicado(s)`
@@ -279,7 +292,7 @@ export async function agendamentosFlowRoutes(app: FastifyInstance) {
       fluxoAtendimento: "PRIMEIRO_ATENDIMENTO",
       textoComplemento: body.textoComplemento ?? "",
     };
-    const resp = await gatewayVerdePost<{ dados?: { id?: number } }>("/api/agendamento/agendar", payload);
+    const resp = await gatewayVerdePost<{ dados?: { id?: number } }>("/agendamento/agendar", payload);
     console.log(
       `[agendamentos] agendar: idPessoa=${payload.idPessoa} idOrgao=${payload.idOrgao} → ${resp.ok ? "ok" : `falha(${resp.status})`}`
     );

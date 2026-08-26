@@ -1,26 +1,78 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../../core/db.js";
 import { mascararRg } from "../../core/mask.js";
+import { gatewayVerdePost } from "../../core/verde-direto.js";
 
 // Rotas de Pessoa Presa (apenado) usadas PELO FLUXO — sem JWT, como os mocks
-// e como assistidos.ts. "API fake" provisória: substitui os 5 nós `api` do
-// subfluxo "Pessoa Presa" que apontavam pra URLs inventadas (sem SEAP/apenado
-// real ainda). O nó `api` do builder faz GET com a URL já interpolada
-// ({{chave}} vira query string) — todo dado de entrada chega via querystring,
-// nunca body (builder.ts não envia body em métodos GET).
+// e como assistidos.ts. O nó `api` do builder faz GET com a URL já
+// interpolada ({{chave}} vira query string) — todo dado de entrada chega via
+// querystring, nunca body (builder.ts não envia body em métodos GET) — por
+// isso estas rotas continuam GET mesmo repassando pro Verde via POST por baixo.
+//
+// consultar-rg (2026-08-26): trocado de mock local (tabela Postgres de teste)
+// pra Verde real (POST /integra/apenado, verde-direto.ts) — motivo original
+// da migração pra chamada direta ao Verde. Mesmo padrão "Verde primeiro,
+// fallback local" já usado em assistidos.ts/agendamentos.ts: sem credencial
+// configurada (dev/teste) ou sem resposta do Verde, cai pra tabela
+// `pessoaPresa` (dados de teste/seed) — mantém a suíte determinística.
+// As demais rotas (consultar-processo/casos/orgao-responsavel*) CONTINUAM
+// mock local — fora do escopo desta migração (fluxo simplificado 2026-08-26
+// não usa mais os campos que elas exporiam, ver nota de pp_msg_assunto_identificado
+// no fluxo "Pessoa Presa (protótipo IA)").
 //
 // Contrato combinado com os nós hoje cadastrados no fluxo "Pessoa Presa"
-// (fluxoId cmrnz07ti007blc0j5givi327, ver notas dos nós api_apenado/api_casos/
-// api_orgao/api_orgao_liberto/api_processo):
-//   - dados_apenado.situacao / .nome / .idPessoa / .idSeap → lidos por
-//     pp_confirma_nome, cond_situacao e pelas urls de api_casos/api_orgao(_liberto)
-//   - casos_pessoa_presa.status → cond_status_caso espera literalmente "ABERTO"
-//   - orgao_responsavel_pp.status → cond_tem_orgao espera literalmente "encontrado"
+// (fluxoId cmrnz07ti007blc0j5givi327, node api_apenado): só
+// dados_apenado.nome é lido hoje (mensagem de confirmação de nome) — os
+// demais campos ficam expostos pra uso futuro/compat com versões anteriores
+// do fluxo.
 
 interface OrgaoResponsavel {
   nome: string;
   telefone: string;
   endereco: string;
+}
+
+// Shape real de POST /integra/apenado (docs/verde-original.json →
+// ApenadoResponseDTO/ApenadoDTO) — "dados" ausente/vazio = RG não encontrado.
+interface ApenadoVerdeRaw {
+  codigo?: string;
+  mensagem?: string;
+  dados?: {
+    idSeap?: number;
+    nome?: string;
+    cpf?: string;
+    regime?: string;
+    situacao?: string;
+    tipoPreso?: string;
+    idPessoa?: number;
+  };
+}
+
+interface ApenadoFlat {
+  encontrado: true;
+  situacao: string;
+  nome: string;
+  tipoPreso: string;
+  regime: string;
+  idPessoa: number | string;
+  idSeap: number | string;
+}
+
+// null = Verde sem credencial/fora do ar/RG não encontrado — quem chama cai
+// pro fallback local (tabela pessoaPresa).
+async function consultarApenadoVerde(rg: string): Promise<ApenadoFlat | null> {
+  const resp = await gatewayVerdePost<ApenadoVerdeRaw>("/apenado", { rg });
+  const d = resp.data?.dados;
+  if (!resp.ok || !d?.nome) return null;
+  return {
+    encontrado: true,
+    situacao: d.situacao ?? "",
+    nome: d.nome,
+    tipoPreso: d.tipoPreso ?? "",
+    regime: d.regime ?? "",
+    idPessoa: d.idPessoa ?? "",
+    idSeap: d.idSeap ?? "",
+  };
 }
 
 const so_digitos = (s?: string) => (s ?? "").replace(/\D/g, "");
@@ -33,18 +85,29 @@ export async function pessoaPresaFlowRoutes(app: FastifyInstance) {
   }
   const db = prisma!; // preHandler acima garante que handler não roda sem banco
 
-  // GET /api/pessoa-presa/consultar-rg?rg=... — dados do apenado (mock SEAP)
-  // resposta FLAT (sem aninhar em "dados") pra bater com {{dados_apenado.nome}}
-  // e cond_situacao (campo: dados_apenado.situacao) já configurados no fluxo.
+  // GET /api/pessoa-presa/consultar-rg?rg=... — dados do apenado. Verde
+  // primeiro (POST /integra/apenado); cai pro fallback local (tabela
+  // pessoaPresa — dados de teste/seed) se não encontrar ou o Verde estiver
+  // fora/sem credencial (mesmo padrão de assistidos.ts). Resposta FLAT (sem
+  // aninhar em "dados") pra bater com {{dados_apenado.nome}} já configurado
+  // no fluxo.
+  const VAZIO = { encontrado: false, situacao: "nao_encontrado", nome: "", tipoPreso: "", regime: "", idPessoa: "", idSeap: "" };
   app.get("/api/pessoa-presa/consultar-rg", async (req) => {
     const rg = so_digitos((req.query as { rg?: string })?.rg);
     if (!rg) {
       console.log("[pessoa-presa] consultar-rg: RG vazio/inválido");
-      return { encontrado: false, situacao: "nao_encontrado", nome: "", tipoPreso: "", regime: "", idPessoa: "", idSeap: "" };
+      return VAZIO;
     }
+
+    const verde = await consultarApenadoVerde(rg);
+    if (verde) {
+      console.log(`[pessoa-presa] consultar-rg: RG ${mascararRg(rg)} → encontrado (Verde)`);
+      return verde;
+    }
+
     const p = await db.pessoaPresa.findUnique({ where: { rg } });
-    console.log(`[pessoa-presa] consultar-rg: RG ${mascararRg(rg)} → ${p ? "encontrado" : "não cadastrado"}`);
-    if (!p) return { encontrado: false, situacao: "nao_encontrado", nome: "", tipoPreso: "", regime: "", idPessoa: "", idSeap: "" };
+    console.log(`[pessoa-presa] consultar-rg: RG ${mascararRg(rg)} → ${p ? "encontrado (local)" : "não cadastrado"}`);
+    if (!p) return VAZIO;
     return {
       encontrado: true,
       situacao: p.situacao,
