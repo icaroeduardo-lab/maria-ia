@@ -10,9 +10,11 @@ import { transcreverAudio } from "../../../core/transcribe.js";
 // Achata os content blocks da Maria (texto | image_url | boolean | options |
 // cta_url — ver CLAUDE.md "Tipos de Mensagem Customizados") num texto único.
 // Mesmo algoritmo de acumulação de src/core/channels/payloads.ts (WhatsApp) —
-// walk blocks, acumula texto, junta bloco por bloco com \n\n — mas sem
-// produzir UI interativa: a Tykhe só tem texto simples, então boolean/options
-// viram texto plano em vez de botão/lista.
+// walk blocks, acumula texto, junta bloco por bloco com \n\n.
+// boolean/options NÃO viram mais "(responda Sim ou Não)"/lista "- opção" aqui
+// (removido 2026-08-26, pedido do usuário) — essa info já sai estruturada em
+// tipoResposta/opcoes (ver tipoEOpcoes() abaixo), a Tykhe monta botão real
+// (optionsNode/dynamicOptionsNode) a partir daí; texto duplicado só poluía.
 function textoDoConteudo(content: MessageContent): string {
   if (typeof content === "string") return content;
   const blocos = content as Array<{ type: string; text?: string; options?: string[] }>;
@@ -25,15 +27,11 @@ function textoDoConteudo(content: MessageContent): string {
   for (const b of blocos) {
     if (b.type === "text" && b.text) {
       acumulado += (acumulado ? "\n\n" : "") + b.text;
-    } else if (b.type === "boolean") {
-      flush();
-      partes.push("(responda Sim ou Não)");
-    } else if (b.type === "options" && b.options?.length) {
-      flush();
-      partes.push(b.options.map((o) => `- ${o}`).join("\n"));
     }
-    // image_url/cta_url: sem representação textual simples — ignorados aqui
-    // (mesmo espírito do flushTexto dos outros canais, que só acumula texto).
+    // boolean/options: sem representação textual aqui de propósito (ver nota
+    // acima) — só contam pra tipoEOpcoes(). image_url/cta_url: sem
+    // representação textual simples — ignorados (mesmo espírito do
+    // flushTexto dos outros canais, que só acumula texto).
   }
   flush();
   return partes.join("\n\n");
