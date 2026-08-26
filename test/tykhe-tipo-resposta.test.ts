@@ -63,12 +63,11 @@ test(
 
       assert.equal(res.statusCode, 200);
       const body = res.json();
-      // `resposta` (texto achatado) continua INALTERADA — a pergunta seguida
-      // da lista em markdown, exatamente como antes desta mudança (mesmo
-      // textoDoConteudo/montarResposta) — só tipoResposta/opcoes são novos.
-      assert.match(body.resposta, /^Qual seu parentesco com a pessoa presa\?/);
-      assert.match(body.resposta, /- Mãe\/Pai/);
-      assert.match(body.resposta, /- Outro$/);
+      // `resposta` (texto achatado) NÃO inclui mais a lista em markdown
+      // (removido 2026-08-26 — duplicava tipoResposta/opcoes, que já carrega
+      // a lista estruturada pra Tykhe montar botão de verdade) — só o texto
+      // da pergunta em si.
+      assert.equal(body.resposta, "Qual seu parentesco com a pessoa presa?");
       assert.equal(body.tipoResposta, "opcoes");
       assert.deepEqual(body.opcoes, opcoesParentesco);
     } finally {
